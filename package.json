@@ -1,0 +1,15 @@
+{
+  "name": "all-in-one-fp-a-tool",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": [
+    "frontend-builder"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=vite-react-ts",
+    "build": "npm run build --workspace=vite-react-ts",
+    "lint": "npm run lint --workspace=vite-react-ts",
+    "preview": "npm run preview --workspace=vite-react-ts"
+  }
+}
