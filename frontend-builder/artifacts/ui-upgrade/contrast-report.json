@@ -1,0 +1,90 @@
+{
+  "overview": {
+    "sampled": 147,
+    "issues": []
+  },
+  "statements": {
+    "sampled": 103,
+    "issues": []
+  },
+  "planning": {
+    "sampled": 124,
+    "issues": []
+  },
+  "consolidation": {
+    "sampled": 76,
+    "issues": []
+  },
+  "imports": {
+    "sampled": 48,
+    "issues": []
+  },
+  "excel": {
+    "sampled": 91,
+    "issues": []
+  },
+  "activity": {
+    "sampled": 100,
+    "issues": []
+  },
+  "settings": {
+    "sampled": 84,
+    "issues": []
+  },
+  "variance-drawer": {
+    "sampled": 33,
+    "issues": []
+  },
+  "business-variance": {
+    "sampled": 30,
+    "issues": []
+  },
+  "source-lineage": {
+    "sampled": 41,
+    "issues": []
+  },
+  "sector-profile": {
+    "sampled": 31,
+    "issues": []
+  },
+  "blocked-reporting-review": {
+    "sampled": 69,
+    "issues": []
+  },
+  "missing-rate-drawer": {
+    "sampled": 27,
+    "issues": []
+  },
+  "import-mapping": {
+    "sampled": 72,
+    "issues": []
+  },
+  "import-error-recovery": {
+    "sampled": 79,
+    "issues": []
+  },
+  "excel-unavailable": {
+    "sampled": 92,
+    "issues": []
+  },
+  "write-preview": {
+    "sampled": 61,
+    "issues": []
+  },
+  "activity-drawer": {
+    "sampled": 23,
+    "issues": []
+  },
+  "command-palette": {
+    "sampled": 28,
+    "issues": []
+  },
+  "overview-mobile": {
+    "sampled": 121,
+    "issues": []
+  },
+  "variance-mobile": {
+    "sampled": 33,
+    "issues": []
+  }
+}

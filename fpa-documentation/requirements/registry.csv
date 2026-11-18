@@ -1,0 +1,16 @@
+requirement_id,requirement,status,priority,scope,owner,acceptance_tests,evidence,approval
+PRD-001,Core works and installs offline,Proposed,P0,Windows 11 x64,Unassigned,T-OFF-01;T-OFF-02,Not run,Pending
+PRD-002,Single user can maintain multiple entity and business unit datasets,Proposed,P0,UAE pilot,Unassigned,T-AG-01;T-AG-02,Not run,Pending
+PRD-003,Import validates maps reconciles and handles retries,Proposed,P0,CSV initial scope,Unassigned,T-IMP-01;T-IMP-02;T-IMP-03,Not run,Pending
+PRD-004,Decimal modeling and correct recalculation,Proposed,P0,Approved formula subset,Unassigned,T-NUM-01;T-CALC-01,Not run,Pending
+PRD-005,Supported linked statements expose errors and balance controls,Proposed,P0,Accounting scope to be approved,Unassigned,T-FIN-01;T-FIN-02,Not run,Pending
+PRD-006,Scenario compare and conflict-aware edits,Proposed,P0,Single user,Unassigned,Not yet specified,Not run,Pending
+PRD-007,Variance report and documented CSV XLSX export,Proposed,P0,Defined pilot reports,Unassigned,T-AG-01;T-AG-11,Not run,Pending
+PRD-008,Auditable commits and encrypted recoverable backups,Proposed,P0,Single user local threat model,Unassigned,T-CRASH-01;T-SEC-01;T-SEC-02;T-REST-01,Not run,Pending
+PRD-009,Trace outputs to available source granularity,Proposed,P0,Imports and reports,Unassigned,Not yet specified,Not run,Pending
+PRD-010,Accessible grid and safe input,Proposed,P0,Desktop core,Unassigned,Not yet specified,Not run,Pending
+PRD-011,Native offline 64-bit Excel add-in in V1,User confirmed,P0,Office 2021 64-bit target; exact build unknown,User,T-XLL-01;T-XLL-02;T-XLL-03;T-XLL-04;T-XLL-05;T-XLL-06,Not run,Technical design pending
+PRD-012,UAE defaults and manual tax planning inputs,Proposed,P0,Not tax filing,Unassigned,T-UAE-01;T-UAE-02,Not run,Finance review pending
+AG-001,Include all businesses in confirmed group coverage matrix,User confirmed outcome,P0,Exact organization and functional depth unconfirmed,User,T-AG-01;T-AG-02;T-AG-06,Not run,Scope confirmation pending
+AG-002,Do not describe unadjusted sums as consolidated,Proposed,P0,Group management reports,Unassigned,T-AG-01;T-AG-03;T-AG-04;T-AG-05,Not run,Finance review pending
+CONS-001,True group consolidation is required for V1,User confirmed outcome,P0,Policies and legal perimeter require finance approval,User,See CONS-001 through CONS-009 in docs 19,Not run,Finance and technical design pending

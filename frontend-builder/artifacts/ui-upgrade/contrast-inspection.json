@@ -1,0 +1,4203 @@
+{
+  "overview": [
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(248, 249, 250)",
+      "size": 9,
+      "ratio": 3.02
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Offline demo",
+      "color": "rgb(108, 120, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.6
+    },
+    {
+      "cls": "prototype-explanation",
+      "tag": "SPAN",
+      "text": "A fictional workspace. Production integrations are not connected.",
+      "color": "rgb(83, 105, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.16
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "About this demo",
+      "color": "rgb(88, 118, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "page-description",
+      "tag": "P",
+      "text": "Aster Vale Group\u00b7January 2026\u00b7AED thousands",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.69
+    },
+    {
+      "cls": "inline-dot",
+      "tag": "SPAN",
+      "text": "\u00b7",
+      "color": "rgb(154, 164, 171)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 2.04
+    },
+    {
+      "cls": "inline-dot",
+      "tag": "SPAN",
+      "text": "\u00b7",
+      "color": "rgb(154, 164, 171)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 2.04
+    },
+    {
+      "cls": "view-label",
+      "tag": "BUTTON",
+      "text": "Unadjusted management view",
+      "color": "rgb(117, 129, 138)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.01
+    },
+    {
+      "cls": "button button-primary ",
+      "tag": "BUTTON",
+      "text": "View statements",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgb(25, 125, 104)",
+      "size": 12,
+      "ratio": 4.05
+    },
+    {
+      "cls": "kpi-unit",
+      "tag": "SPAN",
+      "text": "AED k",
+      "color": "rgb(99, 118, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9,
+      "ratio": 3.74
+    },
+    {
+      "cls": "comparison-change positive",
+      "tag": "SPAN",
+      "text": "+3.3%",
+      "color": "rgb(37, 111, 84)",
+      "bg": "rgb(237, 246, 240)",
+      "size": 10,
+      "ratio": 4.36
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "vs. budget 3,000",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "B",
+      "text": "3,000",
+      "color": "rgb(106, 120, 134)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.6
+    },
+    {
+      "cls": "kpi-unit",
+      "tag": "SPAN",
+      "text": "AED k",
+      "color": "rgb(99, 118, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9,
+      "ratio": 3.74
+    },
+    {
+      "cls": "comparison-change adverse",
+      "tag": "SPAN",
+      "text": "+2.3%",
+      "color": "rgb(138, 103, 43)",
+      "bg": "rgb(252, 243, 226)",
+      "size": 10,
+      "ratio": 3.78
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "vs. budget 2,200",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "B",
+      "text": "2,200",
+      "color": "rgb(106, 120, 134)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.6
+    },
+    {
+      "cls": "kpi-unit",
+      "tag": "SPAN",
+      "text": "AED k",
+      "color": "rgb(99, 118, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9,
+      "ratio": 3.74
+    },
+    {
+      "cls": "comparison-change positive",
+      "tag": "SPAN",
+      "text": "+6.3%",
+      "color": "rgb(37, 111, 84)",
+      "bg": "rgb(237, 246, 240)",
+      "size": 10,
+      "ratio": 4.36
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "vs. budget 800",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "B",
+      "text": "800",
+      "color": "rgb(106, 120, 134)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.6
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Actual & plan inputs not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Revenue \u00b7 AED thousands",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "Expenses",
+      "color": "rgb(122, 134, 146)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.81
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "0",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "1,000",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "2,000",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "3,000",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "4,000",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "Aug 25",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "Sep 25",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "Oct 25",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "Nov 25",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "svg",
+      "tag": "text",
+      "text": "Dec 25",
+      "color": "rgb(37, 50, 68)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Actual",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Budget",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.94
+    },
+    {
+      "cls": "fictional-series",
+      "tag": "SPAN",
+      "text": "Fictional series",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.94
+    },
+    {
+      "cls": "attention-count",
+      "tag": "SPAN",
+      "text": "3",
+      "color": "rgb(158, 119, 51)",
+      "bg": "rgb(255, 244, 223)",
+      "size": 10,
+      "ratio": 3.09
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "3 businesses \u00b7 Jan 2026",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "Consolidation preview is incomplete",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "Native add-in not built in prototype",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "card-footer-link",
+      "tag": "BUTTON",
+      "text": "View readiness checks",
+      "color": "rgb(99, 117, 131)",
+      "bg": "rgb(253, 254, 254)",
+      "size": 10.5,
+      "ratio": 3.74
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Actual vs. budget \u00b7 AED thousands",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "table-review-hint",
+      "tag": "SPAN",
+      "text": "Inspect a variance",
+      "color": "rgb(83, 116, 97)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.09
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "Expenses",
+      "color": "rgb(122, 134, 146)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.81
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "Operating result",
+      "color": "rgb(122, 134, 146)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.81
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Business",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Actual revenue",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Budget",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Variance",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Operating expenses",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Operating result",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "business-icon business-teal",
+      "tag": "SPAN",
+      "text": "SP",
+      "color": "rgb(84, 129, 106)",
+      "bg": "rgb(234, 244, 238)",
+      "size": 9,
+      "ratio": 3.23
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "950",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "variance-button",
+      "tag": "BUTTON",
+      "text": "+50+5.3%",
+      "color": "rgb(46, 126, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.93
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "+5.3%",
+      "color": "rgb(46, 126, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9,
+      "ratio": 3.93
+    },
+    {
+      "cls": "business-icon business-blue",
+      "tag": "SPAN",
+      "text": "SM",
+      "color": "rgb(100, 126, 159)",
+      "bg": "rgb(237, 242, 249)",
+      "size": 9,
+      "ratio": 3.05
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "1,550",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "variance-button",
+      "tag": "BUTTON",
+      "text": "+50+3.2%",
+      "color": "rgb(46, 126, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.93
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "+3.2%",
+      "color": "rgb(46, 126, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9,
+      "ratio": 3.93
+    },
+    {
+      "cls": "business-icon business-purple",
+      "tag": "SPAN",
+      "text": "SY",
+      "color": "rgb(135, 117, 166)",
+      "bg": "rgb(240, 237, 248)",
+      "size": 9,
+      "ratio": 2.93
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "500",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "variance-button",
+      "tag": "BUTTON",
+      "text": "00.0%",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "0.0%",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9,
+      "ratio": 3.94
+    },
+    {
+      "cls": "flex items-center gap-2",
+      "tag": "SPAN",
+      "text": "Unadjusted management total",
+      "color": "rgb(81, 103, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.45
+    },
+    {
+      "cls": "numeric",
+      "tag": "TD",
+      "text": "3,100",
+      "color": "rgb(81, 103, 92)",
+      "bg": "rgb(245, 248, 246)",
+      "size": 10,
+      "ratio": 4.45
+    },
+    {
+      "cls": "numeric",
+      "tag": "TD",
+      "text": "3,000",
+      "color": "rgb(81, 103, 92)",
+      "bg": "rgb(245, 248, 246)",
+      "size": 10,
+      "ratio": 4.45
+    },
+    {
+      "cls": "variance-button",
+      "tag": "BUTTON",
+      "text": "+100",
+      "color": "rgb(81, 103, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.45
+    },
+    {
+      "cls": "numeric",
+      "tag": "TD",
+      "text": "2,250",
+      "color": "rgb(81, 103, 92)",
+      "bg": "rgb(245, 248, 246)",
+      "size": 10,
+      "ratio": 4.45
+    },
+    {
+      "cls": "numeric",
+      "tag": "TD",
+      "text": "850",
+      "color": "rgb(81, 103, 92)",
+      "bg": "rgb(245, 248, 246)",
+      "size": 10,
+      "ratio": 4.45
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Management totals are unadjusted. No consolidation has been perfo",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.69
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "DEMO-03\u00b7Actual",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.69
+    },
+    {
+      "cls": "inline-dot",
+      "tag": "SPAN",
+      "text": "\u00b7",
+      "color": "rgb(154, 164, 171)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 2.04
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Fictional operating context \u00b7 Review prompts, not model inputs",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Sector guide",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "business-icon business-teal",
+      "tag": "SPAN",
+      "text": "SP",
+      "color": "rgb(84, 129, 106)",
+      "bg": "rgb(234, 244, 238)",
+      "size": 9,
+      "ratio": 3.23
+    },
+    {
+      "cls": "driver-sector",
+      "tag": "SPAN",
+      "text": "Packaging & manufacturing",
+      "color": "rgb(67, 116, 91)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.24
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "A fictional producer of transit cartons and protective packaging ",
+      "color": "rgb(106, 124, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.54
+    },
+    {
+      "cls": "driver-card-bottom",
+      "tag": "SPAN",
+      "text": "3 sector driversExplore business",
+      "color": "rgb(109, 128, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.39
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Explore business",
+      "color": "rgb(50, 116, 79)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 4.42
+    },
+    {
+      "cls": "business-icon business-blue",
+      "tag": "SPAN",
+      "text": "SM",
+      "color": "rgb(100, 126, 159)",
+      "bg": "rgb(237, 242, 249)",
+      "size": 9,
+      "ratio": 3.05
+    },
+    {
+      "cls": "driver-sector",
+      "tag": "SPAN",
+      "text": "Metals & fabrication",
+      "color": "rgb(67, 116, 91)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.24
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "A fictional fabricator producing made-to-order metal components i",
+      "color": "rgb(106, 124, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.54
+    },
+    {
+      "cls": "driver-card-bottom",
+      "tag": "SPAN",
+      "text": "3 sector driversExplore business",
+      "color": "rgb(109, 128, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.39
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Explore business",
+      "color": "rgb(50, 116, 79)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 4.42
+    },
+    {
+      "cls": "business-icon business-purple",
+      "tag": "SPAN",
+      "text": "SY",
+      "color": "rgb(135, 117, 166)",
+      "bg": "rgb(240, 237, 248)",
+      "size": 9,
+      "ratio": 2.93
+    },
+    {
+      "cls": "driver-sector",
+      "tag": "SPAN",
+      "text": "Property operations",
+      "color": "rgb(67, 116, 91)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.24
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "A fictional property operation managing a small portfolio of lett",
+      "color": "rgb(106, 124, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.54
+    },
+    {
+      "cls": "driver-card-bottom",
+      "tag": "SPAN",
+      "text": "3 sector driversExplore business",
+      "color": "rgb(109, 128, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.39
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Explore business",
+      "color": "rgb(50, 116, 79)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 4.42
+    },
+    {
+      "cls": "eyebrow",
+      "tag": "SPAN",
+      "text": "NEXT IN YOUR REVIEW",
+      "color": "rgb(107, 133, 111)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 8.5,
+      "ratio": 2.95
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Compare the operating measures, inspect their sources, then explo",
+      "color": "rgb(100, 123, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.31
+    }
+  ],
+  "statements": [
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(248, 249, 250)",
+      "size": 9,
+      "ratio": 3.02
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Offline demo",
+      "color": "rgb(108, 120, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.6
+    },
+    {
+      "cls": "prototype-explanation",
+      "tag": "SPAN",
+      "text": "A fictional workspace. Production integrations are not connected.",
+      "color": "rgb(83, 105, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.16
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "About this demo",
+      "color": "rgb(88, 118, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "page-description",
+      "tag": "P",
+      "text": "Trace a number to its source. Keep missing inputs in view.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.69
+    },
+    {
+      "cls": "badge badge-blue",
+      "tag": "SPAN",
+      "text": "Demo data",
+      "color": "rgb(82, 107, 132)",
+      "bg": "rgb(237, 242, 247)",
+      "size": 10,
+      "ratio": 3.91
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "All businesses",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.19
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "January 2026",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.19
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "AED thousands",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.19
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Actual",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.19
+    },
+    {
+      "cls": "mono",
+      "tag": "SPAN",
+      "text": "Revision DEMO-03",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.81,
+      "ratio": 3.19
+    },
+    {
+      "cls": "active",
+      "tag": "BUTTON",
+      "text": "Income statement",
+      "color": "rgb(25, 125, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 4.05
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "Balance sheet",
+      "color": "rgb(118, 134, 147)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.06
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "Cash flow",
+      "color": "rgb(118, 134, 147)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.06
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Unadjusted management view \u00b7 No accounting policies inferred",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Partial inputs",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Line item",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Actual",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Budget",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Variance",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Availability",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "MANAGEMENT OPERATING MEASURES",
+      "color": "rgb(116, 134, 146)",
+      "bg": "rgb(245, 247, 248)",
+      "size": 9.5,
+      "ratio": 2.89
+    },
+    {
+      "cls": "badge badge-green",
+      "tag": "SPAN",
+      "text": "Demo input",
+      "color": "rgb(54, 113, 84)",
+      "bg": "rgb(236, 246, 239)",
+      "size": 10,
+      "ratio": 4.15
+    },
+    {
+      "cls": "business-icon business-teal",
+      "tag": "SPAN",
+      "text": "SP",
+      "color": "rgb(84, 129, 106)",
+      "bg": "rgb(234, 244, 238)",
+      "size": 8,
+      "ratio": 3.23
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "950",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "+50",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "cell-hint",
+      "tag": "SPAN",
+      "text": "Fictional source",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "business-icon business-blue",
+      "tag": "SPAN",
+      "text": "SM",
+      "color": "rgb(100, 126, 159)",
+      "bg": "rgb(237, 242, 249)",
+      "size": 8,
+      "ratio": 3.05
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "1,550",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "+50",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "cell-hint",
+      "tag": "SPAN",
+      "text": "Fictional source",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "business-icon business-purple",
+      "tag": "SPAN",
+      "text": "SY",
+      "color": "rgb(135, 117, 166)",
+      "bg": "rgb(240, 237, 248)",
+      "size": 8,
+      "ratio": 2.93
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "500",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "0",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "cell-hint",
+      "tag": "SPAN",
+      "text": "Fictional source",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-green",
+      "tag": "SPAN",
+      "text": "Demo input",
+      "color": "rgb(54, 113, 84)",
+      "bg": "rgb(236, 246, 239)",
+      "size": 10,
+      "ratio": 4.15
+    },
+    {
+      "cls": "text-button strong-number",
+      "tag": "BUTTON",
+      "text": "Operating result",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 4.39
+    },
+    {
+      "cls": "variance-button",
+      "tag": "BUTTON",
+      "text": "850",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 4.39
+    },
+    {
+      "cls": "numeric",
+      "tag": "TD",
+      "text": "800",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 12,
+      "ratio": 4.39
+    },
+    {
+      "cls": "variance-button",
+      "tag": "BUTTON",
+      "text": "+50",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 4.39
+    },
+    {
+      "cls": "badge badge-green",
+      "tag": "SPAN",
+      "text": "Demo input",
+      "color": "rgb(54, 113, 84)",
+      "bg": "rgb(236, 246, 239)",
+      "size": 10,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "ADDITIONAL INPUTS",
+      "color": "rgb(116, 134, 146)",
+      "bg": "rgb(245, 247, 248)",
+      "size": 9.5,
+      "ratio": 2.89
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "Not available",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Missing input",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "Not available",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Missing input",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric muted",
+      "tag": "TD",
+      "text": "Not available",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Missing input",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Available numbers open fictional source details.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "button button-ghost ",
+      "tag": "BUTTON",
+      "text": "Review input workflow",
+      "color": "rgb(93, 109, 121)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 4.18
+    },
+    {
+      "cls": "",
+      "tag": "DIV",
+      "text": "The three supplied operating measures are not a complete income s",
+      "color": "rgb(88, 110, 122)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.87
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Revision DEMO-03 is a fixed fixture label, not a persisted record",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "H3",
+      "text": "Keep the reporting boundary clear",
+      "color": "rgb(73, 108, 84)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12.5,
+      "ratio": 4.25
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Actual revenue 3,100 vs. budget 3,000 AED thousands. This compari",
+      "color": "rgb(102, 126, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 3.26
+    }
+  ],
+  "planning": [
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(248, 249, 250)",
+      "size": 9,
+      "ratio": 3.02
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Offline demo",
+      "color": "rgb(108, 120, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.6
+    },
+    {
+      "cls": "prototype-explanation",
+      "tag": "SPAN",
+      "text": "A fictional workspace. Production integrations are not connected.",
+      "color": "rgb(83, 105, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.16
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "About this demo",
+      "color": "rgb(88, 118, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "page-description",
+      "tag": "P",
+      "text": "Compare the plan. Explore a possibility. Keep every change local.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.69
+    },
+    {
+      "cls": "badge badge-blue",
+      "tag": "SPAN",
+      "text": "Illustrative preview",
+      "color": "rgb(82, 107, 132)",
+      "bg": "rgb(237, 242, 247)",
+      "size": 10,
+      "ratio": 3.91
+    },
+    {
+      "cls": "",
+      "tag": "LABEL",
+      "text": "Demo scenario",
+      "color": "rgb(96, 113, 126)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.71
+    },
+    {
+      "cls": "",
+      "tag": "LABEL",
+      "text": "Planning month",
+      "color": "rgb(96, 113, 126)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.71
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "All businesses",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.69
+    },
+    {
+      "cls": "",
+      "tag": "STRONG",
+      "text": "AED thousands",
+      "color": "rgb(133, 148, 159)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.44
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "January 2026 \u00b7 Predetermined synthetic outputs",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-green",
+      "tag": "SPAN",
+      "text": "Session only",
+      "color": "rgb(54, 113, 84)",
+      "bg": "rgb(236, 246, 239)",
+      "size": 10,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Operating measure",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Actual",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Budget",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric forecast-column",
+      "tag": "TH",
+      "text": "Forecast",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(244, 248, 245)",
+      "size": 10,
+      "ratio": 3.6
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Forecast vs. budget",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 10,
+      "ratio": 3.7
+    },
+    {
+      "cls": "positive",
+      "tag": "SPAN",
+      "text": "+140",
+      "color": "rgb(46, 126, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.93
+    },
+    {
+      "cls": "adverse",
+      "tag": "SPAN",
+      "text": "+50",
+      "color": "rgb(154, 113, 51)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.54
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Operating result",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 11.5,
+      "ratio": 4.39
+    },
+    {
+      "cls": "numeric ",
+      "tag": "TD",
+      "text": "850",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 11.5,
+      "ratio": 4.39
+    },
+    {
+      "cls": "numeric ",
+      "tag": "TD",
+      "text": "800",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 11.5,
+      "ratio": 4.39
+    },
+    {
+      "cls": "numeric forecast-column strong-number",
+      "tag": "TD",
+      "text": "890",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 11.5,
+      "ratio": 4.39
+    },
+    {
+      "cls": "positive",
+      "tag": "SPAN",
+      "text": "+90",
+      "color": "rgb(46, 126, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.65
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric forecast-column missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgb(244, 248, 245)",
+      "size": 11.5,
+      "ratio": 3.72
+    },
+    {
+      "cls": "missing-cell",
+      "tag": "SPAN",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "planning-table-note",
+      "tag": "DIV",
+      "text": "Forecast reflects the selected fixed preview; actual and budget f",
+      "color": "rgb(128, 148, 138)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.68
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Illustrative revenue",
+      "color": "rgb(122, 144, 128)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.76
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "AED k",
+      "color": "rgb(139, 158, 144)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.35
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Illustrative operating result",
+      "color": "rgb(122, 144, 128)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.76
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "AED k",
+      "color": "rgb(139, 158, 144)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.35
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "A reversible sensitivity preview",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Revenue uplift / reduction",
+      "color": "rgb(96, 113, 126)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.97
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "%",
+      "color": "rgb(139, 155, 166)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 2.42
+    },
+    {
+      "cls": "field-hint",
+      "tag": "P",
+      "text": "Available previews: \u22125%, 0%, +5%. Operating expenses remain fixed",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "button button-primary ",
+      "tag": "BUTTON",
+      "text": "Apply demo preview",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgb(25, 125, 104)",
+      "size": 12,
+      "ratio": 4.05
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "The input selects a predefined fictional dataset. It does not run",
+      "color": "rgb(127, 145, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 2.71
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Simulated \u00b7 In memory only",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Base case forecast \u00b7 AED thousands \u00b7 No actuals inferred",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Operating measure",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "January 2026",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "February 2026",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "March 2026",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Operating result",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 12,
+      "ratio": 4.39
+    },
+    {
+      "cls": "numeric ",
+      "tag": "TD",
+      "text": "890",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 12,
+      "ratio": 4.39
+    },
+    {
+      "cls": "numeric ",
+      "tag": "TD",
+      "text": "900",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 12,
+      "ratio": 4.39
+    },
+    {
+      "cls": "numeric ",
+      "tag": "TD",
+      "text": "950",
+      "color": "rgb(72, 105, 87)",
+      "bg": "rgb(241, 246, 243)",
+      "size": 12,
+      "ratio": 4.39
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "numeric missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Fictional operating context \u00b7 Review prompts, not model inputs",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Sector guide",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "business-icon business-teal",
+      "tag": "SPAN",
+      "text": "SP",
+      "color": "rgb(84, 129, 106)",
+      "bg": "rgb(234, 244, 238)",
+      "size": 9,
+      "ratio": 3.23
+    },
+    {
+      "cls": "driver-sector",
+      "tag": "SPAN",
+      "text": "Packaging & manufacturing",
+      "color": "rgb(67, 116, 91)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.24
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "A fictional producer of transit cartons and protective packaging ",
+      "color": "rgb(106, 124, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.54
+    },
+    {
+      "cls": "driver-card-bottom",
+      "tag": "SPAN",
+      "text": "3 sector driversExplore business",
+      "color": "rgb(109, 128, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.39
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Explore business",
+      "color": "rgb(50, 116, 79)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 4.42
+    },
+    {
+      "cls": "business-icon business-blue",
+      "tag": "SPAN",
+      "text": "SM",
+      "color": "rgb(100, 126, 159)",
+      "bg": "rgb(237, 242, 249)",
+      "size": 9,
+      "ratio": 3.05
+    },
+    {
+      "cls": "driver-sector",
+      "tag": "SPAN",
+      "text": "Metals & fabrication",
+      "color": "rgb(67, 116, 91)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.24
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "A fictional fabricator producing made-to-order metal components i",
+      "color": "rgb(106, 124, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.54
+    },
+    {
+      "cls": "driver-card-bottom",
+      "tag": "SPAN",
+      "text": "3 sector driversExplore business",
+      "color": "rgb(109, 128, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.39
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Explore business",
+      "color": "rgb(50, 116, 79)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 4.42
+    },
+    {
+      "cls": "business-icon business-purple",
+      "tag": "SPAN",
+      "text": "SY",
+      "color": "rgb(135, 117, 166)",
+      "bg": "rgb(240, 237, 248)",
+      "size": 9,
+      "ratio": 2.93
+    },
+    {
+      "cls": "driver-sector",
+      "tag": "SPAN",
+      "text": "Property operations",
+      "color": "rgb(67, 116, 91)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.24
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "A fictional property operation managing a small portfolio of lett",
+      "color": "rgb(106, 124, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.54
+    },
+    {
+      "cls": "driver-card-bottom",
+      "tag": "SPAN",
+      "text": "3 sector driversExplore business",
+      "color": "rgb(109, 128, 112)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.39
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Explore business",
+      "color": "rgb(50, 116, 79)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 4.42
+    },
+    {
+      "cls": "eyebrow",
+      "tag": "SPAN",
+      "text": "NEXT IN YOUR REVIEW",
+      "color": "rgb(107, 133, 111)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 8.5,
+      "ratio": 2.95
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Planning previews do not clear missing inputs or perform consolid",
+      "color": "rgb(100, 123, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.31
+    },
+    {
+      "cls": "",
+      "tag": "DIV",
+      "text": "All scenarios are illustrative and unadjusted. These fixed output",
+      "color": "rgb(88, 110, 122)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.87
+    }
+  ],
+  "consolidation": [
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(248, 249, 250)",
+      "size": 9,
+      "ratio": 3.02
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Offline demo",
+      "color": "rgb(108, 120, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.6
+    },
+    {
+      "cls": "prototype-explanation",
+      "tag": "SPAN",
+      "text": "A fictional workspace. Production integrations are not connected.",
+      "color": "rgb(83, 105, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.16
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "About this demo",
+      "color": "rgb(88, 118, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "page-description",
+      "tag": "P",
+      "text": "A guided reporting workflow. No consolidation is performed here.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.69
+    },
+    {
+      "cls": "badge badge-amber",
+      "tag": "SPAN",
+      "text": "Incomplete \u00b7 not consolidated",
+      "color": "rgb(138, 104, 43)",
+      "bg": "rgb(255, 244, 223)",
+      "size": 10,
+      "ratio": 3.77
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "All businesses",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.19
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "January 2026",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.19
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "AED thousands",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.19
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Demo workflow \u00b7 No output produced",
+      "color": "rgb(108, 125, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.19
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "businesses selected",
+      "color": "rgb(116, 136, 126)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.07
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Reporting selection, not ownership scope",
+      "color": "rgb(133, 149, 142)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.62
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "example blockers",
+      "color": "rgb(116, 136, 126)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.07
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Missing reference rate & unmatched item",
+      "color": "rgb(133, 149, 142)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.62
+    },
+    {
+      "cls": "summary-word",
+      "tag": "STRONG",
+      "text": "Not consolidated",
+      "color": "rgb(97, 119, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 15,
+      "ratio": 3.81
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "No adjustments or eliminations applied",
+      "color": "rgb(133, 149, 142)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.62
+    },
+    {
+      "cls": "",
+      "tag": "STRONG",
+      "text": "0 of 2 example issues inspected",
+      "color": "rgb(71, 106, 81)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 4.49
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Session-only markers. Both blockers remain unresolved; inspection",
+      "color": "rgb(109, 129, 113)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.2
+    },
+    {
+      "cls": "step-number",
+      "tag": "SPAN",
+      "text": "1",
+      "color": "rgb(61, 125, 99)",
+      "bg": "rgb(233, 244, 237)",
+      "size": 9,
+      "ratio": 3.52
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Reporting scope",
+      "color": "rgb(25, 125, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.99
+    },
+    {
+      "cls": "step-number",
+      "tag": "SPAN",
+      "text": "2",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 2.74
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Entity readiness",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.7
+    },
+    {
+      "cls": "step-number",
+      "tag": "SPAN",
+      "text": "3",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 2.74
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Currencies & rates",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.7
+    },
+    {
+      "cls": "step-number",
+      "tag": "SPAN",
+      "text": "4",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 2.74
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Intercompany",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.7
+    },
+    {
+      "cls": "step-number",
+      "tag": "SPAN",
+      "text": "5",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 2.74
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Adjustments",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.7
+    },
+    {
+      "cls": "step-number",
+      "tag": "SPAN",
+      "text": "6",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 2.74
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Review",
+      "color": "rgb(126, 144, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.7
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Select fictional businesses to explore the readiness interface.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "business-icon business-teal",
+      "tag": "SPAN",
+      "text": "SP",
+      "color": "rgb(84, 129, 106)",
+      "bg": "rgb(234, 244, 238)",
+      "size": 9,
+      "ratio": 3.23
+    },
+    {
+      "cls": "business-code",
+      "tag": "SPAN",
+      "text": "ENT-01 \u00b7 Fictional entity",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.81
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "AED inputs",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "business-icon business-blue",
+      "tag": "SPAN",
+      "text": "SM",
+      "color": "rgb(100, 126, 159)",
+      "bg": "rgb(237, 242, 249)",
+      "size": 9,
+      "ratio": 3.05
+    },
+    {
+      "cls": "business-code",
+      "tag": "SPAN",
+      "text": "ENT-02 \u00b7 Fictional entity",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.81
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "AED inputs",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "business-icon business-purple",
+      "tag": "SPAN",
+      "text": "SY",
+      "color": "rgb(135, 117, 166)",
+      "bg": "rgb(240, 237, 248)",
+      "size": 9,
+      "ratio": 2.93
+    },
+    {
+      "cls": "business-code",
+      "tag": "SPAN",
+      "text": "ENT-03 \u00b7 Fictional entity",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.81
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "AED inputs",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "DIV",
+      "text": "Selection does not establish a consolidation perimeter, ownership",
+      "color": "rgb(88, 110, 122)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.87
+    },
+    {
+      "cls": "muted",
+      "tag": "SPAN",
+      "text": "Step 1 of 6\u00b7Simulated workflow",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "inline-dot",
+      "tag": "SPAN",
+      "text": "\u00b7",
+      "color": "rgb(154, 164, 171)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.19
+    },
+    {
+      "cls": "button button-primary ",
+      "tag": "BUTTON",
+      "text": "Continue",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgb(25, 125, 104)",
+      "size": 12,
+      "ratio": 4.05
+    },
+    {
+      "cls": "eyebrow",
+      "tag": "SPAN",
+      "text": "NEXT IN YOUR REVIEW",
+      "color": "rgb(107, 133, 111)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 8.5,
+      "ratio": 2.95
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Walk through a synthetic CSV selection and mapping preview. This ",
+      "color": "rgb(100, 123, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.31
+    },
+    {
+      "cls": "button button-ghost ",
+      "tag": "BUTTON",
+      "text": "View mock review activity",
+      "color": "rgb(66, 110, 74)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4.16
+    },
+    {
+      "cls": "inline-guidance",
+      "tag": "DIV",
+      "text": "These steps illustrate a possible review experience, not accounti",
+      "color": "rgb(124, 143, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.6
+    }
+  ],
+  "imports": [
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(248, 249, 250)",
+      "size": 9,
+      "ratio": 3.02
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Offline demo",
+      "color": "rgb(108, 120, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.6
+    },
+    {
+      "cls": "prototype-explanation",
+      "tag": "SPAN",
+      "text": "A fictional workspace. Production integrations are not connected.",
+      "color": "rgb(83, 105, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.16
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "About this demo",
+      "color": "rgb(88, 118, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "page-description",
+      "tag": "P",
+      "text": "Choose a synthetic source, review the mapping, and inspect the ha",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.69
+    },
+    {
+      "cls": "badge badge-blue",
+      "tag": "SPAN",
+      "text": "Simulated \u00b7 No data processing",
+      "color": "rgb(82, 107, 132)",
+      "bg": "rgb(237, 242, 247)",
+      "size": 10,
+      "ratio": 3.91
+    },
+    {
+      "cls": "step-number",
+      "tag": "SPAN",
+      "text": "1",
+      "color": "rgb(61, 125, 99)",
+      "bg": "rgb(233, 244, 237)",
+      "size": 9,
+      "ratio": 3.52
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Choose source",
+      "color": "rgb(25, 125, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.99
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Use the provided example, or select a local synthetic CSV for fil",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "STRONG",
+      "text": "CSV file",
+      "color": "rgb(89, 115, 102)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12.5,
+      "ratio": 3.9
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "Filename-only selection",
+      "color": "rgb(130, 153, 140)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.46
+    },
+    {
+      "cls": "",
+      "tag": "STRONG",
+      "text": "Excel layout",
+      "color": "rgb(89, 115, 102)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12.5,
+      "ratio": 4.05
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "Demo preview only",
+      "color": "rgb(130, 153, 140)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.56
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "3 fictional businesses \u00b7 January 2026 \u00b7 AED thousands",
+      "color": "rgb(129, 150, 138)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 2.59
+    },
+    {
+      "cls": "button button-primary ",
+      "tag": "BUTTON",
+      "text": "Use provided example",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgb(25, 125, 104)",
+      "size": 12,
+      "ratio": 4.05
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "No file contents are read or stored. Do not select real corporate",
+      "color": "rgb(140, 158, 145)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.36
+    },
+    {
+      "cls": "download-example",
+      "tag": "A",
+      "text": "Download the synthetic CSV example",
+      "color": "rgb(83, 135, 106)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 3.37
+    },
+    {
+      "cls": "muted",
+      "tag": "SPAN",
+      "text": "Synthetic data only",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "eyebrow",
+      "tag": "SPAN",
+      "text": "NEXT IN YOUR REVIEW",
+      "color": "rgb(107, 133, 111)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 8.5,
+      "ratio": 2.95
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Inspect the planned connection and read/write previews. Your file",
+      "color": "rgb(100, 123, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.31
+    },
+    {
+      "cls": "",
+      "tag": "DIV",
+      "text": "Only the filename and UI selections are retained in temporary Rea",
+      "color": "rgb(88, 110, 122)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.87
+    }
+  ],
+  "excel": [
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(248, 249, 250)",
+      "size": 9,
+      "ratio": 3.02
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Offline demo",
+      "color": "rgb(108, 120, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.6
+    },
+    {
+      "cls": "prototype-explanation",
+      "tag": "SPAN",
+      "text": "A fictional workspace. Production integrations are not connected.",
+      "color": "rgb(83, 105, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.16
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "About this demo",
+      "color": "rgb(88, 118, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "page-description",
+      "tag": "P",
+      "text": "A familiar workflow, thoughtfully previewed. No workbook connecte",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.69
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Not connected \u00b7 prototype",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Read-only pulls and explicit write-back review. No workbook is co",
+      "color": "rgb(125, 145, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 2.73
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Windows 11",
+      "color": "rgb(130, 153, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.56
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Office 2021 \u00b7 Excel x64",
+      "color": "rgb(130, 153, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.56
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Planned requirements only",
+      "color": "rgb(130, 153, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.56
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Explore a loading and unavailable-state example. This check does ",
+      "color": "rgb(105, 125, 114)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 3.51
+    },
+    {
+      "cls": "active",
+      "tag": "BUTTON",
+      "text": "Data pull preview",
+      "color": "rgb(25, 125, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 4.05
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "Write-back preview",
+      "color": "rgb(118, 134, 147)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.06
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "All businesses \u00b7 January 2026 \u00b7 AED thousands",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "STRONG",
+      "text": "Stale preview example",
+      "color": "rgb(148, 121, 56)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 3.25
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Illustrative snapshot: 31 Jan 2026, 17:00. No freshness check or ",
+      "color": "rgb(153, 135, 94)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 2.8
+    },
+    {
+      "cls": "badge badge-amber",
+      "tag": "SPAN",
+      "text": "Not live",
+      "color": "rgb(138, 104, 43)",
+      "bg": "rgb(255, 244, 223)",
+      "size": 10,
+      "ratio": 3.77
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "atlas-management-preview",
+      "color": "rgb(109, 137, 119)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.96
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Not a workbook",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 9,
+      "ratio": 3.59
+    },
+    {
+      "cls": "worksheet-readonly",
+      "tag": "SPAN",
+      "text": "Read-only mock",
+      "color": "rgb(129, 153, 138)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.45
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "A",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "B",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "C",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "D",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "1",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Measure",
+      "color": "rgb(70, 107, 81)",
+      "bg": "rgb(238, 245, 240)",
+      "size": 11,
+      "ratio": 4.29
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Actual",
+      "color": "rgb(70, 107, 81)",
+      "bg": "rgb(238, 245, 240)",
+      "size": 11,
+      "ratio": 4.29
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Budget",
+      "color": "rgb(70, 107, 81)",
+      "bg": "rgb(238, 245, 240)",
+      "size": 11,
+      "ratio": 4.29
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Context",
+      "color": "rgb(70, 107, 81)",
+      "bg": "rgb(238, 245, 240)",
+      "size": 11,
+      "ratio": 4.29
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "2",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Revenue",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": "selected-cell ",
+      "tag": "TD",
+      "text": "3,100",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgb(248, 251, 248)",
+      "size": 11,
+      "ratio": 3.86
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "3,000",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Demo input",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "3",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Operating expenses",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "2,250",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "2,200",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Demo input",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "4",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Operating result",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "850",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "800",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Unadjusted",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "5",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Cash balance",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(126, 151, 136)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.63
+    },
+    {
+      "cls": " missing-cell",
+      "tag": "TD",
+      "text": "Not provided",
+      "color": "rgb(126, 151, 136)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.63
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Missing input",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "6",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "7",
+      "color": "rgb(121, 145, 132)",
+      "bg": "rgb(244, 247, 245)",
+      "size": 10,
+      "ratio": 2.63
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Units: AED thousands",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": " ",
+      "tag": "TD",
+      "text": "Read-only mock",
+      "color": "rgb(91, 116, 101)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 4
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Management view (mock)",
+      "color": "rgb(92, 130, 103)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 10,
+      "ratio": 3.48
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "(mock)",
+      "color": "rgb(134, 159, 139)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9,
+      "ratio": 2.42
+    },
+    {
+      "cls": "worksheet-status",
+      "tag": "SPAN",
+      "text": "No file open",
+      "color": "rgb(130, 153, 138)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.46
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Only bundled fixture values are displayed.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-blue",
+      "tag": "SPAN",
+      "text": "Simulated read",
+      "color": "rgb(82, 107, 132)",
+      "bg": "rgb(237, 242, 247)",
+      "size": 10,
+      "ratio": 3.91
+    },
+    {
+      "cls": "eyebrow",
+      "tag": "SPAN",
+      "text": "NEXT IN YOUR REVIEW",
+      "color": "rgb(107, 133, 111)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 8.5,
+      "ratio": 2.95
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Inspect a fixed mock Excel entry. This does not create or retriev",
+      "color": "rgb(100, 123, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.31
+    },
+    {
+      "cls": "",
+      "tag": "DIV",
+      "text": "No native Excel add-in is built. No workbook is opened, changed, ",
+      "color": "rgb(88, 110, 122)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.87
+    }
+  ],
+  "activity": [
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(248, 249, 250)",
+      "size": 9,
+      "ratio": 3.02
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Offline demo",
+      "color": "rgb(108, 120, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.6
+    },
+    {
+      "cls": "prototype-explanation",
+      "tag": "SPAN",
+      "text": "A fictional workspace. Production integrations are not connected.",
+      "color": "rgb(83, 105, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.16
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "About this demo",
+      "color": "rgb(88, 118, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "page-description",
+      "tag": "P",
+      "text": "Explore how a reporting workspace could make actions traceable.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.69
+    },
+    {
+      "cls": "badge badge-blue",
+      "tag": "SPAN",
+      "text": "Mock activity \u00b7 Static fixture",
+      "color": "rgb(82, 107, 132)",
+      "bg": "rgb(237, 242, 247)",
+      "size": 10,
+      "ratio": 3.91
+    },
+    {
+      "cls": "",
+      "tag": "STRONG",
+      "text": "A timeline for context, not an audit system.",
+      "color": "rgb(88, 119, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12.5,
+      "ratio": 3.55
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "These six fictional entries are dated 30\u201331 January 2026. They ar",
+      "color": "rgb(120, 146, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.53
+    },
+    {
+      "cls": "button button-ghost ",
+      "tag": "BUTTON",
+      "text": "About this view",
+      "color": "rgb(93, 109, 121)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.79
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Fictional names, actions, and timestamps",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "cell-hint",
+      "tag": "SPAN",
+      "text": "6 of 6 mock entries",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Action",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Actor",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Timestamp",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Scope",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Revision",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Result",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Viewed management overview",
+      "color": "rgb(83, 111, 131)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "MOCK-006 \u00b7 Mock entry",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "actor-cell",
+      "tag": "SPAN",
+      "text": "JDJamie Demo",
+      "color": "rgb(113, 138, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.96
+    },
+    {
+      "cls": "mini-avatar",
+      "tag": "SPAN",
+      "text": "JD",
+      "color": "rgb(125, 150, 169)",
+      "bg": "rgb(238, 242, 245)",
+      "size": 8,
+      "ratio": 2.34
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "31 Jan 2026",
+      "color": "rgb(112, 137, 157)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.99
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "17:15 \u00b7 Example time",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Preview only",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Previewed an upside scenario",
+      "color": "rgb(83, 111, 131)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "MOCK-005 \u00b7 Mock entry",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "actor-cell",
+      "tag": "SPAN",
+      "text": "JDJamie Demo",
+      "color": "rgb(113, 138, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.96
+    },
+    {
+      "cls": "mini-avatar",
+      "tag": "SPAN",
+      "text": "JD",
+      "color": "rgb(125, 150, 169)",
+      "bg": "rgb(238, 242, 245)",
+      "size": 8,
+      "ratio": 2.34
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "31 Jan 2026",
+      "color": "rgb(112, 137, 157)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.99
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "16:42 \u00b7 Example time",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Preview only",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Reviewed intercompany difference",
+      "color": "rgb(83, 111, 131)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "MOCK-004 \u00b7 Mock entry",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "actor-cell",
+      "tag": "SPAN",
+      "text": "CSCasey Sample",
+      "color": "rgb(113, 138, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.96
+    },
+    {
+      "cls": "mini-avatar",
+      "tag": "SPAN",
+      "text": "CS",
+      "color": "rgb(125, 150, 169)",
+      "bg": "rgb(238, 242, 245)",
+      "size": 8,
+      "ratio": 2.34
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "31 Jan 2026",
+      "color": "rgb(112, 137, 157)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.99
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "15:30 \u00b7 Example time",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-amber",
+      "tag": "SPAN",
+      "text": "Issue shown",
+      "color": "rgb(138, 104, 43)",
+      "bg": "rgb(255, 244, 223)",
+      "size": 10,
+      "ratio": 3.77
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Opened an Excel write preview",
+      "color": "rgb(83, 111, 131)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "MOCK-003 \u00b7 Mock entry",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "actor-cell",
+      "tag": "SPAN",
+      "text": "JDJamie Demo",
+      "color": "rgb(113, 138, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.96
+    },
+    {
+      "cls": "mini-avatar",
+      "tag": "SPAN",
+      "text": "JD",
+      "color": "rgb(125, 150, 169)",
+      "bg": "rgb(238, 242, 245)",
+      "size": 8,
+      "ratio": 2.34
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "31 Jan 2026",
+      "color": "rgb(112, 137, 157)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.99
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "14:10 \u00b7 Example time",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "No data written",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Inspected a missing reference rate",
+      "color": "rgb(83, 111, 131)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "MOCK-002 \u00b7 Mock entry",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "actor-cell",
+      "tag": "SPAN",
+      "text": "CSCasey Sample",
+      "color": "rgb(113, 138, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.96
+    },
+    {
+      "cls": "mini-avatar",
+      "tag": "SPAN",
+      "text": "CS",
+      "color": "rgb(125, 150, 169)",
+      "bg": "rgb(238, 242, 245)",
+      "size": 8,
+      "ratio": 2.34
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "30 Jan 2026",
+      "color": "rgb(112, 137, 157)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.99
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "11:25 \u00b7 Example time",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-amber",
+      "tag": "SPAN",
+      "text": "Issue shown",
+      "color": "rgb(138, 104, 43)",
+      "bg": "rgb(255, 244, 223)",
+      "size": 10,
+      "ratio": 3.77
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Reviewed the synthetic CSV example",
+      "color": "rgb(83, 111, 131)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "MOCK-001 \u00b7 Mock entry",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "actor-cell",
+      "tag": "SPAN",
+      "text": "JDJamie Demo",
+      "color": "rgb(113, 138, 155)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.96
+    },
+    {
+      "cls": "mini-avatar",
+      "tag": "SPAN",
+      "text": "JD",
+      "color": "rgb(125, 150, 169)",
+      "bg": "rgb(238, 242, 245)",
+      "size": 8,
+      "ratio": 2.34
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "30 Jan 2026",
+      "color": "rgb(112, 137, 157)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11,
+      "ratio": 2.99
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "09:00 \u00b7 Example time",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 9.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Preview only",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Static sample \u00b7 No live event capture",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "cell-hint",
+      "tag": "SPAN",
+      "text": "January 2026",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "eyebrow",
+      "tag": "SPAN",
+      "text": "NEXT IN YOUR REVIEW",
+      "color": "rgb(107, 133, 111)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 8.5,
+      "ratio": 2.95
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "All fixture values are unchanged. Your session actions have not a",
+      "color": "rgb(100, 123, 104)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.31
+    },
+    {
+      "cls": "",
+      "tag": "DIV",
+      "text": "No financial record or audit event is changed by using this proto",
+      "color": "rgb(88, 110, 122)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.87
+    }
+  ],
+  "settings": [
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(248, 249, 250)",
+      "size": 9,
+      "ratio": 3.02
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Offline demo",
+      "color": "rgb(108, 120, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.6
+    },
+    {
+      "cls": "prototype-explanation",
+      "tag": "SPAN",
+      "text": "A fictional workspace. Production integrations are not connected.",
+      "color": "rgb(83, 105, 92)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 4.16
+    },
+    {
+      "cls": "",
+      "tag": "BUTTON",
+      "text": "About this demo",
+      "color": "rgb(88, 118, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "page-description",
+      "tag": "P",
+      "text": "Make this demo workspace feel like yours.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.69
+    },
+    {
+      "cls": "badge badge-neutral",
+      "tag": "SPAN",
+      "text": "Preferences are session-only",
+      "color": "rgb(100, 113, 127)",
+      "bg": "rgb(241, 243, 245)",
+      "size": 10,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Simple preferences with visible effects",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "STRONG",
+      "text": "Atlas light",
+      "color": "rgb(90, 121, 98)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.76
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Warm-gray canvas \u00b7 Navy navigation \u00b7 Teal accents",
+      "color": "rgb(128, 155, 134)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.49
+    },
+    {
+      "cls": "",
+      "tag": "LABEL",
+      "text": "Compact data tables",
+      "color": "rgb(83, 111, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 13,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Table spacing is comfortable across the workspace.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "LABEL",
+      "text": "Reduce interface motion",
+      "color": "rgb(83, 111, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 13,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Disable decorative transitions and loading animations.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "LABEL",
+      "text": "Show inline demo guidance",
+      "color": "rgb(83, 111, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 13,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Show extra explanatory notes. The persistent prototype badge alwa",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Applies to the fictional display only",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "LABEL",
+      "text": "Use digit grouping",
+      "color": "rgb(83, 111, 130)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 13,
+      "ratio": 4.15
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Number preview: 3,100 AED thousands.",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "LABEL",
+      "text": "Reporting period",
+      "color": "rgb(96, 113, 126)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.97
+    },
+    {
+      "cls": "",
+      "tag": "LABEL",
+      "text": "Display currency",
+      "color": "rgb(96, 113, 126)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.97
+    },
+    {
+      "cls": "field-hint",
+      "tag": "P",
+      "text": "Currency switching is unavailable: this prototype does not implem",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "No settings are written to disk or browser storage",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Fictional workspace label",
+      "color": "rgb(96, 113, 126)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.97
+    },
+    {
+      "cls": "field-hint",
+      "tag": "P",
+      "text": "Use a fictional name. This changes the workspace selector and pag",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 3.94
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "A considered workspace for exploring how finance workflows could ",
+      "color": "rgb(99, 113, 125)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.94
+    },
+    {
+      "cls": "badge badge-blue",
+      "tag": "SPAN",
+      "text": "Prototype \u00b7 Synthetic data",
+      "color": "rgb(82, 107, 132)",
+      "bg": "rgb(237, 242, 247)",
+      "size": 10,
+      "ratio": 3.91
+    },
+    {
+      "cls": "",
+      "tag": "DT",
+      "text": "Build",
+      "color": "rgb(98, 124, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.62
+    },
+    {
+      "cls": "",
+      "tag": "DT",
+      "text": "Runtime",
+      "color": "rgb(98, 124, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.62
+    },
+    {
+      "cls": "",
+      "tag": "DT",
+      "text": "UI state",
+      "color": "rgb(98, 124, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.62
+    },
+    {
+      "cls": "",
+      "tag": "DT",
+      "text": "Integrations",
+      "color": "rgb(98, 124, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.62
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Comfortable rows \u00b7 Grouped digits \u00b7 AED thousands",
+      "color": "rgb(107, 126, 113)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.47
+    },
+    {
+      "cls": "",
+      "tag": "TH",
+      "text": "Revenue",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "numeric",
+      "tag": "TH",
+      "text": "Value",
+      "color": "rgb(100, 116, 128)",
+      "bg": "rgb(250, 251, 252)",
+      "size": 11,
+      "ratio": 3.7
+    },
+    {
+      "cls": "",
+      "tag": "H3",
+      "text": "A keyboard-friendly workspace",
+      "color": "rgb(89, 119, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 14,
+      "ratio": 3.91
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Search screens",
+      "color": "rgb(102, 124, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Ctrl K",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 3.16
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Close a dialog / menu",
+      "color": "rgb(102, 124, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Esc",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 3.16
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Switch a statement tab",
+      "color": "rgb(102, 124, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "\u2190",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 3.16
+    },
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "\u2192",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 3.16
+    },
+    {
+      "cls": "",
+      "tag": "SPAN",
+      "text": "Move between controls",
+      "color": "rgb(102, 124, 108)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10.5,
+      "ratio": 3.59
+    },
+    {
+      "cls": "",
+      "tag": "KBD",
+      "text": "Tab",
+      "color": "rgb(121, 130, 141)",
+      "bg": "rgb(255, 255, 255)",
+      "size": 9,
+      "ratio": 3.16
+    },
+    {
+      "cls": "",
+      "tag": "H3",
+      "text": "Start fresh",
+      "color": "rgb(89, 119, 99)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 14,
+      "ratio": 3.91
+    },
+    {
+      "cls": "",
+      "tag": "P",
+      "text": "Restore the default workspace, January 2026, actual scenario, and",
+      "color": "rgb(126, 151, 136)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 11.5,
+      "ratio": 2.63
+    },
+    {
+      "cls": "",
+      "tag": "SMALL",
+      "text": "Only local UI state will change.",
+      "color": "rgb(139, 163, 148)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 10,
+      "ratio": 2.31
+    },
+    {
+      "cls": "",
+      "tag": "DIV",
+      "text": "There are no pretend security controls. Encryption, key recovery,",
+      "color": "rgb(88, 110, 122)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "size": 12,
+      "ratio": 3.87
+    }
+  ]
+}
