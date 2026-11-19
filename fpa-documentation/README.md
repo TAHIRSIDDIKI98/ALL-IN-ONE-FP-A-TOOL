@@ -34,6 +34,7 @@ This is a decision-ready baseline, not a claim that every industry, regulation, 
 27. `decisions/ADR-001-v1-lean-local-core.md` — unapproved external AI stack recommendation, retained for review.
 28. `tests/specifications/S-02-native-excel-xll.md` and `tests/specifications/S-03-finance-consolidation.md` — unapproved draft test specifications, not executed.
 29. `prompts/frontend-builder-react-vite-tailwind.md` — initial prompt for an independently built UI-only synthetic prototype; `prompts/frontend-builder-addon-unlimited-tokens.md` — supplementary instructions for deep implementation and honest verification.
+30. `docs/21-master-architecture-v2.2.md` — **Owner-approved Master Architectural & Implementation Specification v2.2** (10-industry packs, 5 contract-bounded languages with Rust fallback toggles, 100M+ cell Block-Hybrid target, 4-repo forensic countermeasures, `I01`–`I32` invariants, and native Windows 11 boundaries).
 
 ## Authority and baseline recommendation
 Accepted security/finance invariants > approved specs and ADRs > approved release scope > task contract > implementation. If documents conflict or decisions are missing, stop and ask. Current documents are **proposals**, not approval.

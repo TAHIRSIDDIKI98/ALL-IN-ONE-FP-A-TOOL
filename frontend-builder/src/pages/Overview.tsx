@@ -5,6 +5,7 @@ import { useWorkspace } from '../lib/workspace'
 import { Badge, BusinessLabel, Button, Card, CardHeader, DataTable, Note, PageHeader, Segmented, SourceDetail } from '../components/ui'
 import { TrendChart } from '../components/TrendChart'
 import { BusinessDrivers, BusinessProfile, MiniTrend, NextStep, VarianceReview } from '../components/review'
+import { BlueprintStudioCard } from '../components/BlueprintStudioCard'
 
 export function Overview() {
   const { scope, period, scenario, fmt, preferences, openDialog, navigate, setStatementTab, setConsolidationStep, workspaceName } = useWorkspace()
@@ -48,6 +49,6 @@ export function Overview() {
       })}</tbody><tfoot><tr><th><span className="flex items-center gap-2">{scope === 'group' ? 'Unadjusted management total' : 'Business total'}<button className="inline-info" onClick={viewInfo} aria-label="About management totals"><Info size={13} /></button></span></th><td className="numeric">{fmt(actual[tableMetric])}</td><td className="numeric">{fmt(compare[tableMetric])}</td><td className="numeric"><button className="variance-button" aria-label={`Inspect total ${tableMetric} variance`} onClick={() => openDialog({ title: 'Management variance review', drawer: true, content: <VarianceReview metric={tableMetric} /> })}>{signedNumber(actual[tableMetric] - compare[tableMetric], preferences.grouping)}<ArrowUpRight size={12} /></button></td><td className="numeric">{fmt(tableMetric === 'revenue' ? actual.expenses : actual.revenue)}</td><td className="numeric">{fmt(tableMetric === 'result' ? actual.expenses : actual.result)}</td><td /></tr></tfoot></DataTable>
     </Card>
     <div className="overview-footnote"><span><Info size={12} />Management totals are unadjusted. No consolidation has been performed.</span><span>DEMO-03<span className="inline-dot">·</span>{scenarioNames[scenario]}</span></div>
-    <div className="overview-below-fold"><BusinessDrivers /><NextStep title="Turn a variance into a review" description="Compare the operating measures, inspect their sources, then explore a local scenario." label="Review financial statements" onClick={() => { setStatementTab('income'); navigate('statements') }} /></div>
+    <div className="overview-below-fold"><BusinessDrivers /><BlueprintStudioCard /><NextStep title="Turn a variance into a review" description="Compare the operating measures, inspect their sources, then explore a local scenario." label="Review financial statements" onClick={() => { setStatementTab('income'); navigate('statements') }} /></div>
   </div>
 }

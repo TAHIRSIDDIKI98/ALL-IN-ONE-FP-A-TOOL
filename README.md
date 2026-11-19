@@ -12,7 +12,7 @@ The initial focus is the **UAE**, multi-business groups and a single-user deskto
 
 ---
 
-> **Project status: planning and documentation.** This repository currently contains the product blueprint, research, decisions-in-progress and AI-agent guidance. A separate frontend prototype is being developed, but its code and results have not yet been verified here. The production application, finance engine and Excel add-in are **not yet built or tested**.
+> **Project status: documentation & verified UI prototype.** This repository contains the product blueprint, research, Project Brain, and the interactive **Atlas FP&A** frontend prototype (`frontend-builder/`, using exclusively synthetic data). The production finance engine, encrypted database, consolidation backend, and native Office 2021 64-bit Excel add-in are **not yet built or tested**.
 
 ---
 
@@ -73,15 +73,14 @@ These are **planning examples**, not evidence of completed industry packs or cur
 
 | Area | Status |
 | :--- | :--- |
-| **Product vision and research** | Documentation drafted; requirements and scope are being refined. |
-| **Project Brain** | Six persistent files created to capture rules, architecture context, data concepts, contracts, current state and decisions. |
-| **Frontend prototype** | A separate frontend-building AI is working from a React + Vite + Tailwind brief. Its output is not yet available or reviewed in this workspace. |
-| **Production application** | Not implemented in this workspace; no verified backend, database schema, finance engine or production APIs. |
-| **Native Excel add-in** | Required for V1; not yet implemented or tested. |
-| **Production technology stack** | Under discussion. The external AI's previous stack recommendation is **not an approved decision**. |
-| **Testing and approvals** | No Windows/Excel test, production benchmark or independent financial certification has been completed here. |
+| **Product vision, Master Architecture v2.2 & Universal ERP Roadmap v3.0** | Owner-approved architectural & execution specifications ([docs/21-master-architecture-v2.2.md](fpa-documentation/docs/21-master-architecture-v2.2.md) and [docs/22-master-roadmap-and-erp-blueprint-v3.0.md](fpa-documentation/docs/22-master-roadmap-and-erp-blueprint-v3.0.md)): all 10 global industry blueprint packs (`BP-01`–`BP-10`) + 8 UAE sectors in V1, Top-12 Universal ERP Adapter Catalog (`ERP-01`–`ERP-12` across `CSV`/`XLSX`/`PARQUET`/`XML`/`JSON` + SCD2 CoA mapper `I33`), Complete One-Stop FP&A Replacement Engines (`I34` Workforce UAE Art. 51 EOSB + CapEx Roll-Forward, `I35` 13-Week Direct Cash DSCR + PVM Bridge), 8 Gated Vertical Build Phases (`P0`–`P7`, `I36`), contract-bounded 5 languages (`Rust` sole authority, `TypeScript`, `Go`, `Elixir --start-epmd false`, `Java 25 jlink`) with Rust fallback toggles, 100M+ cell Block-Hybrid scale target, native 64-bit Excel `.xll` P0, and 36 blocking invariants (`I01`–`I36`). |
+| **Project Brain** | Six persistent files (`_project_brain/`) synchronized with `D-023`–`D-030`, `IMP-GL` vs `IMP-SUB` ingestion rules (`OQ-025`/`K2`/`K3`), Top-12 ERP normalization rules, and 5-language IPC contracts. |
+| **Interactive reference workbench (`frontend-builder/`)** | Verified React 19 + Vite 7 + TypeScript + Tailwind v4 UI paired with pure `BigInt` & FIPS 180-4 SHA-256 reference modules (`domainRules.ts` & `omniBlueprintEngine.ts`): all 8 screens, 8 UAE sectors, all 10 global industry packs (`0` orphan formulas), Statement policy/acyclic DAG guard (`I08`/`I09`/`I27`), Largest-Remainder `I05` allocator, 100M+ estimator, **One-Stop FP&A Replacement Suite (`I34`/`I35`)**, `IMP-SUB` gate, **Universal Top-12 ERP Mapper (`I33`)**, XLL `FPA.GET`/idempotency lab (`I20`/`I28`), SHA-256 audit chain lab (`I22`), Rust fallback toggles, `Export parity JSON` (`atlas-fpa-v3.0-parity-vectors.json`), **8-Phase Gated Execution Roadmap (`I36`)**, and live 36-invariant oracle. |
+| **Compiled Windows native runtimes** | **Not yet built in Linux UI preview:** Windows 11 executables (`fpa-core.exe`, `fpa-io.exe`, `fpa-flow`, `fpa-docs.exe`, `fpa-xll.xll`) and `SQLCipher` AES-256 storage await native Windows toolchain compilation in Phases `P1`–`P7`. |
+| **Native Excel add-in (`fpa-xll.xll`)** | P0 V1 contract (`=FPA.GET` read-only UDF + 15-sig-digit guard + atomic signed Command write-back); simulated in UI, not yet compiled or tested against Windows / Office 2021 x64. |
+| **Testing & verification** | `npx --yes tsx --test` (`16/16` `node:test` suites across `domainRules.test.ts` + `omniBlueprintEngine.test.ts`), `npm run build`, `npm run lint`, and live headless Chromium (`playwright-cli`) desktop/mobile layout + WCAG contrast checks pass; Windows native binary tests and independent finance sign-off remain pending. |
 
-There are **no installation or run instructions for a production application yet**. If the separate UI prototype is later added to the repository, its actual README and build instructions should be reviewed rather than assumed.
+Run the interactive workbench locally with `npm install && npm run dev` from the repository root (or review `frontend-builder/README.md` and `frontend-builder/docs/UI_FEATURE_MATRIX.md` for boundaries and limitations).
 
 ## Principles behind the project
 
@@ -100,25 +99,20 @@ The design also calls for atomic financial changes, idempotent requests and an a
 
 ## The road ahead
 
-The order and scope of implementation will be decided with the project owner; this is a **directional roadmap**, not a release promise.
-
-1. **Define** — refine business requirements, financial policies, reporting scope, product boundaries and acceptance criteria.
-2. **Explore** — review the separate interface prototype and evaluate technical options for Windows, offline use and native Excel.
-3. **Build** — after approval, implement a traceable financial foundation and the selected user workflows.
-4. **Validate** — test calculations, consolidation, recovery, offline installation and the Excel experience using reviewed cases.
-5. **Expand** — add further industries, integrations and advanced capabilities as they are specified and validated.
-
-Application feature coding, technical spikes and Task #1 remain paused pending separate user approval. Current decisions and next actions live in the [active project state](_project_brain/04_ACTIVE_STATE_AND_TASKS.md).
+1. **Validate workbench & policies (`P0`)** — review the **Atlas FP&A v3.0** interactive modules (`BP-01`–`BP-10`, `I05` allocator, `I34`/`I35` One-Stop FP&A Suite, `IMP-SUB` gate, `I33` Top-12 ERP Mapper, `I20`/`I28` XLL lab, `I22` SHA-256 audit chain, `I36` 8-Phase Roadmap, `I01`–`I36` suite), export `atlas-fpa-v3.0-parity-vectors.json` from Settings, and complete legal perimeter / statutory finance sign-offs (`CONS-001`–`CONS-009`).
+2. **Execute Gated Phases `P1`–`P6` on Windows 11** — compile `fpa-core.exe` (`SQLCipher` + Block-Hybrid + mmap spill), `fpa-io.exe` (Go Top-12 ERP worker), `fpa-flow` (Elixir `--start-epmd false`), `fpa-docs.exe` (Java 25 `jlink`), and `fpa-xll.xll` on Windows 11 while updating `_project_brain/00`–`05` at each gate.
+3. **Accept & certify (`P7`)** — execute native Windows x64 + Office 2021 Excel host regression suites against all 36 blocking invariants before any non-synthetic production data.
 
 ## Explore the repository
 
 | Start here | Purpose |
 | :--- | :--- |
+| [Master Roadmap & Universal ERP Blueprint v3.0](fpa-documentation/docs/22-master-roadmap-and-erp-blueprint-v3.0.md) | **Approved v3.0 Execution Roadmap & ERP Blueprint** (Top-12 ERPs, One-Stop FP&A Engines, 8 Gated Phases `P0`–`P7`, Secondary Brain Protocol, `I01`–`I36`). |
+| [Master Architecture v2.2](fpa-documentation/docs/21-master-architecture-v2.2.md) | **Approved v2.2 Master Plan** (10 industry packs, 5 languages, 100M+ scale, XLL P0, 4-repo forensic fixes). |
 | [Documentation index](fpa-documentation/README.md) | The full product, finance, architecture, security and research plan. |
 | [Product scope](fpa-documentation/docs/01-product-scope.md) | Vision, personas, proposed capabilities and boundaries. |
 | [Consolidation scope](fpa-documentation/docs/19-consolidation-scope.md) | Group consolidation requirements and unresolved accounting decisions. |
-| [Tech-stack brainstorming](fpa-documentation/docs/20-tech-stack-brainstorm.md) | Options and trade-offs; not an approved production stack. |
-| [Frontend prototype brief](fpa-documentation/prompts/frontend-builder-react-vite-tailwind.md) | The UI-only, synthetic-data request supplied to the separate frontend builder. |
+| [Frontend workbench matrix](frontend-builder/docs/UI_FEATURE_MATRIX.md) | Feature traceability and prototype-vs-native runtime boundaries. |
 | [Skills registry](fpa-documentation/skills/README.md) | Draft project workflows and safe handling of external skills. |
 
 ### Repository map
@@ -126,14 +120,16 @@ Application feature coding, technical spikes and Task #1 remain paused pending s
 ```text
 .
 ├── README.md                    Project introduction
+├── package.json                 Root workspace script runner for the UI prototype
 ├── AGENTS.md                    Entry instructions for project agents
 ├── _project_brain/              Six-file persistent project memory
 ├── fpa-documentation/           Product, finance, engineering and research docs
+├── frontend-builder/            Atlas FP&A interactive UI prototype (synthetic data)
 ├── .agents/skills/              Project-authored draft agent workflows
 └── assets/readme/               Locally bundled README artwork
 ```
 
-This map reflects the documentation workspace. The separately developed frontend should be inspected when its files are made available; its location and status are not assumed here.
+See `frontend-builder/docs/UI_FEATURE_MATRIX.md` for the detailed boundary between prototype UI workflows and unbuilt production capabilities.
 
 ## For AI agents
 

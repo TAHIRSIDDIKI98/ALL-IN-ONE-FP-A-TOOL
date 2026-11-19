@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, ArrowUpRight, Building2, CalendarDays, ChartNoAxesCombined, ChevronDown, CircleHelp, FileBarChart2, FileSpreadsheet, FlaskConical, FolderOpen, GitMerge, History, LayoutDashboard, Menu, Monitor, Search, Settings2, Upload, WifiOff, X, type LucideIcon } from 'lucide-react'
 import { APP_NAME, DEFAULT_WORKSPACE, businesses, formatNumber, pageNames, periods, type PageId, type Period, type Preset, type Scenario, type Scope, type StatementTab } from './lib/data'
 import { Workspace, useWorkspace, type OverlayOptions, type Preferences } from './lib/workspace'
-import { initialImportDraft, type DemoIssueId, type ImportDraft } from './lib/reviewData'
+import { initialImportDraft, extendedSectorProfiles, type DemoIssueId, type ImportDraft } from './lib/reviewData'
 import { useUndoState } from './lib/useUndoState'
+import { INDUSTRY_BLUEPRINT_PACKS } from './lib/omniBlueprintEngine'
 import { Badge, Button, Card, DefinitionList, Dialog, EmptyState, Note, PageHeader } from './components/ui'
+import { ExtendedSectorProfile } from './components/review'
 import { Overview } from './pages/Overview'
 import { Statements } from './pages/Statements'
 import { Planning } from './pages/Planning'
@@ -109,16 +111,54 @@ function BlankWorkspace() {
   const { page, setWorkspace, navigate } = useWorkspace()
   return <div className="screen-stack"><PageHeader title={pageNames[page]} description="Blank demo workspace · No financial inputs provided" actions={<Badge>Empty demo state</Badge>} /><Card><EmptyState icon={FolderOpen} title="A workspace with room to begin" description="This intentionally empty demo has no business inputs. Missing data is not shown as zero, and no financial records have been created." action={<div className="flex flex-wrap justify-center gap-2"><Button variant="primary" onClick={() => setWorkspace('sample')}>Open sample workspace<ArrowRight size={14} /></Button><Button onClick={() => navigate('imports')}>Explore mock import</Button></div>} /></Card><Note>The sample workspace contains only bundled synthetic figures. Selecting it does not import or commit data.</Note></div>
 }
+
+const omniSearchEntries = [
+  { id: 'omni-blueprints', name: 'Global 10-industry blueprint studio', description: 'BP-01 to BP-10 · Declarative BigInt KPIs · 0 warnings', page: 'overview' as PageId, icon: LayoutDashboard, sectorId: undefined as string | undefined },
+  { id: 'omni-stmt-policy', name: 'Multi-period aggregation & acyclic DAG guard (I08/I09/I27)', description: 'FLOW_SUM vs CLOSING_LAST, RATIO_OF_SUMS & cycle blocker', page: 'statements' as PageId, icon: FileBarChart2, sectorId: undefined as string | undefined },
+  { id: 'omni-allocator', name: 'Largest-Remainder exact-sum allocator (I05)', description: 'Zero penny drift · Rejects zero/negative weights', page: 'planning' as PageId, icon: ChartNoAxesCombined, sectorId: undefined as string | undefined },
+  { id: 'omni-scale', name: '100M+ cell Hyperblock RAM & spill estimator', description: '4,096-cell Block-Hybrid · ChaCha20 mmap spill', page: 'planning' as PageId, icon: ChartNoAxesCombined, sectorId: undefined as string | undefined },
+  { id: 'omni-fpa-suite', name: 'One-Stop FP&A Replacement Suite (I34/I35)', description: 'Workforce UAE Art. 51 EOSB, CapEx Roll-Forward, 13-Week Cash DSCR & PVM Bridge', page: 'planning' as PageId, icon: ChartNoAxesCombined, sectorId: undefined as string | undefined },
+  { id: 'omni-ingestion', name: 'Source-scoped ingestion gate (IMP-GL / IMP-SUB)', description: 'Fixes OQ-025 sub-ledger drop, K2 leak, K3 finding key', page: 'imports' as PageId, icon: Upload, sectorId: undefined as string | undefined },
+  { id: 'omni-erp-mapper', name: 'Universal Top-12 ERP Adapter Catalog & CoA Mapper (I33)', description: 'SAP ACDOCA, Oracle, D365, NetSuite, TallyPrime, Odoo, Sage, Workday, QuickBooks, Zoho, Infor, SAF-T', page: 'imports' as PageId, icon: Upload, sectorId: undefined as string | undefined },
+  { id: 'omni-xll', name: 'Native XLL P0 =FPA.GET & Command idempotency lab (I20/I28)', description: '15-sig-digit guard, =FPA.SET block & 409/412 conflicts', page: 'excel' as PageId, icon: FileSpreadsheet, sectorId: undefined as string | undefined },
+  { id: 'omni-audit-chain', name: 'FIPS 180-4 SHA-256 hash-chained audit oracle (I22)', description: 'Tamper detection & sequential digest chain verifier', page: 'activity' as PageId, icon: History, sectorId: undefined as string | undefined },
+  { id: 'omni-invariants', name: '5-language contract & 36-invariant oracle (I01–I36)', description: 'Rust, TypeScript, Go, Elixir, Java 25 jlink fallbacks', page: 'settings' as PageId, icon: Settings2, sectorId: undefined as string | undefined },
+  { id: 'omni-master-roadmap', name: '8-Phase Gated Execution Roadmap & Secondary Brain (I36)', description: 'P0–P7 vertical gates, One-Stop Replacement Matrix & Brain 00–05 sync', page: 'settings' as PageId, icon: Settings2, sectorId: undefined as string | undefined },
+  ...INDUSTRY_BLUEPRINT_PACKS.map(pack => ({
+    id: `omni-pack-${pack.id}`,
+    name: `${pack.code} · ${pack.name}`,
+    description: `${pack.sectorGroup} · ${pack.uaeConglomerateLink}`,
+    page: 'overview' as PageId,
+    icon: LayoutDashboard,
+    sectorId: undefined as string | undefined,
+  })),
+]
+
 function SearchPanel() {
-  const { navigate, closeDialog, setStatementTab, setConsolidationStep } = useWorkspace()
+  const { navigate, openDialog, closeDialog, setStatementTab, setConsolidationStep } = useWorkspace()
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const resultsRef = useRef<HTMLDivElement>(null)
-  const results = [...Object.entries(pageNames).map(([id, name]) => ({ id, name, description: 'Prototype screen', page: id as PageId, icon: navItems.find(n => n.id === id)?.icon || Settings2 })),
-    { id: 'cash-inputs', name: 'Cash inputs · Not provided', description: 'Missing-data example', page: 'statements' as PageId, icon: FileBarChart2 },
-    { id: 'fx-reference', name: 'Missing reference FX rate', description: 'Consolidation blocker · Demo only', page: 'consolidation' as PageId, icon: GitMerge },
+  const results = [...Object.entries(pageNames).map(([id, name]) => ({ id, name, description: 'Prototype screen', page: id as PageId, icon: navItems.find(n => n.id === id)?.icon || Settings2, sectorId: undefined as string | undefined })),
+    { id: 'cash-inputs', name: 'Cash inputs · Not provided', description: 'Missing-data example', page: 'statements' as PageId, icon: FileBarChart2, sectorId: undefined },
+    { id: 'fx-reference', name: 'Missing reference FX rate', description: 'Consolidation blocker · Demo only', page: 'consolidation' as PageId, icon: GitMerge, sectorId: undefined },
+    ...extendedSectorProfiles.map(sector => ({ id: `sector-${sector.id}`, name: `${sector.name} · ${sector.sector}`, description: `Extended sector template (${sector.portfolioRef})`, page: 'overview' as PageId, icon: Building2, sectorId: sector.id })),
+    ...omniSearchEntries,
   ].filter(result => `${result.name} ${result.description}`.toLowerCase().includes(query.toLowerCase()))
-  const choose = (result: typeof results[number]) => { if (result.id === 'cash-inputs') setStatementTab('cash'); if (result.id === 'fx-reference') setConsolidationStep(2); closeDialog(); navigate(result.page) }
+  const choose = (result: typeof results[number]) => {
+    if (result.sectorId) {
+      const sector = extendedSectorProfiles.find(item => item.id === result.sectorId)
+      if (sector) {
+        navigate('overview')
+        openDialog({ title: sector.name, eyebrow: `${sector.code} · ${sector.portfolioRef.toUpperCase()} · TEMPLATE PREVIEW`, drawer: true, content: <ExtendedSectorProfile profile={sector} /> })
+        return
+      }
+    }
+    if (result.id === 'cash-inputs') setStatementTab('cash')
+    if (result.id === 'fx-reference') setConsolidationStep(2)
+    closeDialog()
+    navigate(result.page)
+  }
   return <div className="search-panel"><label className="search-field"><Search size={18} /><input autoFocus value={query} role="combobox" aria-expanded="true" aria-controls="workspace-search-results" aria-autocomplete="list" aria-activedescendant={results[activeIndex] ? `search-${results[activeIndex].id}` : undefined} onChange={event => { setQuery(event.target.value); setActiveIndex(0) }} onKeyDown={event => {
     if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && results.length) { event.preventDefault(); const next = (activeIndex + (event.key === 'ArrowDown' ? 1 : results.length - 1)) % results.length; setActiveIndex(next); resultsRef.current?.querySelectorAll<HTMLElement>('[role="option"]')[next]?.scrollIntoView({ block: 'nearest' }) }
     if (event.key === 'Enter' && results[activeIndex]) { event.preventDefault(); choose(results[activeIndex]) }

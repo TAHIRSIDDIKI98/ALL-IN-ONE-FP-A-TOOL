@@ -4,6 +4,9 @@ import { getFigures, getPlan, planningMonths, scopeNames, signedNumber, type Mea
 import { useWorkspace } from '../lib/workspace'
 import { Badge, Button, Card, CardHeader, DataTable, Note, PageHeader, SelectField } from '../components/ui'
 import { BusinessDrivers, NextStep } from '../components/review'
+import { UaeTaxPreviewCard } from '../components/UaeTaxPreviewCard'
+import { HyperblockScaleCard } from '../components/HyperblockScaleCard'
+import { OneStopFpaSuiteCard } from '../components/OneStopFpaSuiteCard'
 
 export function Planning() {
   const { scope, period, preset, setPreset, undoPreset, redoPreset, canUndoPreset, canRedoPreset, fmt, preferences, navigate, setScope, setConsolidationStep } = useWorkspace()
@@ -33,6 +36,9 @@ export function Planning() {
     <Card className="assumption-card"><CardHeader title={<span className="flex items-center gap-2"><SlidersHorizontal size={16} />Local assumption</span>} subtitle="A reversible sensitivity preview" /><div className="assumption-body"><label className="field" htmlFor="revenue-assumption"><span>Revenue uplift / reduction</span><div className="input-suffix"><input id="revenue-assumption" type="number" min="-5" max="5" step="5" value={assumption} onChange={e => { setAssumption(e.target.value); setError(''); setMessage('') }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); apply() } }} aria-invalid={!!error} aria-describedby={error ? 'assumption-help assumption-error' : 'assumption-help'} /><span>%</span></div></label><p id="assumption-help" className="field-hint">Available previews: −5%, 0%, +5%. Operating expenses remain fixed. Changed presets can be undone or redone.</p>{error && <p id="assumption-error" className="form-error" role="alert">{error}</p>}<Button variant="primary" onClick={apply}><Sparkles size={14} />Apply demo preview</Button><div className="assumption-divider" /><h3>How this preview works</h3><p>The input selects a predefined fictional dataset. It does not run a financial model or save an approved forecast.</p><Badge>Simulated · In memory only</Badge></div></Card></div>
     {message && <Note tone="green"><span role="status">{message}</span></Note>}
     <Card><CardHeader title="Quarter at a glance" subtitle={`${names[preset]} forecast · AED thousands · No actuals inferred`} /><DataTable label="Illustrative quarterly forecast in AED thousands"><thead><tr><th>Operating measure</th>{Object.entries(planningMonths).map(([key, name]) => <th className="numeric" key={key}>{name}</th>)}</tr></thead><tbody>{measures.map(measure => <tr key={measure.key} className={measure.key === 'result' ? 'statement-total' : ''}><th>{measure.label}</th>{(['jan', 'feb', 'mar'] as const).map(key => <td className={`numeric ${measure.key === 'cash' ? 'missing-cell' : ''}`} key={key}>{fmt(getPlan(scope, key, preset).forecast[measure.key])}</td>)}</tr>)}</tbody></DataTable></Card>
+    <UaeTaxPreviewCard />
+    <HyperblockScaleCard />
+    <OneStopFpaSuiteCard />
     <BusinessDrivers />
     <NextStep title="Review the group reporting boundary" description="Planning previews do not clear missing inputs or perform consolidation. Inspect the separate readiness workflow." label="Review group reporting" onClick={() => { setScope('group'); setConsolidationStep(1); navigate('consolidation') }} />
     {preferences.guidance && <Note>All scenarios are illustrative and unadjusted. These fixed outputs do not establish accounting accuracy, model validity, or an approved budget. Resetting affects this session only.</Note>}

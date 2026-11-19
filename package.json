@@ -7,7 +7,7 @@
     "frontend-builder"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=vite-react-ts",
+    "dev": "./frontend-builder/node_modules/.bin/vite --config frontend-builder/vite.config.ts frontend-builder --host 0.0.0.0 --port 3000",
     "build": "npm run build --workspace=vite-react-ts",
     "lint": "npm run lint --workspace=vite-react-ts",
     "preview": "npm run preview --workspace=vite-react-ts"

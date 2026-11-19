@@ -5,6 +5,7 @@ import { useWorkspace } from '../lib/workspace'
 import { Badge, BusinessLabel, Button, Card, CardHeader, DataTable, DefinitionList, Note, PageHeader, SourceDetail } from '../components/ui'
 import { Tabs } from '../components/Tabs'
 import { StatementComparisonGuide, VarianceReview } from '../components/review'
+import { StatementPolicyCard } from '../components/StatementPolicyCard'
 
 export function Statements() {
   const { scope, period, scenario, statementTab, setStatementTab, fmt, preferences, openDialog, closeDialog, navigate } = useWorkspace()
@@ -24,6 +25,7 @@ export function Statements() {
     </Tabs></Card><Note>{statementTab === 'income' ? `The three supplied operating measures are not a complete income statement. Operating result is not labeled EBITDA. ${scope === 'group' ? 'Group totals are simple, unadjusted sums, not consolidated statements.' : 'Entity inputs have not been adjusted or consolidated.'}` : 'This screen intentionally demonstrates a missing-data state. A complete statement cannot be produced from the available operating measures.'}</Note>
     <Card className="context-card"><FileClock size={20} /><div><h3>Working with a demo revision</h3><p>Revision {REVISION} is a fixed fixture label, not a persisted record or version history.</p></div><Button onClick={() => openDialog({ title: 'Revision context', content: <DefinitionList items={[{ label: 'Revision', value: REVISION }, { label: 'Period', value: periods[period].full }, { label: 'Currency & units', value: 'AED thousands' }, { label: 'Actual revenue', value: fmt(getFigures(scope, period, 'actual').revenue) }, { label: `Variance vs. ${scenarioNames[comparisonScenario].toLowerCase()}`, value: `${signedNumber(figures.revenue - budget.revenue, preferences.grouping)} · illustrative` }, { label: 'Storage', value: 'Bundled fixture; no persisted revisions' }]} /> })}>View context</Button></Card>
     <StatementComparisonGuide />
+    <StatementPolicyCard />
   </div>
 }
 function StatementGroup({ measure, expanded, onExpand, figures, budget }: { measure: { key: Measure; label: string }; expanded: boolean; onExpand: () => void; figures: ReturnType<typeof getFigures>; budget: ReturnType<typeof getFigures> }) {

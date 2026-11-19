@@ -39,6 +39,112 @@ export const businessProfiles: Record<BusinessId, {
   },
 }
 
+export type ExtendedSectorId = 'foods' | 'development' | 'mobility' | 'infrastructure' | 'investments'
+
+export type ExtendedSectorProfile = {
+  id: ExtendedSectorId
+  name: string
+  code: string
+  short: string
+  color: 'amber' | 'indigo' | 'emerald' | 'slate' | 'rose'
+  portfolioRef: string
+  sector: string
+  description: string
+  unitNote: string
+  boundaryNote: string
+  drivers: { name: string; context: string; question: string }[]
+}
+
+// Illustrative sector templates for the remaining target verticals documented in
+// fpa-documentation/docs/14-al-ghurair-group-pilot.md. Financial inputs are Not provided.
+export const extendedSectorProfiles: ExtendedSectorProfile[] = [
+  {
+    id: 'foods',
+    name: 'Synthetic Foods',
+    code: 'TPL-04',
+    short: 'SF',
+    color: 'amber',
+    portfolioRef: 'AG-B1 · Portfolio B',
+    sector: 'Foods & ingredients',
+    description: 'An illustrative template for food manufacturing and ingredient processing with plant utilization, input commodities, and inventory assumptions.',
+    unitNote: 'Metric tonnes / kg (explicit conversion required) · AED thousands',
+    boundaryNote: 'Template preview only. Sales volumes, commodity input costs, and inventory balances are Not provided and are excluded from management totals.',
+    drivers: [
+      { name: 'Production & sales volume', context: 'Monthly throughput by product line with declared kg-to-tonne conversion.', question: 'Are volume units consistent across production and sales inputs?' },
+      { name: 'Raw commodity inputs', context: 'Grain, ingredient, and packaging cost assumptions per unit.', question: 'Which input price assumptions require updated supplier quotes?' },
+      { name: 'Plant utilization & yield', context: 'Line capacity, processing loss, and finished-goods inventory.', question: 'How does capacity utilization affect unit conversion cost?' },
+    ],
+  },
+  {
+    id: 'development',
+    name: 'Synthetic Development',
+    code: 'TPL-05',
+    short: 'SD',
+    color: 'indigo',
+    portfolioRef: 'AG-A9 / AG-B2',
+    sector: 'Real estate development',
+    description: 'An illustrative template for multi-period development projects tracking land/build budgets, milestone collections, and work-in-progress.',
+    unitNote: 'Project milestones / sq ft · AED thousands',
+    boundaryNote: 'Revenue recognition, WIP capitalization, and milestone timing require expert-approved accounting policy. No project cash flow is fabricated here.',
+    drivers: [
+      { name: 'Project phasing & WIP', context: 'Land acquisition, construction drawdowns, and cost-to-complete.', question: 'Are cost-to-complete updates reconciled with the latest engineering schedule?' },
+      { name: 'Milestone sales & collections', context: 'Contracted milestone billing versus cash receipt timing.', question: 'Which collection milestones shift across quarters under sensitivity?' },
+      { name: 'Recognition policy boundary', context: 'Point-in-time versus over-time revenue recognition rules.', question: 'Has finance confirmed the applicable recognition policy per project?' },
+    ],
+  },
+  {
+    id: 'mobility',
+    name: 'Synthetic Mobility',
+    code: 'TPL-06',
+    short: 'MB',
+    color: 'emerald',
+    portfolioRef: 'AG-B3 · Portfolio B',
+    sector: 'Mobility & fleet',
+    description: 'An illustrative template for vehicle distribution, fleet operations, and after-sales service utilization.',
+    unitNote: 'Vehicle units / active fleet days · AED thousands',
+    boundaryNote: 'Template preview only. Fleet counts, residual values, and service margins are Not provided and require approved entity inputs.',
+    drivers: [
+      { name: 'Fleet & vehicle volume', context: 'Active fleet size, unit deliveries, and disposal cadence.', question: 'How do delivery schedules align with the monthly planning calendar?' },
+      { name: 'Service bay utilization', context: 'Workshop hours, recurring maintenance contracts, and parts mix.', question: 'What portion of revenue comes from recurring service versus unit sales?' },
+      { name: 'Acquisition & upkeep cost', context: 'Vehicle financing, depreciation assumptions, and fleet upkeep.', question: 'Are fleet maintenance reserves tracked separately from operating cost?' },
+    ],
+  },
+  {
+    id: 'infrastructure',
+    name: 'Synthetic Infrastructure',
+    code: 'TPL-07',
+    short: 'SI',
+    color: 'slate',
+    portfolioRef: 'AG-B4 · Portfolio B',
+    sector: 'Infrastructure & construction',
+    description: 'An illustrative template for infrastructure contracting, order backlog, resource capacity, and materials scheduling.',
+    unitNote: 'Project hours / tonnes / contract value · AED thousands',
+    boundaryNote: 'Template preview only. Contract backlog, subcontractor accruals, and retention balances are Not provided.',
+    drivers: [
+      { name: 'Order backlog & award timing', context: 'Confirmed contract pipeline and mobilization start dates.', question: 'Which awarded projects enter active execution during Q1?' },
+      { name: 'Resource & equipment capacity', context: 'Crew deployment, heavy plant utilization, and subcontractor mix.', question: 'Where do equipment bottlenecks limit monthly revenue burn?' },
+      { name: 'Materials & cost escalation', context: 'Structural materials, freight, and variation-order tracking.', question: 'Are unapproved variation orders excluded from baseline revenue?' },
+    ],
+  },
+  {
+    id: 'investments',
+    name: 'Synthetic Investments',
+    code: 'TPL-08',
+    short: 'IV',
+    color: 'rose',
+    portfolioRef: 'AG-A10 / AG-A11',
+    sector: 'Strategic & portfolio investments',
+    description: 'An illustrative holding-level register for minority stakes, public/private market assets, declared dividends, and liquidity assumptions.',
+    unitNote: 'Ownership % (decimal) · Carrying value & dividends in AED thousands',
+    boundaryNote: 'Critical boundary: Dividends and fair-value movements must remain separate below operating result and are never silently combined into operating revenue or EBITDA. Minority stakes do not imply consolidation.',
+    drivers: [
+      { name: 'Ownership & control perimeter', context: 'Manual holding % and classification (associate, FVOCI, FVTPL).', question: 'Has group finance verified whether each holding is excluded from consolidation?' },
+      { name: 'Dividends & distributions', context: 'Expected cash dividends tracked outside operating revenue/EBITDA.', question: 'Are declared dividends separated from operating business-unit KPIs?' },
+      { name: 'Carrying value & liquidity', context: 'Opening/closing carrying value, capital calls, and disposal cash.', question: 'Which valuation sources are approved for period-end reporting?' },
+    ],
+  },
+]
+
 export const importMappingFixture = [
   { column: 'business', sample: 'Synthetic Packaging', target: 'Business' },
   { column: 'period', sample: '2026-01', target: 'Reporting period' },

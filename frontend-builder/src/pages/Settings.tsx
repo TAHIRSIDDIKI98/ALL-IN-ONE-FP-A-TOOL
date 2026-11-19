@@ -3,6 +3,8 @@ import { ArrowRight, Check, FlaskConical, Keyboard, Monitor, RotateCcw, SlidersH
 import { APP_NAME, periods, type Period } from '../lib/data'
 import { useWorkspace } from '../lib/workspace'
 import { Badge, Button, Card, CardHeader, DataTable, DefinitionList, Note, PageHeader, SelectField, Toggle } from '../components/ui'
+import { PolyglotArchitectureCard } from '../components/PolyglotArchitectureCard'
+import { MasterRoadmapBlueprintCard } from '../components/MasterRoadmapBlueprintCard'
 
 export function Settings() {
   const { workspaceName, setWorkspaceName, preferences, setPreferences, period, setPeriod, fmt, resetDemo, openDialog } = useWorkspace()
@@ -24,5 +26,7 @@ export function Settings() {
       <Card className="reset-card"><Keyboard size={20} /><h3>A keyboard-friendly workspace</h3><div className="shortcut-list"><div><span>Search screens</span><kbd>Ctrl K</kbd></div><div><span>Close a dialog / menu</span><kbd>Esc</kbd></div><div><span>Switch a statement tab</span><span><kbd>←</kbd> <kbd>→</kbd></span></div><div><span>Move between controls</span><kbd>Tab</kbd></div></div></Card>
       <Card className="reset-card"><Workflow size={21} /><h3>Start fresh</h3><p>Restore the default workspace, January 2026, actual scenario, and all demo preferences.</p><Button onClick={resetDemo}><RotateCcw size={14} />Reset entire demo</Button><small>Only local UI state will change.</small></Card><Note>There are no pretend security controls. Encryption, key recovery, corporate SSO, and production storage are not implemented.</Note></aside>
     </div>
+    <PolyglotArchitectureCard />
+    <MasterRoadmapBlueprintCard />
   </div>
 }
