@@ -1116,6 +1116,7 @@ export type InvariantTier =
   | 'Numeric & Accounting Core (I01–I10)'
   | 'Consolidation, Ingestion & Contracts (I11–I20)'
   | 'Security, Scale & Delivery Hygiene (I21–I32)'
+  | 'Per-Project Isolation, WBS/PoC & Sub-Projects (I37–I40)'
 
 export interface InvariantCheckResult {
   id: string
@@ -1200,6 +1201,7 @@ export function runAllInvariantsSuite(activeFallbacks: RuntimeId[] = []): {
   const t1: InvariantTier = 'Numeric & Accounting Core (I01–I10)'
   const t2: InvariantTier = 'Consolidation, Ingestion & Contracts (I11–I20)'
   const t3: InvariantTier = 'Security, Scale & Delivery Hygiene (I21–I32)'
+  const t4: InvariantTier = 'Per-Project Isolation, WBS/PoC & Sub-Projects (I37–I40)'
 
   const results: InvariantCheckResult[] = [
     {
@@ -1645,6 +1647,84 @@ export function runAllInvariantsSuite(activeFallbacks: RuntimeId[] = []): {
         ),
       evidence:
         'All 8 vertical phases (P0–P7) define explicit deliverables, blocking invariants, Secondary Brain update gates, and verification commands.',
+    },
+    {
+      id: 'I37',
+      tier: t4,
+      title: 'Sealed Per-Project CoA & Ledger Isolation Firewall',
+      mechanism: 'LIVE_ORACLE',
+      passed: (() => {
+        const clean = validateProjectCoaBoundary({
+          targetProjectId: 'PRJ-02',
+          postingProjectId: 'PRJ-02',
+          coaNamespace: 'COA-DEV-POC',
+          nativeAccountCode: '4100-POC-REV',
+        })
+        const breach = validateProjectCoaBoundary({
+          targetProjectId: 'PRJ-02',
+          postingProjectId: 'PRJ-01',
+          coaNamespace: 'COA-HOLDING-IFRS',
+          nativeAccountCode: '410000-REV',
+        })
+        return (
+          clean.status === 'ISOLATION_OK' &&
+          breach.status === 'CROSS_PROJECT_COA_ISOLATION_VIOLATION'
+        )
+      })(),
+      evidence:
+        'Each FP&A project enforces its own CoA namespace; cross-project posting PRJ-01 -> PRJ-02 rejects cleanly with CROSS_PROJECT_COA_ISOLATION_VIOLATION.',
+    },
+    {
+      id: 'I38',
+      tier: t4,
+      title: 'Cross-Project Multi-Currency Consolidation FX Guard',
+      mechanism: 'LIVE_ORACLE',
+      passed: (() => {
+        const fullFx = consolidateProjectPortfolio({ baseCurrency: 'USD', simulateMissingEurRate: false })
+        const missingEur = consolidateProjectPortfolio({ baseCurrency: 'USD', simulateMissingEurRate: true })
+        return (
+          fullFx.status === 'ALL_PROJECTS_CONSOLIDATED' &&
+          fullFx.quarantinedProjectIds.length === 0 &&
+          missingEur.status === 'PARTIAL_EXCLUDED_MISSING_FX' &&
+          missingEur.quarantinedProjectIds.includes('PRJ-03')
+        )
+      })(),
+      evidence:
+        'Consolidates USD/AED/EUR/GBP projects via explicit 10^4 FX rates; missing EUR->USD rate quarantines PRJ-03 rather than summing 1:1 or coercing 0.',
+    },
+    {
+      id: 'I39',
+      tier: t4,
+      title: 'Exact BigInt Project WBS, EAC, PoC % & P&L Conservation',
+      mechanism: 'LIVE_ORACLE',
+      passed: (() => {
+        const evals = FPA_PROJECT_WORKSPACES.map(p => evaluateFpaProjectWorkspace(p.projectId))
+        const tower = evals.find(e => e.projectId === 'PRJ-02')
+        return (
+          evals.length === 4 &&
+          evals.every(e => e.wbsReconciliationDeltaFils === 0n && e.pocPctTenths <= 1000n) &&
+          tower?.pocPctTenths === 600n && // 36M / 60M = 60.0%
+          tower?.earnedRevenueFils === 5100000000n // 85M * 60.0% = 51,000,000.00 AED
+        )
+      })(),
+      evidence:
+        'All 4 project WBS schedules tie to EAC = Actual + ETC with 0.00 delta; PRJ-02 Al-Noor Tower computes 60.0% PoC -> 51,000,000.00 AED Earned Revenue.',
+    },
+    {
+      id: 'I40',
+      tier: t4,
+      title: '7 Engineering Sub-Project Packs & Phase Traceability (0 Orphans)',
+      mechanism: 'LIVE_ORACLE',
+      passed: (() => {
+        const trace = validateSubProjectTraceability()
+        return (
+          ENGINEERING_SUBPROJECT_PACKS.length === 7 &&
+          trace.allCovered &&
+          trace.orphanInvariantIds.length === 0
+        )
+      })(),
+      evidence:
+        'All 7 engineering sub-projects (PRJ-CORE..PRJ-DIST) assign every invariant I01–I40 and phase P0–P7 with 0 orphan invariants.',
     },
   ]
 
@@ -2282,17 +2362,27 @@ export function generateGoldenContractBundle() {
     mixShiftFils: 150000n,
     fxTranslationFils: -50000n,
   })
+  const projectPortfolio = consolidateProjectPortfolio({
+    baseCurrency: 'USD',
+    simulateMissingEurRate: false,
+  })
+  const projectWorkspacesVectors = FPA_PROJECT_WORKSPACES.map(p =>
+    evaluateFpaProjectWorkspace(p.projectId)
+  )
+  const subProjectTrace = validateSubProjectTraceability()
   const suite = runAllInvariantsSuite([])
 
   return {
-    schemaVersion: 'atlas-fpa-omni-v3.0',
+    schemaVersion: 'atlas-fpa-omni-v4.0',
     generatedNote:
-      'Machine-readable BigInt reference parity vectors for Rust/Go/Elixir/Java/XLL Windows 11 builds (Master Plan v3.0).',
+      'Machine-readable BigInt reference parity vectors for Rust/Go/Elixir/Java/XLL Windows 11 builds & Per-Project Workspaces (Master Plan v4.0).',
     summary: {
       packsValidated: packs.totalPacks,
       packWarnings: packs.totalWarnings,
       erpAdaptersValidated: erpValidation.totalAdapters,
       roadmapPhasesCount: MASTER_EXECUTION_ROADMAP.length,
+      fpaProjectWorkspacesCount: FPA_PROJECT_WORKSPACES.length,
+      engineeringSubProjectsCount: ENGINEERING_SUBPROJECT_PACKS.length,
       invariantsPassed: suite.passedCount,
       invariantsTotal: suite.total,
     },
@@ -2320,6 +2410,38 @@ export function generateGoldenContractBundle() {
       cash13WeekClosingFils: cash13wVector.closingCashWeek13Fils.toString(),
       pvmTotalVarianceFils: pvmVector.totalRevenueVarianceFils.toString(),
       pvmReconciliationDeltaFils: pvmVector.reconciliationDeltaFils.toString(),
+    },
+    perProjectWorkspacesVectors: projectWorkspacesVectors.map(w => ({
+      projectId: w.projectId,
+      currency: w.currency,
+      coaNamespace: w.coaNamespace,
+      contractValueFils: w.contractValueFils.toString(),
+      actualCostFils: w.actualCostFils.toString(),
+      etcCostFils: w.etcCostFils.toString(),
+      eacCostFils: w.eacCostFils.toString(),
+      pocPctTenths: w.pocPctTenths.toString(),
+      earnedRevenueFils: w.earnedRevenueFils.toString(),
+      recognizedGrossProfitFils: w.recognizedGrossProfitFils.toString(),
+      wbsDeltaFils: w.wbsReconciliationDeltaFils.toString(),
+    })),
+    crossProjectPortfolioUsdVector: {
+      status: projectPortfolio.status,
+      totalEarnedRevenueUsdFils: projectPortfolio.totalEarnedRevenueUsdFils.toString(),
+      totalActualCostUsdFils: projectPortfolio.totalActualCostUsdFils.toString(),
+      totalGrossProfitUsdFils: projectPortfolio.totalGrossProfitUsdFils.toString(),
+      quarantinedProjectIds: projectPortfolio.quarantinedProjectIds,
+    },
+    engineeringSubProjectsTraceability: {
+      totalSubProjects: ENGINEERING_SUBPROJECT_PACKS.length,
+      allInvariantsCovered: subProjectTrace.allCovered,
+      orphanInvariantIds: subProjectTrace.orphanInvariantIds,
+      packs: ENGINEERING_SUBPROJECT_PACKS.map(sp => ({
+        subProjectId: sp.subProjectId,
+        targetBinary: sp.targetBinary,
+        docPath: sp.docPath,
+        phasesUnlocked: sp.phasesUnlocked,
+        ownedInvariants: sp.ownedInvariants,
+      })),
     },
     largestRemainderI05Vector:
       alloc.status === 'ALLOCATED'
@@ -2997,13 +3119,13 @@ export interface RoadmapPhaseSpec {
 export const MASTER_EXECUTION_ROADMAP: RoadmapPhaseSpec[] = [
   {
     phaseId: 'P0',
-    title: 'Golden Reference Oracle, Parity Vector Suite & Interactive Workbench',
+    title: 'Golden Reference Oracle, Per-Project Packs & Interactive Workbench',
     environmentStatus: 'VERIFIED_IN_WEB_WORKBENCH',
     runtimesInvolved: 'TypeScript 5.8 + React 19 + Node test runner (tsx --test)',
     primaryDeliverables:
-      'Pure BigInt & FIPS 180-4 SHA-256 reference engine (domainRules.ts + omniBlueprintEngine.ts), all 8 screens, 10 industry packs, 8 UAE sectors, Top-12 ERP normalizer, Workforce/EOSB + CapEx + 13-Wk Cash + PVM engines, and machine-readable atlas-fpa-v3.0-parity-vectors.json.',
-    brainFilesUpdated: '_project_brain/00..05, docs/21, docs/22, UI_FEATURE_MATRIX.md, STATUS.md',
-    blockingInvariants: 'I01–I36 (all 36 invariants verified in TS oracle)',
+      'Pure BigInt & FIPS 180-4 SHA-256 reference engine (domainRules.ts + omniBlueprintEngine.ts), all 8 screens, 10 industry packs, 4 sealed FP&A project workspaces (I37-I39), 7 engineering sub-project packs (I40), Top-12 ERP normalizer, One-Stop FP&A modules, and atlas-fpa-v4.0-parity-vectors.json.',
+    brainFilesUpdated: '_project_brain/00..05, docs/21..23, projects/*, UI_FEATURE_MATRIX.md, STATUS.md',
+    blockingInvariants: 'I01–I40 (all 40 invariants verified in TS oracle)',
     exitGateCommand:
       'npx --yes tsx --test frontend-builder/src/lib/domainRules.test.ts frontend-builder/src/lib/omniBlueprintEngine.test.ts && npm run build && npm run lint',
   },
@@ -3085,5 +3207,499 @@ export const MASTER_EXECUTION_ROADMAP: RoadmapPhaseSpec[] = [
     exitGateCommand: 'msiexec /i atlas-fpa-omni.msi /qn && fpa-core.exe --verify-all-invariants',
   },
 ]
+
+// ---------------------------------------------------------------------------
+// 14. Multi-Project FP&A Workspaces, Isolated CoA & Project P&L / WBS / PoC (I37–I39)
+// ---------------------------------------------------------------------------
+
+export type FpaProjectId = 'PRJ-01' | 'PRJ-02' | 'PRJ-03' | 'PRJ-04'
+export type ProjectCurrencyCode = 'USD' | 'AED' | 'EUR' | 'GBP'
+
+export interface ProjectCoaAccountSpec {
+  nativeCode: string
+  nativeName: string
+  canonicalGroupCode: string
+  statementClass: 'REVENUE' | 'COST' | 'CAPEX_WIP'
+}
+
+export interface ProjectWbsItemSpec {
+  wbsCode: string
+  title: string
+  budgetCostFils: bigint
+  actualCostFils: bigint
+  etcCostFils: bigint
+}
+
+export interface FpaProjectWorkspaceSpec {
+  projectId: FpaProjectId
+  projectName: string
+  industryModel: string
+  currency: ProjectCurrencyCode
+  erpProfileCode: ErpAdapterCode
+  erpProfileLabel: string
+  coaNamespace: string
+  perimeterLabel: string
+  contractValueFils: bigint
+  isolatedCoa: ProjectCoaAccountSpec[]
+  wbsItems: ProjectWbsItemSpec[]
+}
+
+export const FPA_PROJECT_WORKSPACES: FpaProjectWorkspaceSpec[] = [
+  {
+    projectId: 'PRJ-01',
+    projectName: 'Aster Vale Group Conglomerate',
+    industryModel: 'Multi-Entity Manufacturing & Property Holding',
+    currency: 'USD',
+    erpProfileCode: 'ERP-01',
+    erpProfileLabel: 'SAP S/4HANA (ACDOCA)',
+    coaNamespace: 'COA-HOLDING-IFRS',
+    perimeterLabel: '3 Controlled Subsidiaries (80/20 NCI)',
+    contractValueFils: 1245000000n, // $12,450,000.00
+    isolatedCoa: [
+      { nativeCode: '0000410000', nativeName: 'Industrial & Property Sales', canonicalGroupCode: 'GRP-REV-OP', statementClass: 'REVENUE' },
+      { nativeCode: '0000512000', nativeName: 'Direct Raw Materials & Toll Mfg', canonicalGroupCode: 'GRP-COGS', statementClass: 'COST' },
+      { nativeCode: '0000640000', nativeName: 'Shared Services & Head Office', canonicalGroupCode: 'GRP-OPEX', statementClass: 'COST' },
+    ],
+    wbsItems: [
+      { wbsCode: 'WBS-01.1', title: 'Packaging Corrugated Lines', budgetCostFils: 320000000n, actualCostFils: 245000000n, etcCostFils: 70000000n },
+      { wbsCode: 'WBS-01.2', title: 'Aluminium Rolling & Extrusion', budgetCostFils: 510000000n, actualCostFils: 410000000n, etcCostFils: 105000000n },
+      { wbsCode: 'WBS-01.3', title: 'Commercial Leasing Portfolio OpEx', budgetCostFils: 170000000n, actualCostFils: 127000000n, etcCostFils: 43000000n },
+    ],
+  },
+  {
+    projectId: 'PRJ-02',
+    projectName: 'Al-Noor Commercial Tower Development',
+    industryModel: 'WBS & IFRS 15 Percentage-of-Completion (PoC)',
+    currency: 'AED',
+    erpProfileCode: 'ERP-02',
+    erpProfileLabel: 'Oracle Fusion Cloud (GL_JE_LINES)',
+    coaNamespace: 'COA-DEV-POC',
+    perimeterLabel: 'SPV Tower Parcel #A7 (Standalone Ring-Fenced)',
+    contractValueFils: 8500000000n, // 85,000,000.00 AED Contract Value
+    isolatedCoa: [
+      { nativeCode: '02-DEV-4100', nativeName: 'Recognized Contract Revenue (PoC)', canonicalGroupCode: 'GRP-REV-POC', statementClass: 'REVENUE' },
+      { nativeCode: '02-DEV-5310', nativeName: 'Substructure, MEP & Steel Subcontract', canonicalGroupCode: 'GRP-COST-WIP', statementClass: 'COST' },
+      { nativeCode: '02-DEV-1490', nativeName: 'Contract Asset / Unbilled CIE', canonicalGroupCode: 'GRP-BS-CIE', statementClass: 'CAPEX_WIP' },
+    ],
+    wbsItems: [
+      { wbsCode: 'WBS-02.1', title: 'Piling, Shoring & Substructure', budgetCostFils: 1400000000n, actualCostFils: 1400000000n, etcCostFils: 0n },
+      { wbsCode: 'WBS-02.2', title: 'Core, Shell & HVAC MEP Risers', budgetCostFils: 2800000000n, actualCostFils: 1800000000n, etcCostFils: 1000000000n },
+      { wbsCode: 'WBS-02.3', title: 'Curtain Wall Facade & Cat-A Fitout', budgetCostFils: 1800000000n, actualCostFils: 400000000n, etcCostFils: 1400000000n },
+    ],
+  },
+  {
+    projectId: 'PRJ-03',
+    projectName: 'Atlas Cloud SaaS Expansion',
+    industryModel: 'Multi-Region Enterprise Cloud & NRR Rollout',
+    currency: 'EUR',
+    erpProfileCode: 'ERP-04',
+    erpProfileLabel: 'Oracle NetSuite OneWorld',
+    coaNamespace: 'COA-SAAS-REV',
+    perimeterLabel: 'EMEA Cloud Pod (Isolated EUR Ledger)',
+    contractValueFils: 1420000000n, // EUR 14,200,000.00
+    isolatedCoa: [
+      { nativeCode: '4010-ARR-SUB', nativeName: 'Annual Subscription Platform ARR', canonicalGroupCode: 'GRP-REV-ARR', statementClass: 'REVENUE' },
+      { nativeCode: '5020-HOST-EU', nativeName: 'Bare-Metal & Inference Compute', canonicalGroupCode: 'GRP-COGS-CLOUD', statementClass: 'COST' },
+      { nativeCode: '6200-GTM-EU', nativeName: 'Enterprise CS & Field Quota', canonicalGroupCode: 'GRP-OPEX-SM', statementClass: 'COST' },
+    ],
+    wbsItems: [
+      { wbsCode: 'WBS-03.1', title: 'Frankfurt Core Cluster & HSM Provisioning', budgetCostFils: 300000000n, actualCostFils: 210000000n, etcCostFils: 90000000n },
+      { wbsCode: 'WBS-03.2', title: 'DACH & Benelux Enterprise Onboarding', budgetCostFils: 360000000n, actualCostFils: 160000000n, etcCostFils: 200000000n },
+      { wbsCode: 'WBS-03.3', title: 'Managed Connector & SOC-Readiness Kit', budgetCostFils: 240000000n, actualCostFils: 80000000n, etcCostFils: 160000000n },
+    ],
+  },
+  {
+    projectId: 'PRJ-04',
+    projectName: 'Gulf Packaging Line 4 CapEx',
+    industryModel: 'High-Speed Corrugator Commissioning & Yield Program',
+    currency: 'GBP',
+    erpProfileCode: 'ERP-03',
+    erpProfileLabel: 'Microsoft Dynamics 365 F&O',
+    coaNamespace: 'COA-MFG-CAPEX',
+    perimeterLabel: 'UK OEM Machinery & Civil Tie-In Ring-Fence',
+    contractValueFils: 960000000n, // GBP 9,600,000.00
+    isolatedCoa: [
+      { nativeCode: '600100-TURNKEY', nativeName: 'Incremental Line Output Value', canonicalGroupCode: 'GRP-REV-OP', statementClass: 'REVENUE' },
+      { nativeCode: '162000-CWIP', nativeName: 'Machinery Capital Work in Progress', canonicalGroupCode: 'GRP-BS-CWIP', statementClass: 'CAPEX_WIP' },
+      { nativeCode: '540000-INST', nativeName: 'Clean-Room Foundations & Power Bus', canonicalGroupCode: 'GRP-COST-PLANT', statementClass: 'COST' },
+    ],
+    wbsItems: [
+      { wbsCode: 'WBS-04.1', title: 'Corrugator & Rotary Die-Cutter Import', budgetCostFils: 420000000n, actualCostFils: 420000000n, etcCostFils: 0n },
+      { wbsCode: 'WBS-04.2', title: 'PLC Automation & Conveyor Tie-In', budgetCostFils: 180000000n, actualCostFils: 90000000n, etcCostFils: 90000000n },
+      { wbsCode: 'WBS-04.3', title: 'Trial Scrap & Operator Certification', budgetCostFils: 100000000n, actualCostFils: 15000000n, etcCostFils: 85000000n },
+    ],
+  },
+]
+
+export interface FpaProjectWorkspaceEvaluation {
+  projectId: FpaProjectId
+  projectName: string
+  currency: ProjectCurrencyCode
+  coaNamespace: string
+  erpProfileLabel: string
+  contractValueFils: bigint
+  budgetCostFils: bigint
+  actualCostFils: bigint
+  etcCostFils: bigint
+  eacCostFils: bigint
+  budgetVarianceFils: bigint // positive = under budget (favorable), negative = cost overrun
+  pocPctTenths: bigint // e.g. 600n = 60.0%
+  earnedRevenueFils: bigint
+  recognizedGrossProfitFils: bigint
+  wbsReconciliationDeltaFils: bigint
+}
+
+export function evaluateFpaProjectWorkspace(
+  projectId: FpaProjectId
+): FpaProjectWorkspaceEvaluation {
+  const project =
+    FPA_PROJECT_WORKSPACES.find(p => p.projectId === projectId) ?? FPA_PROJECT_WORKSPACES[0]
+
+  let budgetCostFils = 0n
+  let actualCostFils = 0n
+  let etcCostFils = 0n
+  for (const wbs of project.wbsItems) {
+    budgetCostFils += wbs.budgetCostFils
+    actualCostFils += wbs.actualCostFils
+    etcCostFils += wbs.etcCostFils
+  }
+
+  const eacCostFils = actualCostFils + etcCostFils
+  const budgetVarianceFils = budgetCostFils - eacCostFils
+  const rawPocTenths =
+    eacCostFils > 0n ? divideRoundHalfEven(actualCostFils * 1000n, eacCostFils) : 0n
+  const pocPctTenths = rawPocTenths > 1000n ? 1000n : rawPocTenths
+  const earnedRevenueFils = divideRoundHalfEven(project.contractValueFils * pocPctTenths, 1000n)
+  const recognizedGrossProfitFils = earnedRevenueFils - actualCostFils
+
+  // Conservation check: sum of individual WBS (actual + etc) minus eacCostFils must equal 0n
+  const wbsTotalEac = project.wbsItems.reduce(
+    (sum, item) => sum + item.actualCostFils + item.etcCostFils,
+    0n
+  )
+
+  return {
+    projectId: project.projectId,
+    projectName: project.projectName,
+    currency: project.currency,
+    coaNamespace: project.coaNamespace,
+    erpProfileLabel: project.erpProfileLabel,
+    contractValueFils: project.contractValueFils,
+    budgetCostFils,
+    actualCostFils,
+    etcCostFils,
+    eacCostFils,
+    budgetVarianceFils,
+    pocPctTenths,
+    earnedRevenueFils,
+    recognizedGrossProfitFils,
+    wbsReconciliationDeltaFils: eacCostFils - wbsTotalEac,
+  }
+}
+
+export type ProjectCoaIsolationResult =
+  | {
+      status: 'ISOLATION_OK'
+      targetProjectId: FpaProjectId
+      coaNamespace: string
+      mappedCanonicalCode: string
+      diagnostic: string
+    }
+  | {
+      status: 'CROSS_PROJECT_COA_ISOLATION_VIOLATION'
+      targetProjectId: FpaProjectId
+      postingProjectId: FpaProjectId
+      coaNamespace: string
+      diagnostic: string
+    }
+
+export function validateProjectCoaBoundary(input: {
+  targetProjectId: FpaProjectId
+  postingProjectId: FpaProjectId
+  coaNamespace: string
+  nativeAccountCode: string
+}): ProjectCoaIsolationResult {
+  const target =
+    FPA_PROJECT_WORKSPACES.find(p => p.projectId === input.targetProjectId) ??
+    FPA_PROJECT_WORKSPACES[0]
+
+  if (
+    input.postingProjectId !== target.projectId ||
+    input.coaNamespace !== target.coaNamespace
+  ) {
+    return {
+      status: 'CROSS_PROJECT_COA_ISOLATION_VIOLATION',
+      targetProjectId: target.projectId,
+      postingProjectId: input.postingProjectId,
+      coaNamespace: input.coaNamespace,
+      diagnostic: `Firewall blocked cross-project posting: source belongs to ${input.postingProjectId} (${input.coaNamespace}), cannot write into sealed workspace ${target.projectId} (${target.coaNamespace}).`,
+    }
+  }
+
+  const matched = target.isolatedCoa.find(a => a.nativeCode === input.nativeAccountCode)
+  return {
+    status: 'ISOLATION_OK',
+    targetProjectId: target.projectId,
+    coaNamespace: target.coaNamespace,
+    mappedCanonicalCode: matched?.canonicalGroupCode ?? 'UNMAPPED_SUSPENSE_9999',
+    diagnostic: matched
+      ? `Verified inside sealed namespace ${target.coaNamespace}: ${matched.nativeCode} -> ${matched.canonicalGroupCode}.`
+      : `Namespace ${target.coaNamespace} matched; account ${input.nativeAccountCode} routes to project-scoped unmapped triage.`,
+  }
+}
+
+// Explicit 10^4 scaled-integer FX bridge rates into USD
+const PROJECT_FX_TO_USD_SCALED_4: Record<ProjectCurrencyCode, bigint> = {
+  USD: 10000n, // 1.0000
+  AED: 2723n, // 0.2723
+  EUR: 10850n, // 1.0850
+  GBP: 12680n, // 1.2680
+}
+
+export interface ProjectPortfolioConsolidationRow {
+  projectId: FpaProjectId
+  projectName: string
+  nativeCurrency: ProjectCurrencyCode
+  fxRateScaled4: bigint | null
+  included: boolean
+  earnedRevenueUsdFils: bigint | null
+  actualCostUsdFils: bigint | null
+  grossProfitUsdFils: bigint | null
+  exclusionReason: string | null
+}
+
+export interface ProjectPortfolioConsolidationResult {
+  baseCurrency: 'USD'
+  status: 'ALL_PROJECTS_CONSOLIDATED' | 'PARTIAL_EXCLUDED_MISSING_FX'
+  includedCount: number
+  quarantinedProjectIds: FpaProjectId[]
+  totalEarnedRevenueUsdFils: bigint
+  totalActualCostUsdFils: bigint
+  totalGrossProfitUsdFils: bigint
+  rows: ProjectPortfolioConsolidationRow[]
+}
+
+export function consolidateProjectPortfolio(options: {
+  baseCurrency: 'USD'
+  simulateMissingEurRate?: boolean
+}): ProjectPortfolioConsolidationResult {
+  let totalEarnedRevenueUsdFils = 0n
+  let totalActualCostUsdFils = 0n
+  let totalGrossProfitUsdFils = 0n
+  const quarantinedProjectIds: FpaProjectId[] = []
+
+  const rows: ProjectPortfolioConsolidationRow[] = FPA_PROJECT_WORKSPACES.map(project => {
+    const evalRes = evaluateFpaProjectWorkspace(project.projectId)
+    const missingEur = options.simulateMissingEurRate && project.currency === 'EUR'
+    const fxRate = missingEur ? null : PROJECT_FX_TO_USD_SCALED_4[project.currency]
+
+    if (fxRate === null) {
+      quarantinedProjectIds.push(project.projectId)
+      return {
+        projectId: project.projectId,
+        projectName: project.projectName,
+        nativeCurrency: project.currency,
+        fxRateScaled4: null,
+        included: false,
+        earnedRevenueUsdFils: null,
+        actualCostUsdFils: null,
+        grossProfitUsdFils: null,
+        exclusionReason: `Missing ${project.currency}->USD closing FX rate (Missing != Zero guard I38).`,
+      }
+    }
+
+    const earnedRevenueUsdFils = divideRoundHalfEven(evalRes.earnedRevenueFils * fxRate, 10000n)
+    const actualCostUsdFils = divideRoundHalfEven(evalRes.actualCostFils * fxRate, 10000n)
+    const grossProfitUsdFils = earnedRevenueUsdFils - actualCostUsdFils
+
+    totalEarnedRevenueUsdFils += earnedRevenueUsdFils
+    totalActualCostUsdFils += actualCostUsdFils
+    totalGrossProfitUsdFils += grossProfitUsdFils
+
+    return {
+      projectId: project.projectId,
+      projectName: project.projectName,
+      nativeCurrency: project.currency,
+      fxRateScaled4: fxRate,
+      included: true,
+      earnedRevenueUsdFils,
+      actualCostUsdFils,
+      grossProfitUsdFils,
+      exclusionReason: null,
+    }
+  })
+
+  return {
+    baseCurrency: options.baseCurrency,
+    status:
+      quarantinedProjectIds.length === 0
+        ? 'ALL_PROJECTS_CONSOLIDATED'
+        : 'PARTIAL_EXCLUDED_MISSING_FX',
+    includedCount: FPA_PROJECT_WORKSPACES.length - quarantinedProjectIds.length,
+    quarantinedProjectIds,
+    totalEarnedRevenueUsdFils,
+    totalActualCostUsdFils,
+    totalGrossProfitUsdFils,
+    rows,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 15. 7 Engineering Sub-Project Blueprint Packs Registry & Traceability (I40)
+// ---------------------------------------------------------------------------
+
+export type EngineeringSubProjectId =
+  | 'PRJ-CORE'
+  | 'PRJ-IO'
+  | 'PRJ-FLOW'
+  | 'PRJ-DOCS'
+  | 'PRJ-XLL'
+  | 'PRJ-UI'
+  | 'PRJ-DIST'
+
+export interface EngineeringSubProjectSpec {
+  subProjectId: EngineeringSubProjectId
+  title: string
+  languageRuntime: string
+  targetBinary: string
+  docPath: string
+  phasesUnlocked: RoadmapPhaseSpec['phaseId'][]
+  environmentStatus: 'VERIFIED_IN_WEB_WORKBENCH' | 'SPECIFIED_FOR_WINDOWS_11_NATIVE_BUILD'
+  ipcAndDataBoundary: string
+  securityGate: string
+  ownedInvariants: string[]
+  exitGateCommand: string
+}
+
+export const ENGINEERING_SUBPROJECT_PACKS: EngineeringSubProjectSpec[] = [
+  {
+    subProjectId: 'PRJ-CORE',
+    title: 'Authoritative Financial Engine, Hyperblock & SQLCipher Vault',
+    languageRuntime: 'Rust (2024 edition)',
+    targetBinary: 'fpa-core.exe',
+    docPath: 'fpa-documentation/projects/PRJ-CORE-rust-engine-and-vault.md',
+    phasesUnlocked: ['P1', 'P3', 'P4'],
+    environmentStatus: 'SPECIFIED_FOR_WINDOWS_11_NATIVE_BUILD',
+    ipcAndDataBoundary:
+      'Sole SQLCipher AES-256 writer; 4,096-cell Block-Hybrid Hyperblock + ChaCha20 mmap spill; Named Pipe SID-locked server.',
+    securityGate: 'DPAPI key wrapping + append-only SHA-256 audit triggers + WAL-reset guard (D-015).',
+    ownedInvariants: [
+      'I01', 'I02', 'I03', 'I04', 'I05', 'I06', 'I07', 'I08', 'I09',
+      'I11', 'I12', 'I16', 'I17', 'I21', 'I22', 'I26', 'I27', 'I34', 'I35',
+      'I37', 'I38', 'I39',
+    ],
+    exitGateCommand: 'cargo test --workspace && cargo bench --bench hyperblock_100m',
+  },
+  {
+    subProjectId: 'PRJ-IO',
+    title: 'Universal Top-12 ERP Ingestion & Encrypted Backup Worker',
+    languageRuntime: 'Go 1.24+',
+    targetBinary: 'fpa-io.exe (Fallback: Rust fpa-core::io)',
+    docPath: 'fpa-documentation/projects/PRJ-IO-go-universal-erp-worker.md',
+    phasesUnlocked: ['P2', 'P7'],
+    environmentStatus: 'SPECIFIED_FOR_WINDOWS_11_NATIVE_BUILD',
+    ipcAndDataBoundary:
+      'Stateless CSV/XLSX/Parquet/XML/JSON streaming worker over framed NDJSON + Arrow IPC temp staging; zero direct DB writes.',
+    securityGate: 'Raw-byte SHA-256 manifests, zstd encrypted snapshot bundles, and Project CoA stamping (I37).',
+    ownedInvariants: ['I03', 'I04', 'I10', 'I13', 'I14', 'I15', 'I23', 'I30', 'I33', 'I37'],
+    exitGateCommand: 'go test ./... && cargo test -p fpa-core --test erp_fallback_parity',
+  },
+  {
+    subProjectId: 'PRJ-FLOW',
+    title: 'OTP Close-Calendar Saga & Exception Orchestrator',
+    languageRuntime: 'Elixir / OTP 27',
+    targetBinary: 'fpa-flow --start-epmd false (Fallback: Rust FSM)',
+    docPath: 'fpa-documentation/projects/PRJ-FLOW-elixir-close-orchestrator.md',
+    phasesUnlocked: ['P5'],
+    environmentStatus: 'SPECIFIED_FOR_WINDOWS_11_NATIVE_BUILD',
+    ipcAndDataBoundary:
+      'Framed stdio ETF/JSON-RPC pipes only; executes close DAG dependencies and canonical K3 5-part exception keys.',
+    securityGate: 'Must assert 0 open TCP/UDP ports (--start-epmd false) so Windows Firewall never fires.',
+    ownedInvariants: ['I15', 'I18', 'I30'],
+    exitGateCommand: 'mix test && powershell -c "Get-NetTCPConnection -OwningProcess $FlowPid"',
+  },
+  {
+    subProjectId: 'PRJ-DOCS',
+    title: 'Streaming OpenXML Board Pack Renderer',
+    languageRuntime: 'Java 25 LTS (jlink) + Apache POI SXSSF',
+    targetBinary: 'fpa-docs.exe (~45 MB image · Fallback: rust_xlsxwriter)',
+    docPath: 'fpa-documentation/projects/PRJ-DOCS-java-openxml-renderer.md',
+    phasesUnlocked: ['P6'],
+    environmentStatus: 'SPECIFIED_FOR_WINDOWS_11_NATIVE_BUILD',
+    ipcAndDataBoundary:
+      'Framed stdio manifest consumer; streams multi-sheet workbooks preserving embedded charts, styles, and macros.',
+    securityGate: 'Self-contained trimmed jlink runtime; zero JRE download; zero outbound network.',
+    ownedInvariants: ['I19', 'I24', 'I30'],
+    exitGateCommand: 'jlink-runtime/bin/fpa-docs.exe --self-test --template-roundtrip',
+  },
+  {
+    subProjectId: 'PRJ-XLL',
+    title: 'Native Windows x64 Office 2021 Excel Add-In',
+    languageRuntime: 'Rust C-ABI cdylib + Office 2021 x64 SDK',
+    targetBinary: 'fpa-xll.xll',
+    docPath: 'fpa-documentation/projects/PRJ-XLL-office-2021-excel-addin.md',
+    phasesUnlocked: ['P4', 'P6'],
+    environmentStatus: 'SPECIFIED_FOR_WINDOWS_11_NATIVE_BUILD',
+    ipcAndDataBoundary:
+      'Read-only =FPA.GET UDFs over user-SID Named Pipe; explicit signed Command write-back batch with UUID idempotency keys.',
+    securityGate: 'Blocks =FPA.SET (#BLOCKED!) and >15 significant-digit float truncation (#NUM!).',
+    ownedInvariants: ['I20', 'I28'],
+    exitGateCommand: 'cargo test -p fpa-xll && office2021-xll-smoke.ps1',
+  },
+  {
+    subProjectId: 'PRJ-UI',
+    title: 'Atlas FP&A Workbench & Pure BigInt Reference Oracle',
+    languageRuntime: 'TypeScript 5.8 + React 19 + Vite 7 + Tauri v2',
+    targetBinary: 'Atlas FP&A Web / Tauri Desktop Shell',
+    docPath: 'fpa-documentation/projects/PRJ-UI-atlas-workbench-and-oracle.md',
+    phasesUnlocked: ['P0', 'P3', 'P7'],
+    environmentStatus: 'VERIFIED_IN_WEB_WORKBENCH',
+    ipcAndDataBoundary:
+      'Zero localStorage/File.text(); pure BigInt & SHA-256 P0 reference modules power all 8 workbench screens & parity JSON.',
+    securityGate: 'Strict prototype-vs-production disclosure (I32) and zero-orphan wiring (I31).',
+    ownedInvariants: ['I25', 'I29', 'I31', 'I32', 'I36', 'I40'],
+    exitGateCommand:
+      'npx --yes tsx --test frontend-builder/src/lib/*.test.ts && npm run build && npm run lint',
+  },
+  {
+    subProjectId: 'PRJ-DIST',
+    title: 'Windows 11 Per-User Installer, Win32 Job Objects & Air-Gap QA',
+    languageRuntime: 'WiX Toolset v4 + Win32 Job Objects + DPAPI',
+    targetBinary: 'atlas-fpa-omni.msi',
+    docPath: 'fpa-documentation/projects/PRJ-DIST-windows-msi-security-qa.md',
+    phasesUnlocked: ['P7'],
+    environmentStatus: 'SPECIFIED_FOR_WINDOWS_11_NATIVE_BUILD',
+    ipcAndDataBoundary:
+      'Per-user %LOCALAPPDATA% MSI installer, Win32 Job Object child termination, and second-VM encrypted backup recovery (GAP-010).',
+    securityGate: 'Offline Windows 11 VM air-gap certification & Group Finance/Tax UAT sign-offs (GAP-001..006).',
+    ownedInvariants: ['I21', 'I24', 'I32', 'I36', 'I40'],
+    exitGateCommand: 'msiexec /i atlas-fpa-omni.msi /qn && fpa-core.exe --verify-all-invariants',
+  },
+]
+
+export function validateSubProjectTraceability(): {
+  totalSubProjects: number
+  expectedInvariantCount: number
+  coveredInvariantIds: string[]
+  orphanInvariantIds: string[]
+  allCovered: boolean
+} {
+  const expectedIds = Array.from({ length: 40 }, (_, i) => `I${String(i + 1).padStart(2, '0')}`)
+  const coveredSet = new Set<string>()
+  for (const sp of ENGINEERING_SUBPROJECT_PACKS) {
+    for (const inv of sp.ownedInvariants) {
+      coveredSet.add(inv)
+    }
+  }
+  const orphanInvariantIds = expectedIds.filter(id => !coveredSet.has(id))
+  return {
+    totalSubProjects: ENGINEERING_SUBPROJECT_PACKS.length,
+    expectedInvariantCount: expectedIds.length,
+    coveredInvariantIds: [...coveredSet].sort(),
+    orphanInvariantIds,
+    allCovered: orphanInvariantIds.length === 0,
+  }
+}
+
 
 

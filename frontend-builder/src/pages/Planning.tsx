@@ -7,6 +7,7 @@ import { BusinessDrivers, NextStep } from '../components/review'
 import { UaeTaxPreviewCard } from '../components/UaeTaxPreviewCard'
 import { HyperblockScaleCard } from '../components/HyperblockScaleCard'
 import { OneStopFpaSuiteCard } from '../components/OneStopFpaSuiteCard'
+import { ProjectWorkspaceHubCard } from '../components/ProjectWorkspaceHubCard'
 
 export function Planning() {
   const { scope, period, preset, setPreset, undoPreset, redoPreset, canUndoPreset, canRedoPreset, fmt, preferences, navigate, setScope, setConsolidationStep } = useWorkspace()
@@ -39,6 +40,7 @@ export function Planning() {
     <UaeTaxPreviewCard />
     <HyperblockScaleCard />
     <OneStopFpaSuiteCard />
+    <ProjectWorkspaceHubCard />
     <BusinessDrivers />
     <NextStep title="Review the group reporting boundary" description="Planning previews do not clear missing inputs or perform consolidation. Inspect the separate readiness workflow." label="Review group reporting" onClick={() => { setScope('group'); setConsolidationStep(1); navigate('consolidation') }} />
     {preferences.guidance && <Note>All scenarios are illustrative and unadjusted. These fixed outputs do not establish accounting accuracy, model validity, or an approved budget. Resetting affects this session only.</Note>}

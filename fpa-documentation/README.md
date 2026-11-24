@@ -35,6 +35,9 @@ This is a decision-ready baseline, not a claim that every industry, regulation, 
 28. `tests/specifications/S-02-native-excel-xll.md` and `tests/specifications/S-03-finance-consolidation.md` — unapproved draft test specifications, not executed.
 29. `prompts/frontend-builder-react-vite-tailwind.md` — initial prompt for an independently built UI-only synthetic prototype; `prompts/frontend-builder-addon-unlimited-tokens.md` — supplementary instructions for deep implementation and honest verification.
 30. `docs/21-master-architecture-v2.2.md` — **Owner-approved Master Architectural & Implementation Specification v2.2** (10-industry packs, 5 contract-bounded languages with Rust fallback toggles, 100M+ cell Block-Hybrid target, 4-repo forensic countermeasures, `I01`–`I32` invariants, and native Windows 11 boundaries).
+31. `docs/22-master-roadmap-and-erp-blueprint-v3.0.md` — **Owner-approved Master Roadmap & Universal ERP Blueprint v3.0** (Top-12 Universal ERP Adapter Catalog `I33`, Complete One-Stop FP&A Replacement Engines `I34`/`I35`, 8 Gated Vertical Build Phases `P0`–`P7` `I36`).
+32. `docs/23-per-project-master-blueprint-v4.0.md` — **Owner-approved Per-Project Master Architecture & Multi-Project FP&A Blueprint v4.0** (7 Engineering Sub-Project Packs, Isolated Multi-Project Workspaces & Project P&L `I37`–`I39`, 0-orphan traceability `I40`, and `atlas-fpa-v4.0-parity-vectors.json`).
+33. `projects/README.md` — **Modular Per-Project Blueprint Packs Index** (`PRJ-CORE`, `PRJ-IO`, `PRJ-FLOW`, `PRJ-DOCS`, `PRJ-XLL`, `PRJ-UI`, `PRJ-DIST`, and `FPA-WORKSPACES`).
 
 ## Authority and baseline recommendation
 Accepted security/finance invariants > approved specs and ADRs > approved release scope > task contract > implementation. If documents conflict or decisions are missing, stop and ask. Current documents are **proposals**, not approval.

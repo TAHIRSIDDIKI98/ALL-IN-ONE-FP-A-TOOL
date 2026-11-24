@@ -765,10 +765,86 @@ input::placeholder { color: #63717d; }
   }
   .omni-erp-card,
   .omni-suite-card,
-  .omni-roadmap-card {
+  .omni-roadmap-card,
+  .omni-project-hub-card,
+  .omni-subproject-card {
     padding: 15px;
   }
 }
+
+/* v4.0 Per-Project Workspaces Hub & Engineering Sub-Project Explorer */
+.omni-project-hub-card,
+.omni-subproject-card {
+  border: 1px solid #d9e2dc;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.omni-inline-meta {
+  font-size: 11px;
+  color: #466052;
+  white-space: nowrap;
+}
+.omni-project-meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: #364b59;
+  padding: 8px 0;
+  border-top: 1px solid #e6ede8;
+  border-bottom: 1px solid #e6ede8;
+}
+.omni-project-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.omni-project-kpi-strip > div {
+  border: 1px solid #e1e8e3;
+  border-radius: 7px;
+  padding: 11px 13px;
+  background: #fafcfb;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.omni-project-kpi-strip span {
+  font-size: 10.5px;
+  color: #4e6370;
+}
+.omni-project-kpi-strip strong {
+  font-size: 14px;
+  font-weight: 650;
+  color: #1c2d38;
+}
+.omni-ok-box {
+  border: 1px solid #c3dfd0;
+  background: #f2f8f4;
+  color: #174f3b;
+  padding: 11px 13px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 900px) {
+  .omni-project-kpi-strip {
+    grid-template-columns: 1fr;
+  }
+  .omni-inline-meta {
+    white-space: normal;
+  }
+}
+
 
 
 

@@ -10,7 +10,7 @@ import { Badge, Button, Card, CardHeader, DataTable, Note, Segmented, Toggle } f
 
 export function PolyglotArchitectureCard() {
   const [fallbacks, setFallbacks] = useState<RuntimeId[]>([])
-  const [tierFilter, setTierFilter] = useState<'all' | 't1' | 't2' | 't3'>('all')
+  const [tierFilter, setTierFilter] = useState<'all' | 't1' | 't2' | 't3' | 't4'>('all')
   const [lastRunStamp, setLastRunStamp] = useState<string>('Initial check')
   const [exportStatus, setExportStatus] = useState<string>('')
 
@@ -26,11 +26,11 @@ export function PolyglotArchitectureCard() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'atlas-fpa-v3.0-parity-vectors.json'
+    link.download = 'atlas-fpa-v4.0-parity-vectors.json'
     link.click()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     setExportStatus(
-      `Exported parity JSON (${bundle.summary.packsValidated} packs · ${bundle.summary.erpAdaptersValidated} ERPs · ${bundle.summary.invariantsPassed}/${bundle.summary.invariantsTotal} invariants)`
+      `Exported v4.0 parity JSON (${bundle.summary.packsValidated} packs · ${bundle.summary.erpAdaptersValidated} ERPs · ${bundle.summary.fpaProjectWorkspacesCount} FP&A projects · ${bundle.summary.engineeringSubProjectsCount} sub-projects · ${bundle.summary.invariantsPassed}/${bundle.summary.invariantsTotal} invariants)`
     )
   }
 
@@ -40,6 +40,7 @@ export function PolyglotArchitectureCard() {
     if (tierFilter === 't1') return item.tier.startsWith('Numeric')
     if (tierFilter === 't2') return item.tier.startsWith('Consolidation')
     if (tierFilter === 't3') return item.tier.startsWith('Security')
+    if (tierFilter === 't4') return item.tier.startsWith('Per-Project')
     return true
   })
 
@@ -49,7 +50,7 @@ export function PolyglotArchitectureCard() {
         title={
           <span className="flex items-center gap-2">
             <Workflow size={16} />
-            5-language Windows 11 contract &amp; 36-invariant oracle (I01–I36)
+            5-language Windows 11 contract &amp; 40-invariant oracle (I01–I40)
           </span>
         }
         subtitle="Contract-bounded Rust / TypeScript / Go / Elixir / Java 25 jlink architecture with live Rust fallback toggles · Compiled EXEs not built in Linux UI preview"
@@ -108,7 +109,7 @@ export function PolyglotArchitectureCard() {
         <div className="omni-invariants-header">
           <div>
             <span className="eyebrow">BLOCKING VERIFICATION ORACLE · {lastRunStamp.toUpperCase()}</span>
-            <h3>Live 36-invariant check matrix</h3>
+            <h3>Live 40-invariant check matrix</h3>
           </div>
           <div className="omni-invariants-actions">
             <Segmented
@@ -120,6 +121,7 @@ export function PolyglotArchitectureCard() {
                 { value: 'all', label: `All (${suite.total})` },
                 { value: 't1', label: 'Core & FP&A' },
                 { value: 't2', label: 'Cons, ERP & IO' },
+                { value: 't4', label: 'Per-Project' },
                 { value: 't3', label: 'Scale, Sec & Roadmap' },
               ]}
             />
@@ -137,7 +139,7 @@ export function PolyglotArchitectureCard() {
               }
             >
               <Play size={13} />
-              Re-run 36 invariants
+              Re-run 40 invariants
             </Button>
           </div>
         </div>
@@ -147,7 +149,7 @@ export function PolyglotArchitectureCard() {
           </div>
         )}
 
-        <DataTable label="36 blocking invariants live execution matrix">
+        <DataTable label="40 blocking invariants live execution matrix">
           <thead>
             <tr>
               <th>ID</th>
@@ -183,7 +185,7 @@ export function PolyglotArchitectureCard() {
           <span className="flex items-start gap-2">
             <ShieldCheck size={14} className="shrink-0 mt-0.5" />
             <span>
-              <strong>Honest sandbox boundary:</strong> Live BigInt checks (I01–I28, I30–I31, I33–I36) execute directly inside this pure TypeScript oracle. Native Windows 11 builds (`fpa-core.exe`, `fpa-io.exe`, `fpa-flow`, `fpa-docs.exe`, `fpa-xll.xll`) and SQLCipher / Office 2021 host tests are contract-specified here and remain unbuilt in Linux preview.
+              <strong>Honest sandbox boundary:</strong> Live BigInt checks (I01–I28, I30–I31, I33–I40) execute directly inside this pure TypeScript oracle. Native Windows 11 builds (`fpa-core.exe`, `fpa-io.exe`, `fpa-flow`, `fpa-docs.exe`, `fpa-xll.xll`) and SQLCipher / Office 2021 host tests are contract-specified here and remain unbuilt in Linux preview.
             </span>
           </span>
         </Note>

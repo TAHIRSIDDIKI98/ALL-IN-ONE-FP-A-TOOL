@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  ENGINEERING_SUBPROJECT_PACKS,
   ERP_UNIVERSAL_ADAPTERS,
+  FPA_PROJECT_WORKSPACES,
   INDUSTRY_BLUEPRINT_PACKS,
   LANGUAGE_RUNTIME_CONTRACTS,
   MASTER_EXECUTION_ROADMAP,
@@ -10,10 +12,12 @@ import {
   calculateCapexDepreciationRollForward,
   calculatePriceVolumeMixBridge,
   calculateUaeWorkforceEosb,
+  consolidateProjectPortfolio,
   createInitialXllCommandLedger,
   estimateHyperblockFootprint,
   evaluate13WeekCashForecast,
   evaluateExcelXllFormula,
+  evaluateFpaProjectWorkspace,
   evaluateIngestionBatch,
   evaluateStatementPolicyMatrix,
   formatCanonicalFindingKey,
@@ -25,6 +29,8 @@ import {
   topologicalSortFormulaDag,
   validateAllErpAdapters,
   validateAllIndustryPacks,
+  validateProjectCoaBoundary,
+  validateSubProjectTraceability,
   verifyAuditChain,
 } from './omniBlueprintEngine'
 
@@ -139,15 +145,15 @@ test('Source-scoped ingestion gate (IMP-GL vs IMP-SUB) fixes OQ-025 sub-ledger d
   )
 })
 
-test('All 5 language runtime contracts and all 36 blocking invariants (I01..I36) pass cleanly with or without Rust fallbacks', () => {
+test('All 5 language runtime contracts and all 40 blocking invariants (I01..I40) pass cleanly with or without Rust fallbacks', () => {
   assert.equal(LANGUAGE_RUNTIME_CONTRACTS.length, 5)
   const fullRun = runAllInvariantsSuite([])
-  assert.equal(fullRun.total, 36)
-  assert.equal(fullRun.passedCount, 36)
+  assert.equal(fullRun.total, 40)
+  assert.equal(fullRun.passedCount, 40)
   assert.equal(fullRun.failedCount, 0)
 
   const fallbackRun = runAllInvariantsSuite(['go', 'elixir', 'java'])
-  assert.equal(fallbackRun.passedCount, 36)
+  assert.equal(fallbackRun.passedCount, 40)
   assert.equal(fallbackRun.failedCount, 0)
 })
 
@@ -231,7 +237,7 @@ test('Excel XLL P0 evaluates FPA.GET safely, blocks FPA.SET, guards 15-sig-digit
   assert.equal(stale.outcome, 'STALE_REVISION_CONFLICT')
 })
 
-test('Statement multi-period aggregation guards STOCK_CLOSING_LAST / RATIO_OF_SUMS and rejects cyclic formula DAGs (I08/I09/I27)', () => {
+test('Statement multi-period aggregation guards STOCK_CLOSING_LAST / RATIO_OF_SUMS, rejects cyclic DAGs, and emits v4.0 parity JSON', () => {
   const matrix = evaluateStatementPolicyMatrix()
   assert.equal(matrix.quarterFlowRevenueThousands, 9660n)
   assert.equal(matrix.quarterFlowOperatingResultThousands, 2740n)
@@ -253,11 +259,14 @@ test('Statement multi-period aggregation guards STOCK_CLOSING_LAST / RATIO_OF_SU
   assert.equal(cycle.status, 'CYCLIC_DEPENDENCY_DETECTED')
 
   const bundle = generateGoldenContractBundle()
-  assert.equal(bundle.schemaVersion, 'atlas-fpa-omni-v3.0')
+  assert.equal(bundle.schemaVersion, 'atlas-fpa-omni-v4.0')
   assert.equal(bundle.summary.packsValidated, 10)
   assert.equal(bundle.summary.erpAdaptersValidated, 12)
   assert.equal(bundle.summary.roadmapPhasesCount, 8)
-  assert.equal(bundle.summary.invariantsPassed, 36)
+  assert.equal(bundle.summary.fpaProjectWorkspacesCount, 4)
+  assert.equal(bundle.summary.engineeringSubProjectsCount, 7)
+  assert.equal(bundle.summary.invariantsPassed, 40)
+  assert.equal(bundle.summary.invariantsTotal, 40)
   assert.equal(bundle.auditHashChainVector.sha256AbcCheck, sha256HexSync('abc'))
 })
 
@@ -276,7 +285,7 @@ test('Universal Top-12 ERP Adapter Catalog normalizes all 12 ERP dialects and qu
   assert.equal(tally.signedAmountFils, 25000000n) // 2,50,000.00 Dr
 
   const workday = normalizeErpSampleRecord('ERP-08', false)
-  assert.equal(workday.gateRoute, 'IMP-SUB (Control Total + Fiscal Window)') // Payroll Roster bypasses IMP-GL trial-balance gate
+  assert.equal(workday.gateRoute, 'IMP-SUB (Control Total + Fiscal Window)')
 
   const quarantined = normalizeErpSampleRecord('ERP-01', true)
   assert.equal(quarantined.coaStatus, 'QUARANTINED_UNMAPPED_COA')
@@ -288,7 +297,7 @@ test('One-Stop FP&A Replacement Engines: UAE Art. 51 EOSB, CapEx Roll-Forward, 1
     headcount: 10n,
     monthlyBasicSalaryAedRaw: '15000.00',
     monthlyAllowancesAedRaw: '5000.00',
-    yearsOfServiceWhole: 6n, // 5y * 21d + 1y * 30d
+    yearsOfServiceWhole: 6n,
   })
   assert.equal(eosb6Yr.status, 'CALCULATED')
   if (eosb6Yr.status === 'CALCULATED') {
@@ -305,7 +314,7 @@ test('One-Stop FP&A Replacement Engines: UAE Art. 51 EOSB, CapEx Roll-Forward, 1
   assert.equal(eosb45Yr.status, 'CALCULATED')
   if (eosb45Yr.status === 'CALCULATED') {
     assert.equal(eosb45Yr.capApplied, true)
-    assert.equal(eosb45Yr.singleEmployeeCappedEosbFils, 72000000n) // 24 * 30,000.00 AED
+    assert.equal(eosb45Yr.singleEmployeeCappedEosbFils, 72000000n)
     assert.equal(eosb45Yr.totalCappedEosbLiabilityFils, 144000000n)
   }
 
@@ -338,6 +347,56 @@ test('One-Stop FP&A Replacement Engines: UAE Art. 51 EOSB, CapEx Roll-Forward, 1
   assert.equal(pvm.reconciliationDeltaFils, 0n)
   assert.equal(MASTER_EXECUTION_ROADMAP.length, 8)
 })
+
+test('Multi-Project FP&A Workspaces enforce isolated CoA (I37), missing-FX quarantine (I38), WBS/PoC conservation (I39), and 0-orphan sub-projects (I40)', () => {
+  assert.equal(FPA_PROJECT_WORKSPACES.length, 4)
+
+  const okBoundary = validateProjectCoaBoundary({
+    targetProjectId: 'PRJ-02',
+    postingProjectId: 'PRJ-02',
+    coaNamespace: 'COA-DEV-POC',
+    nativeAccountCode: '02-DEV-4100',
+  })
+  assert.equal(okBoundary.status, 'ISOLATION_OK')
+  if (okBoundary.status === 'ISOLATION_OK') {
+    assert.equal(okBoundary.mappedCanonicalCode, 'GRP-REV-POC')
+  }
+
+  const blockedBoundary = validateProjectCoaBoundary({
+    targetProjectId: 'PRJ-02',
+    postingProjectId: 'PRJ-01',
+    coaNamespace: 'COA-HOLDING-IFRS',
+    nativeAccountCode: '0000410000',
+  })
+  assert.equal(blockedBoundary.status, 'CROSS_PROJECT_COA_ISOLATION_VIOLATION')
+
+  const towerEval = evaluateFpaProjectWorkspace('PRJ-02')
+  assert.equal(towerEval.wbsReconciliationDeltaFils, 0n)
+  assert.equal(towerEval.eacCostFils, 6000000000n) // 60,000,000.00 AED
+  assert.equal(towerEval.pocPctTenths, 600n) // 60.0%
+  assert.equal(towerEval.earnedRevenueFils, 5100000000n) // 51,000,000.00 AED
+  assert.equal(towerEval.recognizedGrossProfitFils, 1500000000n) // 15,000,000.00 AED
+
+  const consolidatedOk = consolidateProjectPortfolio({ baseCurrency: 'USD', simulateMissingEurRate: false })
+  assert.equal(consolidatedOk.status, 'ALL_PROJECTS_CONSOLIDATED')
+  assert.equal(consolidatedOk.includedCount, 4)
+  assert.equal(consolidatedOk.quarantinedProjectIds.length, 0)
+
+  const consolidatedMissingFx = consolidateProjectPortfolio({
+    baseCurrency: 'USD',
+    simulateMissingEurRate: true,
+  })
+  assert.equal(consolidatedMissingFx.status, 'PARTIAL_EXCLUDED_MISSING_FX')
+  assert.equal(consolidatedMissingFx.includedCount, 3)
+  assert.deepEqual(consolidatedMissingFx.quarantinedProjectIds, ['PRJ-03'])
+
+  assert.equal(ENGINEERING_SUBPROJECT_PACKS.length, 7)
+  const trace = validateSubProjectTraceability()
+  assert.equal(trace.allCovered, true)
+  assert.equal(trace.expectedInvariantCount, 40)
+  assert.equal(trace.orphanInvariantIds.length, 0)
+})
+
 
 
 

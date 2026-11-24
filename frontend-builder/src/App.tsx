@@ -4,7 +4,11 @@ import { APP_NAME, DEFAULT_WORKSPACE, businesses, formatNumber, pageNames, perio
 import { Workspace, useWorkspace, type OverlayOptions, type Preferences } from './lib/workspace'
 import { initialImportDraft, extendedSectorProfiles, type DemoIssueId, type ImportDraft } from './lib/reviewData'
 import { useUndoState } from './lib/useUndoState'
-import { INDUSTRY_BLUEPRINT_PACKS } from './lib/omniBlueprintEngine'
+import {
+  ENGINEERING_SUBPROJECT_PACKS,
+  FPA_PROJECT_WORKSPACES,
+  INDUSTRY_BLUEPRINT_PACKS,
+} from './lib/omniBlueprintEngine'
 import { Badge, Button, Card, DefinitionList, Dialog, EmptyState, Note, PageHeader } from './components/ui'
 import { ExtendedSectorProfile } from './components/review'
 import { Overview } from './pages/Overview'
@@ -122,8 +126,26 @@ const omniSearchEntries = [
   { id: 'omni-erp-mapper', name: 'Universal Top-12 ERP Adapter Catalog & CoA Mapper (I33)', description: 'SAP ACDOCA, Oracle, D365, NetSuite, TallyPrime, Odoo, Sage, Workday, QuickBooks, Zoho, Infor, SAF-T', page: 'imports' as PageId, icon: Upload, sectorId: undefined as string | undefined },
   { id: 'omni-xll', name: 'Native XLL P0 =FPA.GET & Command idempotency lab (I20/I28)', description: '15-sig-digit guard, =FPA.SET block & 409/412 conflicts', page: 'excel' as PageId, icon: FileSpreadsheet, sectorId: undefined as string | undefined },
   { id: 'omni-audit-chain', name: 'FIPS 180-4 SHA-256 hash-chained audit oracle (I22)', description: 'Tamper detection & sequential digest chain verifier', page: 'activity' as PageId, icon: History, sectorId: undefined as string | undefined },
-  { id: 'omni-invariants', name: '5-language contract & 36-invariant oracle (I01–I36)', description: 'Rust, TypeScript, Go, Elixir, Java 25 jlink fallbacks', page: 'settings' as PageId, icon: Settings2, sectorId: undefined as string | undefined },
+  { id: 'omni-invariants', name: '5-language contract & 40-invariant oracle (I01–I40)', description: 'Rust, TypeScript, Go, Elixir, Java 25 jlink fallbacks', page: 'settings' as PageId, icon: Settings2, sectorId: undefined as string | undefined },
   { id: 'omni-master-roadmap', name: '8-Phase Gated Execution Roadmap & Secondary Brain (I36)', description: 'P0–P7 vertical gates, One-Stop Replacement Matrix & Brain 00–05 sync', page: 'settings' as PageId, icon: Settings2, sectorId: undefined as string | undefined },
+  { id: 'omni-project-workspaces', name: 'Multi-Project FP&A Workspaces & Isolated CoA (I37–I39)', description: 'PRJ-01..PRJ-04 sealed CoA firewall, WBS/PoC Project P&L & FX guard', page: 'planning' as PageId, icon: Building2, sectorId: undefined as string | undefined },
+  { id: 'omni-subproject-packs', name: '7 Engineering Sub-Project Blueprint Packs (I40)', description: 'PRJ-CORE..PRJ-DIST modular specs · 40/40 invariants · 0 orphans', page: 'settings' as PageId, icon: Settings2, sectorId: undefined as string | undefined },
+  ...FPA_PROJECT_WORKSPACES.map(prj => ({
+    id: `omni-workspace-${prj.projectId.toLowerCase()}`,
+    name: `${prj.projectId} · ${prj.projectName} (${prj.currency})`,
+    description: `${prj.industryModel} · ${prj.coaNamespace} · ${prj.erpProfileLabel}`,
+    page: 'planning' as PageId,
+    icon: Building2,
+    sectorId: undefined as string | undefined,
+  })),
+  ...ENGINEERING_SUBPROJECT_PACKS.map(sp => ({
+    id: `omni-subprj-${sp.subProjectId.toLowerCase()}`,
+    name: `${sp.subProjectId} · ${sp.title}`,
+    description: `${sp.languageRuntime} · Phases ${sp.phasesUnlocked.join(', ')} · ${sp.docPath}`,
+    page: 'settings' as PageId,
+    icon: Settings2,
+    sectorId: undefined as string | undefined,
+  })),
   ...INDUSTRY_BLUEPRINT_PACKS.map(pack => ({
     id: `omni-pack-${pack.id}`,
     name: `${pack.code} · ${pack.name}`,

@@ -5,6 +5,7 @@ import { useWorkspace } from '../lib/workspace'
 import { Badge, Button, Card, CardHeader, DataTable, DefinitionList, Note, PageHeader, SelectField, Toggle } from '../components/ui'
 import { PolyglotArchitectureCard } from '../components/PolyglotArchitectureCard'
 import { MasterRoadmapBlueprintCard } from '../components/MasterRoadmapBlueprintCard'
+import { EngineeringSubProjectsCard } from '../components/EngineeringSubProjectsCard'
 
 export function Settings() {
   const { workspaceName, setWorkspaceName, preferences, setPreferences, period, setPeriod, fmt, resetDemo, openDialog } = useWorkspace()
@@ -28,5 +29,6 @@ export function Settings() {
     </div>
     <PolyglotArchitectureCard />
     <MasterRoadmapBlueprintCard />
+    <EngineeringSubProjectsCard />
   </div>
 }
