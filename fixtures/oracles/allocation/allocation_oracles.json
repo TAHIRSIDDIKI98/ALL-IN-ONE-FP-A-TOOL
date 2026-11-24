@@ -1,0 +1,99 @@
+{
+  "_meta": {
+    "derivation": "Hand-computed largest-remainder allocation vectors verifying MASTER_PROMPT §5.4 (exact sum, descending fractional remainder, deterministic ascending bucket key tie-break, symmetric negative allocation, zero-weight handling).",
+    "approved_date": "2026-11-24",
+    "quarry_reference": "Q2 fpa/src-tauri/src/core/money.rs @ 6f6f72f5b681 + Q1 fp-A-betterversion/src/utils/money.test.ts @ 86d785ca696c"
+  },
+  "cases": [
+    {
+      "id": "even-3way-100-usd",
+      "amount": "100.00",
+      "scale": 2,
+      "buckets": [
+        { "key": "cc_c", "weight": "1" },
+        { "key": "cc_a", "weight": "1" },
+        { "key": "cc_b", "weight": "1" }
+      ],
+      "expected": {
+        "cc_a": "33.34",
+        "cc_b": "33.33",
+        "cc_c": "33.33"
+      }
+    },
+    {
+      "id": "weighted-remainder-order",
+      "amount": "10.00",
+      "scale": 2,
+      "buckets": [
+        { "key": "dept_1", "weight": "1" },
+        { "key": "dept_2", "weight": "2" },
+        { "key": "dept_3", "weight": "3" }
+      ],
+      "expected": {
+        "dept_1": "1.67",
+        "dept_2": "3.33",
+        "dept_3": "5.00"
+      }
+    },
+    {
+      "id": "negative-symmetric-3way",
+      "amount": "-100.00",
+      "scale": 2,
+      "buckets": [
+        { "key": "b", "weight": "1" },
+        { "key": "a", "weight": "1" },
+        { "key": "c", "weight": "1" }
+      ],
+      "expected": {
+        "a": "-33.34",
+        "b": "-33.33",
+        "c": "-33.33"
+      }
+    },
+    {
+      "id": "zero-weight-bucket-gets-zero",
+      "amount": "50.00",
+      "scale": 2,
+      "buckets": [
+        { "key": "zero_bucket", "weight": "0" },
+        { "key": "p1", "weight": "1" },
+        { "key": "p2", "weight": "2" }
+      ],
+      "expected": {
+        "zero_bucket": "0.00",
+        "p1": "16.67",
+        "p2": "33.33"
+      }
+    },
+    {
+      "id": "jpy-scale-0",
+      "amount": "1000",
+      "scale": 0,
+      "buckets": [
+        { "key": "k1", "weight": "1" },
+        { "key": "k2", "weight": "1" },
+        { "key": "k3", "weight": "1" }
+      ],
+      "expected": {
+        "k1": "334",
+        "k2": "333",
+        "k3": "333"
+      }
+    },
+    {
+      "id": "kwd-scale-3",
+      "amount": "1.000",
+      "scale": 3,
+      "buckets": [
+        { "key": "x1", "weight": "1" },
+        { "key": "x2", "weight": "1" },
+        { "key": "x3", "weight": "1" }
+      ],
+      "expected": {
+        "x1": "0.334",
+        "x2": "0.333",
+        "x3": "0.333"
+      }
+    }
+  ]
+}

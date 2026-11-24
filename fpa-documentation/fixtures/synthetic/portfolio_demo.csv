@@ -1,5 +1,0 @@
-fixture_id,period,currency,business_unit,revenue_aed,operating_expense_aed,investment_dividend_aed
-SYN-PORTFOLIO-01,2026-01,AED,Synthetic Packaging,1000.00,750.00,0.00
-SYN-PORTFOLIO-01,2026-01,AED,Synthetic Metals,1600.00,1300.00,0.00
-SYN-PORTFOLIO-01,2026-01,AED,Synthetic Property,500.00,200.00,0.00
-SYN-PORTFOLIO-01,2026-01,AED,Synthetic Investment,0.00,0.00,100.00

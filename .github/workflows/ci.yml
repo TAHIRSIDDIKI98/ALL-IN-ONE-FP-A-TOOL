@@ -1,0 +1,85 @@
+name: OneFP&A CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sandbox-and-e2e:
+    name: Sandbox Gates, Build & Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Run sandbox verification suite (zero secrets/network)
+        env:
+          CI: 'true'
+        run: npm run verify | tee verify-output.log
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright Spine Harness
+        env:
+          CI: 'true'
+        run: npx playwright test --config=e2e/playwright.config.ts
+
+      - name: Upload CI diagnostics & test reports (always, including failure — PR5)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-${{ github.run_id }}
+          path: |
+            verify-output.log
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+  neon-parity:
+    name: Neon Migration Parity Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ vars.ENABLE_NEON_PARITY == 'true' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Run PGLite vs Neon schema & query parity gate
+        env:
+          NEON_PARITY_DATABASE_URL: ${{ secrets.NEON_PARITY_DATABASE_URL }}
+        run: npx tsx scripts/neon-parity.ts | tee neon-parity.log
+
+      - name: Upload Neon parity diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neon-parity-diagnostics-${{ github.run_id }}
+          path: neon-parity.log
+          if-no-files-found: warn
+          retention-days: 14

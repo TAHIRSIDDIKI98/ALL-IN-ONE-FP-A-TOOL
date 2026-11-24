@@ -1,0 +1,12 @@
+{
+  "source": "https://github.com/TAHIRSIDDIKI98/fpa/tree/6f6f72f5b681/tests/fixtures/calendar",
+  "commit": "6f6f72f5b681",
+  "portClass": "A",
+  "approvedDate": "2026-11-24",
+  "files": {
+    "README.md": "55aeddf8a8839ae2b61ab58dd9d801609a335a05d5a69f09fab721630ea6c36b",
+    "nrf-3334-expected.json": "e7d6175101dfe4aeb3d32f2b462f4d1fdda886b256454ec80a0a360aad3430d8",
+    "nrf-454-2024-2028.json": "5596772a6381f63abb48fc27e3ad83022244000cd508116df7cb7685993c167a",
+    "nrf-544-expected.json": "9a8552b338c22070657af291cc77a71a3b60be284e8d1932999b5461fd06eb58"
+  }
+}

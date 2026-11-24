@@ -1,15 +1,67 @@
 {
-  "name": "all-in-one-fp-a-tool",
+  "name": "onefpa",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
-  "workspaces": [
-    "frontend-builder"
-  ],
+  "description": "OneFP&A — Cloud all-in-one FP&A platform (M0 Foundation)",
+  "engines": {
+    "node": ">=20.20.0"
+  },
   "scripts": {
-    "dev": "./frontend-builder/node_modules/.bin/vite --config frontend-builder/vite.config.ts frontend-builder --host 0.0.0.0 --port 3000",
-    "build": "npm run build --workspace=vite-react-ts",
-    "lint": "npm run lint --workspace=vite-react-ts",
-    "preview": "npm run preview --workspace=vite-react-ts"
+    "dev:client": "vite",
+    "dev:server": "tsx server/index.ts",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:core": "vitest run core shared",
+    "test:db": "vitest run server db fixtures",
+    "test:e2e": "playwright test",
+    "db:migrate": "tsx scripts/db-migrate.ts",
+    "corpus:generate": "tsx scripts/generate-corpus.ts",
+    "gate:core-purity": "node scripts/core-purity.mjs",
+    "gate:money-ast": "node scripts/money-ast.mjs",
+    "gate:tautology": "node scripts/tautology.mjs",
+    "gate:fabrication": "node scripts/fabrication.mjs",
+    "gate:readme-claims": "node scripts/readme-claims.mjs",
+    "gate:secret-scan": "node scripts/secret-scan.mjs",
+    "gate:no-native-deps": "node scripts/no-native-deps.mjs",
+    "gate:schema-scope": "node scripts/schema-scope.mjs",
+    "gate:constitution": "node scripts/constitution-check.mjs",
+    "gate:licenses": "node scripts/license-check.mjs",
+    "gate:work-integrity": "node scripts/work-integrity.mjs",
+    "gate:bundle-size": "node scripts/bundle-size.mjs",
+    "verify": "node scripts/verify.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.108.4",
+    "ag-grid-community": "36.3.0",
+    "ag-grid-react": "36.3.0",
+    "decimal.js": "10.6.0",
+    "exceljs": "4.4.0",
+    "express": "5.3.0",
+    "firebase": "11.10.0",
+    "firebase-admin": "13.10.0",
+    "pdfmake": "0.3.15",
+    "postgres": "4.1.1",
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
+    "zod": "3.25.76",
+    "zustand": "5.1.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.6.0",
+    "@playwright/test": "1.65.1",
+    "@tailwindcss/vite": "4.3.5",
+    "@types/express": "5.0.6",
+    "@types/node": "22.20.5",
+    "@types/pdfmake": "0.3.3",
+    "@types/react": "19.1.17",
+    "@types/react-dom": "19.1.11",
+    "@vitejs/plugin-react": "4.7.0",
+    "tailwindcss": "4.3.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "6.4.6",
+    "vitest": "3.2.7"
   }
 }
