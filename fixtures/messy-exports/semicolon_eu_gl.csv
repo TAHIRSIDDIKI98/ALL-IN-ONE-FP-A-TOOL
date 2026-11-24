@@ -1,0 +1,6 @@
+entry_ref;posting_date;account_code;memo;amount
+JE-EU-001;2026-02-01;1000;Customer wire settlement;1.234,56
+JE-EU-001;2026-02-01;4000;Revenue recognition;-1.234,56
+JE-EU-002;2026-02-02;001200;Lead-zero stock receipt;450,00
+JE-EU-002;2026-02-02;001200;Lead-zero stock receipt duplicate;450,00
+JE-EU-002;2026-02-02;2000;Vendor liability;450,00-

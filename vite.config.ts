@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: '0.0.0.0',
-    port: 5173,
+    port: 3000,
     allowedHosts: true,
     proxy: {
       '/api': {
@@ -21,6 +21,14 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (
+            id.includes('/node_modules/react/') ||
+            id.includes('/node_modules/react-dom/') ||
+            id.includes('/node_modules/scheduler/') ||
+            id.includes('commonjsHelpers')
+          ) {
+            return 'react-vendor';
+          }
           if (id.includes('ag-grid')) return 'ag-grid';
           if (id.includes('exceljs') || id.includes('pdfmake')) return 'exports';
           if (id.includes('firebase')) return 'firebase';

@@ -1,0 +1,13 @@
+entry_ref,date,account_code,description,debit,credit
+JE-M-001,2026-01-15,"  001200 ","Inventory restock, ""Batch A""","$ 2,500.00",
+JE-M-001,2026-01-15,2000,"AP offset
+multi-line memo","(2,500.00)",
+
+JE-M-002,2026-01-20, 6000 ,Payroll run Jan,"1 234,56",
+JE-M-002,2026-01-20,6000,Duplicate of payroll run,"1 234,56",
+JE-M-003,25/01/2026," 4000 ",Mixed case & DD/MM/YYYY,,500.00-
+JE-M-004,03/04/2026,6100,Ambiguous date Mar 4 vs Apr 3,300.00,
+JE-M-005,2026-01-28,9999,Unmapped account code,1250.00,
+JE-M-006,2026-01-29,6200,Ambiguous 3-digit comma,"1,234",
+JE-M-007,2026-01-30,6100
+TOTAL,,,,,2500.00,2500.00

@@ -1,0 +1,19 @@
+{
+  "fixture": "messy-exports/erp_mixed_gl",
+  "synthetic": true,
+  "locale": "unknown",
+  "rows_in": 11,
+  "imported": 4,
+  "quarantined": [
+    { "row_no": 5, "reason": "BLANK_ROW" },
+    { "row_no": 7, "reason": "DUPLICATE_ROW:JE-M-002" },
+    { "row_no": 9, "reason": "AMBIGUOUS_DATE:03/04/2026" },
+    { "row_no": 10, "reason": "UNMAPPED_ACCOUNT:9999" },
+    { "row_no": 11, "reason": "AMBIGUOUS_SINGLE_SEPARATOR_3DP:1,234" },
+    { "row_no": 12, "reason": "RAGGED_ROW:expected=6:got=3" },
+    { "row_no": 13, "reason": "SUMMARY_TOTAL_ROW" }
+  ],
+  "duplicates_detected": 1,
+  "tb_debits": "4234.56",
+  "tb_credits": "2500.00"
+}

@@ -1,0 +1,17 @@
+{
+  "source": "https://github.com/TAHIRSIDDIKI98/fpa/tree/6f6f72f5b681/tests/fixtures/statements",
+  "commit": "6f6f72f5b681",
+  "portClass": "A",
+  "approvedDate": "2026-11-24",
+  "files": {
+    "README.md": "2daaa0576bbb3989c5a3af8fc25dc026c0d9876211a9f5ef7f2df7315bd25261",
+    "bs_basic.expected.json": "c01478188b71c031c7b3c52e6dab6118919a2959bd03f36b6aecf9902bdeae3c",
+    "bs_basic.json": "a8e687d4c90ac5e35f8c69672cecddd4763b079619c60401c218fcd6c0184aff",
+    "cf_basic.expected.json": "729b401d0262693ffe98abe4b3559604b8868bf9e37a6d8f62d945e298262452",
+    "cf_basic.json": "c438be518c61a34dc4ef66f9eba7eb8dc08d92fe3f9487c117fcae5acbe72caa",
+    "pl_basic.expected.json": "9c6ae208411b449eb950e80dc0e2794aaf838f230ec3e0b93baef7c9c75b1076",
+    "pl_basic.json": "9896888da51d2a85ada1da8072ec47da72f88e6084cdaf9e89c1f594d74dcb13",
+    "rounding_oracle.expected.json": "8461d6ef780659c29038c9033b80835ac8214d5e72e2845e9e5e71be0df5e1f4",
+    "rounding_oracle.json": "1fe05f82474cdfeaac68b0d83dd0aa6cd2015baaefc244c158650ec3db3cf050"
+  }
+}

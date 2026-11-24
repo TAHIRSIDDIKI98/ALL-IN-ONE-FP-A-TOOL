@@ -39,3 +39,4 @@ export function makeSuccessEnvelopeSchema<T extends z.ZodType>(dataSchema: T) {
 }
 
 export * from './errors.js';
+export * from './spine.js';

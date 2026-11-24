@@ -1,0 +1,19 @@
+{
+  "source": "https://github.com/TAHIRSIDDIKI98/fpa/tree/6f6f72f5b681/tests/fixtures/coa",
+  "commit": "6f6f72f5b681",
+  "portClass": "A",
+  "approvedDate": "2026-11-24",
+  "files": {
+    "README.md": "95f69f4478daf8636c0277f8250668546563c6d6659efac5f1c188f8b6bbe0cb",
+    "duplicate-code.expected.json": "fab31d48e58e74cb8d48323d9274a2e4050c890e1c20e117ac073eceaf4dd2c7",
+    "duplicate-code.json": "889097f28871b8e8571aaa97965db6bd5c803ad30568284f6b991f7750d9a140",
+    "import-pack-coa.expected.json": "4f81c5ef319a5de5a755e8965732bb4207f3d05e886be2e7829c4d7ca56f4999",
+    "import-pack-coa.json": "8bbf67bcd5477bac8161e48653e9468bb4f78c86448db792adde2ae10493f541",
+    "import-update.expected.json": "6c80baef94666ed4e24dbe435215e43970bec40c9f10994a1c641a78b18e981e",
+    "import-update.json": "c93ae577d2b43a9f54399e0a52e345c3628c5ecdee9403f64980766b015dd868",
+    "merge-remap.expected.json": "17b2a603f6f75888b89ec0756dfef5671080fe8b58ce395653e6a96286842dfe",
+    "merge-remap.json": "6f8a928bc1274dbee72c92dcb3c557f8d6edad294347e5c3646ff9b82896d056",
+    "referenced-account.expected.json": "97ea7a9a7ab1dae1677d2882ff8d458c4a6011c7e6bc2eb7c62391845ec1b601",
+    "referenced-account.json": "937605c4038ed3960a859d7bc2cf07cd418f41f71e68247814bb44a3446a6f80"
+  }
+}

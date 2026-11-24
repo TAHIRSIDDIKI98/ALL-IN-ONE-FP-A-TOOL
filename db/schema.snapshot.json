@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "0001_m1_spine",
+  "migration": "db/migrations/0001_m1_spine.sql",
+  "tableCount": 18,
+  "tables": [
+    "app_user",
+    "company",
+    "membership",
+    "fiscal_calendar",
+    "fiscal_period",
+    "statement_line",
+    "account",
+    "entity",
+    "department",
+    "coa_mapping",
+    "import_batch",
+    "import_row_raw",
+    "gl_entry",
+    "gl_line",
+    "scenario",
+    "plan_version",
+    "plan_line",
+    "audit_log"
+  ],
+  "moneyColumns": [
+    { "table": "gl_entry", "column": "total_debit", "type": "NUMERIC(28,6)" },
+    { "table": "gl_entry", "column": "total_credit", "type": "NUMERIC(28,6)" },
+    { "table": "gl_line", "column": "debit", "type": "NUMERIC(28,6)" },
+    { "table": "gl_line", "column": "credit", "type": "NUMERIC(28,6)" },
+    { "table": "plan_line", "column": "amount", "type": "NUMERIC(28,6)" }
+  ],
+  "deferredTriggers": [
+    "trg_gl_entry_balance_header",
+    "trg_gl_line_balance_lines",
+    "trg_import_batch_row_accounting",
+    "trg_import_row_raw_accounting"
+  ],
+  "immutabilityTriggers": [
+    "trg_audit_log_append_only"
+  ]
+}

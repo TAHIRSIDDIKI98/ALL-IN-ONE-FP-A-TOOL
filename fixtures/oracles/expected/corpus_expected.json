@@ -1,0 +1,51 @@
+{
+  "derivationMethod": "Independent JS BigInt minor-unit integer summation with zero /core imports",
+  "approvedDate": "2026-11-24",
+  "generatorVersion": "1.0.0",
+  "seed": 202601,
+  "trialBalance": {
+    "totalDebits": "20237811.00",
+    "totalCredits": "20237811.00",
+    "balanced": true
+  },
+  "pnl": {
+    "revenue": "6509493.00",
+    "cogs": "2193359.00",
+    "grossProfit": "4316134.00",
+    "opex": "3004027.00",
+    "ebitda": "1312107.00",
+    "depreciation": "239914.00",
+    "ebit": "1072193.00",
+    "nonOperatingNet": "-72088.00",
+    "ebt": "1000105.00",
+    "tax": "214930.00",
+    "netIncome": "785175.00"
+  },
+  "balanceSheet": {
+    "currentAssets": "4331862.10",
+    "nonCurrentAssets": "1440086.00",
+    "totalAssets": "5771948.10",
+    "currentLiabilities": "1361773.10",
+    "nonCurrentLiabilities": "850000.00",
+    "totalLiabilities": "2211773.10",
+    "totalEquity": "3560175.00",
+    "totalLiabilitiesAndEquity": "5771948.10",
+    "cashBalance": "2110947.70",
+    "balanced": true
+  },
+  "cashFlow": {
+    "beginningCash": "1200000.00",
+    "operatingCashFlow": "965947.70",
+    "investingCashFlow": "-280000.00",
+    "financingCashFlow": "225000.00",
+    "endingCash": "2110947.70",
+    "tiesToBsCash": true
+  },
+  "retainedEarnings": {
+    "opening": "1200000.00",
+    "netIncome": "785175.00",
+    "distributions": "75000.00",
+    "closingTotal": "1910175.00",
+    "rollForwardValid": true
+  }
+}

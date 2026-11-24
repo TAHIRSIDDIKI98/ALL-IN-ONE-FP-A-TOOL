@@ -1,0 +1,422 @@
+import { PGlite } from '@electric-sql/pglite';
+import { afterEach, describe, expect, it } from 'vitest';
+import schemaSnapshot from '../../db/schema.snapshot.json' with { type: 'json' };
+import { appendAuditLog, verifyCompanyAuditLog } from '../audit/index.js';
+import { applyMigrations, type SqlExecutor } from './migrate.js';
+
+const openDbs: PGlite[] = [];
+
+async function makeMigratedDb(): Promise<{ pg: PGlite; db: SqlExecutor }> {
+  const pg = new PGlite();
+  openDbs.push(pg);
+  const db: SqlExecutor = {
+    async exec(sql: string) {
+      await pg.exec(sql);
+    },
+    async query<T extends Record<string, unknown>>(sql: string, params: readonly unknown[] = []) {
+      const res = await pg.query<T>(sql, [...params]);
+      return { rows: res.rows };
+    },
+  };
+  await applyMigrations(db);
+  return { pg, db };
+}
+
+interface SeedFixtures {
+  userId: string;
+  companyA: string;
+  companyB: string;
+  calA: string;
+  calB: string;
+  periodA: string;
+  periodB: string;
+  entityA: string;
+  entityB: string;
+  cashAcctA: string;
+  revAcctA: string;
+  revAcctB: string;
+  scenarioA: string;
+  versionA: string;
+  batchA: string;
+  rowRawA1: string;
+  rowRawA2: string;
+}
+
+async function seedBaseTenants(db: SqlExecutor): Promise<SeedFixtures> {
+  const uRes = await db.query<{ id: string }>(
+    `INSERT INTO app_user (firebase_uid, email, display_name)
+     VALUES ('uid-1', 'owner@example.com', 'Owner')
+     RETURNING id`,
+  );
+  const userId = uRes.rows[0]!.id;
+
+  await db.query(
+    `INSERT INTO statement_line (key, statement, label, sort_order, sign_rule)
+     VALUES
+       ('bs.asset.cash', 'bs', 'Cash & Equivalents', 10, 'debit_minus_credit'),
+       ('pl.revenue.product', 'pl', 'Product Revenue', 10, 'credit_minus_debit')`,
+  );
+
+  const compARes = await db.query<{ id: string }>(
+    `INSERT INTO company (name, base_currency) VALUES ('Tenant A', 'USD') RETURNING id`,
+  );
+  const compBRes = await db.query<{ id: string }>(
+    `INSERT INTO company (name, base_currency) VALUES ('Tenant B', 'USD') RETURNING id`,
+  );
+  const companyA = compARes.rows[0]!.id;
+  const companyB = compBRes.rows[0]!.id;
+
+  await db.query(`INSERT INTO membership (company_id, user_id, role) VALUES ($1, $2, 'owner')`, [companyA, userId]);
+  await db.query(`INSERT INTO membership (company_id, user_id, role) VALUES ($1, $2, 'owner')`, [companyB, userId]);
+
+  const calARes = await db.query<{ id: string }>(
+    `INSERT INTO fiscal_calendar (company_id, kind, year_start_month) VALUES ($1, '12month', 1) RETURNING id`,
+    [companyA],
+  );
+  const calBRes = await db.query<{ id: string }>(
+    `INSERT INTO fiscal_calendar (company_id, kind, year_start_month) VALUES ($1, '12month', 1) RETURNING id`,
+    [companyB],
+  );
+  const calA = calARes.rows[0]!.id;
+  const calB = calBRes.rows[0]!.id;
+
+  await db.query(`UPDATE company SET fiscal_calendar_id = $1 WHERE id = $2`, [calA, companyA]);
+  await db.query(`UPDATE company SET fiscal_calendar_id = $1 WHERE id = $2`, [calB, companyB]);
+
+  const perARes = await db.query<{ id: string }>(
+    `INSERT INTO fiscal_period (company_id, fiscal_calendar_id, fiscal_year, period_no, code, label, quarter, start_date, end_date)
+     VALUES ($1, $2, 2026, 1, 'P01', 'P01 (Jan 2026)', 1, '2026-01-01', '2026-01-31') RETURNING id`,
+    [companyA, calA],
+  );
+  const perBRes = await db.query<{ id: string }>(
+    `INSERT INTO fiscal_period (company_id, fiscal_calendar_id, fiscal_year, period_no, code, label, quarter, start_date, end_date)
+     VALUES ($1, $2, 2026, 1, 'P01', 'P01 (Jan 2026)', 1, '2026-01-01', '2026-01-31') RETURNING id`,
+    [companyB, calB],
+  );
+  const periodA = perARes.rows[0]!.id;
+  const periodB = perBRes.rows[0]!.id;
+
+  const entARes = await db.query<{ id: string }>(
+    `INSERT INTO entity (company_id, code, name, currency) VALUES ($1, '001', 'Entity A', 'USD') RETURNING id`,
+    [companyA],
+  );
+  const entBRes = await db.query<{ id: string }>(
+    `INSERT INTO entity (company_id, code, name, currency) VALUES ($1, '001', 'Entity B', 'USD') RETURNING id`,
+    [companyB],
+  );
+  const entityA = entARes.rows[0]!.id;
+  const entityB = entBRes.rows[0]!.id;
+
+  const cashARes = await db.query<{ id: string }>(
+    `INSERT INTO account (company_id, code, name, type, normal_side, statement_line_key)
+     VALUES ($1, '001000', 'Cash', 'asset', 'debit', 'bs.asset.cash') RETURNING id`,
+    [companyA],
+  );
+  const revARes = await db.query<{ id: string }>(
+    `INSERT INTO account (company_id, code, name, type, normal_side, statement_line_key)
+     VALUES ($1, '004000', 'Product Revenue', 'revenue', 'credit', 'pl.revenue.product') RETURNING id`,
+    [companyA],
+  );
+  const revBRes = await db.query<{ id: string }>(
+    `INSERT INTO account (company_id, code, name, type, normal_side, statement_line_key)
+     VALUES ($1, '004000', 'Product Revenue B', 'revenue', 'credit', 'pl.revenue.product') RETURNING id`,
+    [companyB],
+  );
+
+  const scenARes = await db.query<{ id: string }>(
+    `INSERT INTO scenario (company_id, kind, name, status) VALUES ($1, 'budget', 'FY26 Budget', 'draft') RETURNING id`,
+    [companyA],
+  );
+  const scenarioA = scenARes.rows[0]!.id;
+
+  const verARes = await db.query<{ id: string }>(
+    `INSERT INTO plan_version (company_id, scenario_id, version_no, label) VALUES ($1, $2, 1, 'v1') RETURNING id`,
+    [companyA, scenarioA],
+  );
+  const versionA = verARes.rows[0]!.id;
+
+  const sourceHash = 'a'.repeat(64);
+  const batchARes = await db.query<{ id: string }>(
+    `INSERT INTO import_batch (company_id, kind, source_filename, source_hash, row_count, status, imported_by)
+     VALUES ($1, 'actuals', 'jan.csv', $2, 2, 'staged', $3) RETURNING id`,
+    [companyA, sourceHash, userId],
+  );
+  const batchA = batchARes.rows[0]!.id;
+
+  const r1 = await db.query<{ id: string }>(
+    `INSERT INTO import_row_raw (company_id, batch_id, row_no, raw_payload, status)
+     VALUES ($1, $2, 1, '{"acct":"001000","debit":"1000.00"}'::jsonb, 'imported') RETURNING id`,
+    [companyA, batchA],
+  );
+  const r2 = await db.query<{ id: string }>(
+    `INSERT INTO import_row_raw (company_id, batch_id, row_no, raw_payload, status)
+     VALUES ($1, $2, 2, '{"acct":"004000","credit":"1000.00"}'::jsonb, 'imported') RETURNING id`,
+    [companyA, batchA],
+  );
+  await db.query(`UPDATE import_batch SET status = 'committed' WHERE id = $1`, [batchA]);
+
+  return {
+    userId,
+    companyA,
+    companyB,
+    calA,
+    calB,
+    periodA,
+    periodB,
+    entityA,
+    entityB,
+    cashAcctA: cashARes.rows[0]!.id,
+    revAcctA: revARes.rows[0]!.id,
+    revAcctB: revBRes.rows[0]!.id,
+    scenarioA,
+    versionA,
+    batchA,
+    rowRawA1: r1.rows[0]!.id,
+    rowRawA2: r2.rows[0]!.id,
+  };
+}
+
+afterEach(async () => {
+  while (openDbs.length > 0) {
+    const pg = openDbs.pop();
+    if (pg) await pg.close();
+  }
+});
+
+describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => {
+  it('D1 & D9: applies migration idempotently and creates the exact 18 approved M1 tables with NUMERIC money columns', async () => {
+    const { db } = await makeMigratedDb();
+
+    const tablesRes = await db.query<{ tablename: string }>(
+      `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`,
+    );
+    const actualTables = tablesRes.rows.map((r) => r.tablename);
+    const expectedTables = [...schemaSnapshot.tables].sort();
+    expect(actualTables).toEqual(expectedTables);
+    expect(actualTables).toHaveLength(18);
+
+    // Idempotent second run applies 0 new files
+    const secondRun = await applyMigrations(db);
+    expect(secondRun).toEqual([]);
+  });
+
+  it('D2: composite tenant FKs reject cross-company references and preserve leading zeros on account codes', async () => {
+    const { db } = await makeMigratedDb();
+    const s = await seedBaseTenants(db);
+
+    // Leading zeros preserved: "001000" and "1000" are distinct accounts in the same company
+    await db.query(
+      `INSERT INTO account (company_id, code, name, type, normal_side, statement_line_key)
+       VALUES ($1, '1000', 'Cash Alt', 'asset', 'debit', 'bs.asset.cash')`,
+      [s.companyA],
+    );
+
+    // Negative: asset with credit normal_side without is_contra=true is rejected
+    await expect(
+      db.query(
+        `INSERT INTO account (company_id, code, name, type, normal_side, statement_line_key)
+         VALUES ($1, '1099', 'Bad Asset', 'asset', 'credit', 'bs.asset.cash')`,
+        [s.companyA],
+      ),
+    ).rejects.toThrow();
+
+    // Negative cross-tenant FK: Company A plan_line referencing Company B account must fail
+    await expect(
+      db.query(
+        `INSERT INTO plan_line (company_id, scenario_id, version_id, account_id, period_id, entity_id, amount)
+         VALUES ($1, $2, $3, $4, $5, $6, '500.000000')`,
+        [s.companyA, s.scenarioA, s.versionA, s.revAcctB, s.periodA, s.entityA],
+      ),
+    ).rejects.toThrow();
+
+    // Negative cross-tenant FK: Company A gl_entry referencing Company B period must fail
+    await expect(
+      db.query(
+        `INSERT INTO gl_entry (company_id, batch_id, period_id, entity_id, entry_date, currency, total_debit, total_credit)
+         VALUES ($1, $2, $3, $4, '2026-01-15', 'USD', '100.00', '100.00')`,
+        [s.companyA, s.batchA, s.periodB, s.entityA],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('D3 & D4: enforces balanced gl_entry at COMMIT via deferred trigger and valid single-sided gl_line constraints', async () => {
+    const { pg, db } = await makeMigratedDb();
+    const s = await seedBaseTenants(db);
+
+    // Positive: balanced journal entry commits cleanly
+    await pg.exec('BEGIN');
+    const entRes = await db.query<{ id: string }>(
+      `INSERT INTO gl_entry (company_id, batch_id, period_id, entity_id, entry_date, source_ref, currency, total_debit, total_credit)
+       VALUES ($1, $2, $3, $4, '2026-01-15', 'JE-001', 'USD', '1000.000000', '1000.000000') RETURNING id`,
+      [s.companyA, s.batchA, s.periodA, s.entityA],
+    );
+    const jeId = entRes.rows[0]!.id;
+    await db.query(
+      `INSERT INTO gl_line (company_id, entry_id, account_id, period_id, entity_id, debit, credit, source_row_id)
+       VALUES ($1, $2, $3, $4, $5, '1000.000000', '0', $6)`,
+      [s.companyA, jeId, s.cashAcctA, s.periodA, s.entityA, s.rowRawA1],
+    );
+    await db.query(
+      `INSERT INTO gl_line (company_id, entry_id, account_id, period_id, entity_id, debit, credit, source_row_id)
+       VALUES ($1, $2, $3, $4, $5, '0', '1000.000000', $6)`,
+      [s.companyA, jeId, s.revAcctA, s.periodA, s.entityA, s.rowRawA2],
+    );
+    await pg.exec('COMMIT');
+
+    // Negative D3: unbalanced lines rejected at COMMIT by deferred trigger
+    await pg.exec('BEGIN');
+    const badJeRes = await db.query<{ id: string }>(
+      `INSERT INTO gl_entry (company_id, batch_id, period_id, entity_id, entry_date, source_ref, currency, total_debit, total_credit)
+       VALUES ($1, $2, $3, $4, '2026-01-16', 'JE-BAD', 'USD', '500.000000', '500.000000') RETURNING id`,
+      [s.companyA, s.batchA, s.periodA, s.entityA],
+    );
+    const badJeId = badJeRes.rows[0]!.id;
+    await db.query(
+      `INSERT INTO gl_line (company_id, entry_id, account_id, period_id, entity_id, debit, credit, source_row_id)
+       VALUES ($1, $2, $3, $4, $5, '500.000000', '0', $6)`,
+      [s.companyA, badJeId, s.cashAcctA, s.periodA, s.entityA, s.rowRawA1],
+    );
+    await db.query(
+      `INSERT INTO gl_line (company_id, entry_id, account_id, period_id, entity_id, debit, credit, source_row_id)
+       VALUES ($1, $2, $3, $4, $5, '0', '450.000000', $6)`,
+      [s.companyA, badJeId, s.revAcctA, s.periodA, s.entityA, s.rowRawA2],
+    );
+    await expect(pg.exec('COMMIT')).rejects.toThrow(/TRIAL_BALANCE_IMBALANCE/);
+    await pg.exec('ROLLBACK');
+
+    // Negative D4: both-nonzero, both-zero, and negative gl_line amounts rejected immediately
+    await expect(
+      db.query(
+        `INSERT INTO gl_line (company_id, entry_id, account_id, period_id, entity_id, debit, credit, source_row_id)
+         VALUES ($1, $2, $3, $4, $5, '10.00', '10.00', $6)`,
+        [s.companyA, jeId, s.cashAcctA, s.periodA, s.entityA, s.rowRawA1],
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      db.query(
+        `INSERT INTO gl_line (company_id, entry_id, account_id, period_id, entity_id, debit, credit, source_row_id)
+         VALUES ($1, $2, $3, $4, $5, '0', '0', $6)`,
+        [s.companyA, jeId, s.cashAcctA, s.periodA, s.entityA, s.rowRawA1],
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      db.query(
+        `INSERT INTO gl_line (company_id, entry_id, account_id, period_id, entity_id, debit, credit, source_row_id)
+         VALUES ($1, $2, $3, $4, $5, '-5.00', '0', $6)`,
+        [s.companyA, jeId, s.cashAcctA, s.periodA, s.entityA, s.rowRawA1],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('D5 & D6: enforces atomic import idempotency/row-accounting and plan_line duplicate prevention (NULLS NOT DISTINCT)', async () => {
+    const { pg, db } = await makeMigratedDb();
+    const s = await seedBaseTenants(db);
+
+    const sourceHash = 'a'.repeat(64);
+    // Negative D5: duplicate active import_batch for same (company_id, kind, source_hash) rejected
+    await expect(
+      db.query(
+        `INSERT INTO import_batch (company_id, kind, source_filename, source_hash, row_count, status, imported_by)
+         VALUES ($1, 'actuals', 'jan.csv', $2, 0, 'staged', $3)`,
+        [s.companyA, sourceHash, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative D5: committed batch whose raw rows != row_count rejected at COMMIT
+    await pg.exec('BEGIN');
+    await db.query(
+      `INSERT INTO import_batch (company_id, kind, source_filename, source_hash, row_count, status, imported_by)
+       VALUES ($1, 'actuals', 'feb.csv', $2, 3, 'committed', $3)`,
+      [s.companyA, 'b'.repeat(64), s.userId],
+    );
+    await expect(pg.exec('COMMIT')).rejects.toThrow(/IMPORT_ROW_ACCOUNTING_FAILED/);
+    await pg.exec('ROLLBACK');
+
+    // Positive D5: atomic replace marks old batch 'replaced' and commits new batch with same source_hash
+    await pg.exec('BEGIN');
+    await db.query(`UPDATE import_batch SET status = 'replaced' WHERE id = $1`, [s.batchA]);
+    const repRes = await db.query<{ id: string }>(
+      `INSERT INTO import_batch (company_id, kind, source_filename, source_hash, row_count, status, replaced_batch_id, imported_by)
+       VALUES ($1, 'actuals', 'jan.csv', $2, 1, 'committed', $3, $4) RETURNING id`,
+      [s.companyA, sourceHash, s.batchA, s.userId],
+    );
+    await db.query(
+      `INSERT INTO import_row_raw (company_id, batch_id, row_no, raw_payload, status, quarantine_reason)
+       VALUES ($1, $2, 1, '{"acct":"9999"}'::jsonb, 'quarantined', 'UNMAPPED_ACCOUNT')`,
+      [s.companyA, repRes.rows[0]!.id],
+    );
+    await pg.exec('COMMIT');
+
+    // Positive & Negative D6: plan_line rejects duplicate when department_id IS NULL and supports ON CONFLICT upsert
+    await db.query(
+      `INSERT INTO plan_line (company_id, scenario_id, version_id, account_id, period_id, entity_id, department_id, amount)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, '1200.000000')`,
+      [s.companyA, s.scenarioA, s.versionA, s.revAcctA, s.periodA, s.entityA],
+    );
+
+    await expect(
+      db.query(
+        `INSERT INTO plan_line (company_id, scenario_id, version_id, account_id, period_id, entity_id, department_id, amount)
+         VALUES ($1, $2, $3, $4, $5, $6, NULL, '1300.000000')`,
+        [s.companyA, s.scenarioA, s.versionA, s.revAcctA, s.periodA, s.entityA],
+      ),
+    ).rejects.toThrow();
+
+    await db.query(
+      `INSERT INTO plan_line (company_id, scenario_id, version_id, account_id, period_id, entity_id, department_id, amount)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, '1350.000000')
+       ON CONFLICT (company_id, scenario_id, version_id, account_id, period_id, entity_id, department_id)
+       DO UPDATE SET amount = EXCLUDED.amount`,
+      [s.companyA, s.scenarioA, s.versionA, s.revAcctA, s.periodA, s.entityA],
+    );
+
+    const planCheck = await db.query<{ amount: string }>(
+      `SELECT amount::text AS amount FROM plan_line WHERE company_id = $1 AND account_id = $2`,
+      [s.companyA, s.revAcctA],
+    );
+    expect(planCheck.rows).toHaveLength(1);
+    expect(planCheck.rows[0]!.amount).toBe('1350.000000');
+  });
+
+  it('D7: writes hash-chained audit_log rows and blocks UPDATE/DELETE mutations via trigger', async () => {
+    const { db } = await makeMigratedDb();
+    const s = await seedBaseTenants(db);
+
+    const first = await appendAuditLog(db, {
+      companyId: s.companyA,
+      actorId: s.userId,
+      action: 'company.create',
+      targetTable: 'company',
+      targetId: s.companyA,
+      oldPayload: null,
+      newPayload: { name: 'Tenant A' },
+      occurredAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const second = await appendAuditLog(db, {
+      companyId: s.companyA,
+      actorId: s.userId,
+      action: 'plan_line.upsert',
+      targetTable: 'plan_line',
+      targetId: s.versionA,
+      oldPayload: null,
+      newPayload: { amount: '1350.000000' },
+      occurredAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    expect(second.prevHash).toBe(first.entryHash);
+    const verified = await verifyCompanyAuditLog(db, s.companyA);
+    expect(verified).toEqual({ valid: true, checkedCount: 2 });
+
+    // Negative D7: UPDATE and DELETE on audit_log must fail
+    await expect(
+      db.query(`UPDATE audit_log SET action = 'tampered' WHERE id = $1`, [first.id]),
+    ).rejects.toThrow(/AUDIT_LOG_IMMUTABLE/);
+
+    await expect(
+      db.query(`DELETE FROM audit_log WHERE id = $1`, [first.id]),
+    ).rejects.toThrow(/AUDIT_LOG_IMMUTABLE/);
+  });
+});

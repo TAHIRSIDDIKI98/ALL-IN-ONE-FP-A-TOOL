@@ -1,0 +1,177 @@
+{
+  "generatorVersion": "1.0.0",
+  "seed": 202601,
+  "demoLabel": "Sample Co — DEMO — SYNTHETIC DATA",
+  "items": [
+    {
+      "id": "DEV-001",
+      "kind": "price_variance",
+      "grain": {
+        "account_code": "4000",
+        "period": "P03",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "42000.00",
+      "minorUnits": 4200000,
+      "cause": "Enterprise tier Q1 list price uplift (+5% realized ASP on Core Product)",
+      "favorability": "favorable",
+      "statement_line_key": "pl.revenue.product",
+      "expected_finding_key": "bva:price_variance:4000:P03",
+      "expected_severity": "info",
+      "expected_rule": "VAR_MATERIAL_FAVORABLE"
+    },
+    {
+      "id": "DEV-002",
+      "kind": "volume_variance",
+      "grain": {
+        "account_code": "4010",
+        "period": "P06",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "-28000.00",
+      "minorUnits": -2800000,
+      "cause": "Two enterprise renewals slipped to Q3 reducing subscription seats",
+      "favorability": "unfavorable",
+      "statement_line_key": "pl.revenue.service",
+      "expected_finding_key": "bva:volume_variance:4010:P06",
+      "expected_severity": "warn",
+      "expected_rule": "VAR_MATERIAL_UNFAVORABLE"
+    },
+    {
+      "id": "DEV-003A",
+      "kind": "timing_shift",
+      "grain": {
+        "account_code": "6300",
+        "period": "P04",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "-15000.00",
+      "minorUnits": -1500000,
+      "cause": "Spring field conference deferred from April to May (Part 1 of timing shift)",
+      "favorability": "favorable",
+      "statement_line_key": "pl.opex.sm",
+      "expected_finding_key": "bva:timing_shift:6300:P04",
+      "expected_severity": "info",
+      "expected_rule": "VAR_TIMING_SHIFT"
+    },
+    {
+      "id": "DEV-003B",
+      "kind": "timing_shift",
+      "grain": {
+        "account_code": "6300",
+        "period": "P05",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "15000.00",
+      "minorUnits": 1500000,
+      "cause": "Deferred spring field conference invoiced in May (Part 2 of timing shift)",
+      "favorability": "unfavorable",
+      "statement_line_key": "pl.opex.sm",
+      "expected_finding_key": "bva:timing_shift:6300:P05",
+      "expected_severity": "warn",
+      "expected_rule": "VAR_TIMING_SHIFT"
+    },
+    {
+      "id": "DEV-004",
+      "kind": "one_off_expense",
+      "grain": {
+        "account_code": "6200",
+        "period": "P08",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "24000.00",
+      "minorUnits": 2400000,
+      "cause": "Unbudgeted patent defense legal settlement retainer",
+      "favorability": "unfavorable",
+      "statement_line_key": "pl.opex.ga",
+      "expected_finding_key": "bva:one_off_expense:6200:P08",
+      "expected_severity": "warn",
+      "expected_rule": "VAR_ONE_OFF_OPEX"
+    },
+    {
+      "id": "DEV-005",
+      "kind": "favorable_expense",
+      "grain": {
+        "account_code": "6400",
+        "period": "P09",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "-11000.00",
+      "minorUnits": -1100000,
+      "cause": "R&D cloud compute reserved-instance savings renegotiated early",
+      "favorability": "favorable",
+      "statement_line_key": "pl.opex.rd",
+      "expected_finding_key": "bva:favorable_expense:6400:P09",
+      "expected_severity": "info",
+      "expected_rule": "VAR_MATERIAL_FAVORABLE"
+    },
+    {
+      "id": "DEV-006",
+      "kind": "zero_plan_non_zero_actual",
+      "grain": {
+        "account_code": "4200",
+        "period": "P10",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "7500.00",
+      "minorUnits": 750000,
+      "cause": "Unbudgeted partner referral rebate payout (tests 0-plan / non-zero actual -> n/m %)",
+      "favorability": "favorable",
+      "statement_line_key": "pl.revenue.other",
+      "expected_finding_key": "bva:zero_plan_nm:4200:P10",
+      "expected_severity": "info",
+      "expected_rule": "VAR_ZERO_PLAN_NM"
+    },
+    {
+      "id": "DEV-007",
+      "kind": "negative_plan",
+      "grain": {
+        "account_code": "4090",
+        "period": "P07",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "1500.00",
+      "minorUnits": 150000,
+      "cause": "Lower customer returns (-3,500 actual vs -5,000 negative plan -> +1,500 fav variance)",
+      "favorability": "favorable",
+      "statement_line_key": "pl.revenue.other",
+      "expected_finding_key": "bva:negative_plan:4090:P07",
+      "expected_severity": "info",
+      "expected_rule": "VAR_NEGATIVE_PLAN"
+    },
+    {
+      "id": "STR-001",
+      "kind": "structural_unmapped",
+      "grain": {
+        "account_code": "9999",
+        "period": "P01",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "1250.00",
+      "minorUnits": 125000,
+      "cause": "Unmapped ERP account 9999 quarantined during messy import",
+      "favorability": "na",
+      "statement_line_key": "pl.opex.other",
+      "expected_finding_key": "import:quarantine:UNMAPPED_ACCOUNT:9999",
+      "expected_severity": "critical",
+      "expected_rule": "IMPORT_UNMAPPED_ACCOUNT"
+    },
+    {
+      "id": "STR-002",
+      "kind": "structural_duplicate",
+      "grain": {
+        "account_code": "6000",
+        "period": "P01",
+        "entity": "ENT-US-HQ"
+      },
+      "amount": "4500.00",
+      "minorUnits": 450000,
+      "cause": "Duplicate GL row detected in messy import and quarantined cleanly",
+      "favorability": "na",
+      "statement_line_key": "pl.opex.payroll",
+      "expected_finding_key": "import:quarantine:DUPLICATE_ROW:JE-MESSY-002",
+      "expected_severity": "warn",
+      "expected_rule": "IMPORT_DUPLICATE_ROW"
+    }
+  ]
+}

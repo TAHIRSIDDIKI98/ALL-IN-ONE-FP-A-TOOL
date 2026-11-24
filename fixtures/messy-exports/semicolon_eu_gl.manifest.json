@@ -1,0 +1,13 @@
+{
+  "fixture": "messy-exports/semicolon_eu_gl",
+  "synthetic": true,
+  "locale": "eu",
+  "rows_in": 5,
+  "imported": 4,
+  "quarantined": [
+    { "row_no": 5, "reason": "DUPLICATE_ROW:JE-EU-002" }
+  ],
+  "duplicates_detected": 1,
+  "tb_debits": "1684.56",
+  "tb_credits": "1684.56"
+}

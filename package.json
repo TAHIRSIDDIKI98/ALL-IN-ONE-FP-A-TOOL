@@ -8,6 +8,7 @@
     "node": ">=20.20.0"
   },
   "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3000",
     "dev:client": "vite",
     "dev:server": "tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
@@ -15,7 +16,7 @@
     "test": "vitest run",
     "test:core": "vitest run core shared",
     "test:db": "vitest run server db fixtures",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --config=e2e/playwright.config.ts",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "corpus:generate": "tsx scripts/generate-corpus.ts",
     "gate:core-purity": "node scripts/core-purity.mjs",
