@@ -8,7 +8,8 @@
     "node": ">=20.20.0"
   },
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 3000",
+    "dev": "tsx server/index.ts",
+    "start": "NODE_ENV=production tsx server/index.ts",
     "dev:client": "vite",
     "dev:server": "tsx server/index.ts",
     "build": "tsc --noEmit && vite build",

@@ -1,7 +1,7 @@
 # Third-Party Dependency Licenses
 
 > Generated deterministically from `package-lock.json` (`MASTER_PROMPT §12.16 LIC2`).
-> Packages: **570** · Manifest Digest: `338a536ad2dc2342`
+> Packages: **570** · Manifest Digest: `1dbf87173eccb7aa`
 
 | Package | Version | License |
 |---|---|---|
@@ -201,7 +201,7 @@
 | `call-bind` | `1.0.9` | `MIT` |
 | `call-bind-apply-helpers` | `1.0.2` | `MIT` |
 | `call-bound` | `1.0.4` | `MIT` |
-| `caniuse-lite` | `1.0.30001827` | `CC-BY-4.0` |
+| `caniuse-lite` | `1.0.30001828` | `CC-BY-4.0` |
 | `chai` | `5.3.3` | `MIT` |
 | `chainsaw` | `0.1.0` | `MIT/X11` |
 | `check-error` | `2.1.3` | `MIT` |
