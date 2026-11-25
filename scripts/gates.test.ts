@@ -47,6 +47,29 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     expect(green.status).toBe(0);
   });
 
+  it('verify log digest surfaces the failing gate before passing gates', () => {
+    const ws = makeTempWorkspace();
+    const log = join(ws, 'verify-output.log');
+    writeFileSync(
+      log,
+      [
+        '[PASS] typecheck (100ms)',
+        '[FAIL] work-integrity (200ms)',
+        'WORK-INTEGRITY GATE FAILED (1 violation(s)):',
+        '  ✗ S-COMMIT abc1234: commit body must cite its single WI-#### work item',
+        'VERIFY RED: 15/16 gates passed',
+        '[PASS] build (300ms)',
+      ].join('\n'),
+    );
+    const digest = spawnSync('node', [join(process.cwd(), 'scripts/publish-e2e-failure.mjs'), log, 'Sandbox verify'], {
+      encoding: 'utf8',
+    });
+    expect(digest.status).toBe(0);
+    expect(digest.stdout).toContain('::error title=Sandbox verify::[FAIL] work-integrity (200ms)');
+    expect(digest.stdout).toContain('commit body must cite its single WI-#### work item');
+    expect(digest.stdout.indexOf('[FAIL] work-integrity')).toBeLessThan(digest.stdout.indexOf('[PASS] typecheck'));
+  });
+
   it('P01 money-ast fails on raw float arithmetic, Math.abs, Number(), and .toFixed() on money', () => {
     const ws = makeTempWorkspace();
     mkdirSync(join(ws, 'core', 'statements'), { recursive: true });

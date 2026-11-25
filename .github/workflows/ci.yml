@@ -41,7 +41,7 @@ jobs:
       # own lines to check-run annotations just as the E2E step does (§8.9/PR5).
       - name: Publish sandbox gate failure annotations
         if: failure()
-        run: node scripts/publish-e2e-failure.mjs verify-output.log
+        run: node scripts/publish-e2e-failure.mjs verify-output.log 'Sandbox verify'
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
