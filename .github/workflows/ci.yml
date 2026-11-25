@@ -37,6 +37,12 @@ jobs:
           set -o pipefail
           npm run verify | tee verify-output.log
 
+      # The raw log host is not reachable from every environment, so promote the failing gate's
+      # own lines to check-run annotations just as the E2E step does (§8.9/PR5).
+      - name: Publish sandbox gate failure annotations
+        if: failure()
+        run: node scripts/publish-e2e-failure.mjs verify-output.log
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 

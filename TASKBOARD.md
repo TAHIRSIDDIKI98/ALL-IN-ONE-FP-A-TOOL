@@ -112,6 +112,8 @@
 
 | DEC-011 | 2026-11-25 | Extend the S-COMMIT platform-generated merge exemption to GitHub's synthetic PR-check subject `Merge <40-hex head> into <40-hex base>`; keep hand-made `Merge branch ...` commits in scope. | CI run `45665651628` failed verify in 7s after the history fix. Reproduced locally on `refs/pull/3/merge` (`739d44a`): `S-COMMIT 739d44a: commit subject must follow conventional format: "Merge 3861410… into 2ae6d72…"` plus the WI-body violation. The gate already exempts the other platform-written subject (`Merge pull request #N from …`); this is the same class, not a new waiver for authored commits. | (a) exempt all merge commits — rejected as gate weakening; (b) disable S-COMMIT in CI — rejected; (c) add exactly the second platform subject shape with a planted negative test — chosen. | N (implementation detail inside locked INT8) |
 
+| DEC-012 | 2026-11-25 | Promote `verify-output.log` failure lines to check-run annotations when the sandbox verify step fails. | CI run `45666254382` failed verify in 31s but the raw log host is unreachable from this sandbox and existing annotations only said `exit code 1`. §8.9/PR5 requires readable diagnostics before trusting or fixing a red run. | (a) guess the failing gate — rejected; (b) disable the gate — rejected; (c) reuse the existing annotation bridge on the verify log — chosen. | N (diagnostics-only workflow fix) |
+
 ---
 
 ## §Blockers
