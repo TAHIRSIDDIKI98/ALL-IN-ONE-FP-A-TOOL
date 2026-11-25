@@ -17,6 +17,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # S-COMMIT (INT8) must see the DEC-007 ancestry boundary; a depth-1 clone fails closed.
+          fetch-depth: 0
 
       - name: Setup Node.js 22 LTS
         uses: actions/setup-node@v4
@@ -30,7 +33,9 @@ jobs:
       - name: Run sandbox verification suite (zero secrets/network)
         env:
           CI: 'true'
-        run: npm run verify | tee verify-output.log
+        run: |
+          set -o pipefail
+          npm run verify | tee verify-output.log
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
