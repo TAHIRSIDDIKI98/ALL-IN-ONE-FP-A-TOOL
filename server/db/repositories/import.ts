@@ -173,10 +173,13 @@ async function loadActiveBatch(
  * so a replaced batch can never be double-counted (§4.2 append-only replacement).
  */
 export function activeBatchPredicate(entryAlias = 'gl_entry'): string {
+  // Status AND kind: only an active ACTUALS batch may reach a trial balance, statement or drill, so
+  // a batch of another kind could never be counted as actuals even if one were written (§4.2).
   return `EXISTS (
   SELECT 1 FROM import_batch active_batch
    WHERE active_batch.id = ${entryAlias}.batch_id
      AND active_batch.status IN ('staged', 'committed')
+     AND active_batch.kind = 'actuals'
 )`;
 }
 
@@ -380,6 +383,19 @@ export async function commitImport(
   tx: SqlExecutor,
   params: ImportCommitParams,
 ): Promise<ImportCommitResult> {
+  /**
+   * G4 is not implemented yet: a budget belongs in `plan_version`/`plan_line`, which the read models
+   * do not consume. Posting a budget file as journals here would silently mix plan numbers into the
+   * trial balance and every statement, so the commit refuses it and writes nothing (§1.4-1, §13.3).
+   */
+  if (params.kind !== 'actuals') {
+    throw new AppError('VALIDATION_FAILED', {
+      userMessage:
+        'Only actuals can be committed in this build. A budget is stored as plan lines (a later spine item), and posting it as a journal would corrupt the trial balance.',
+      details: { kind: params.kind, supportedKinds: ['actuals'] },
+    });
+  }
+
   const classification = await classifyImport(tx, {
     companyId: params.companyId,
     csvText: params.csvText,

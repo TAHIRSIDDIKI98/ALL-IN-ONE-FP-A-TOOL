@@ -631,6 +631,67 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(afterSignIn.companies.map((company) => company.name)).toEqual(['Client Flow Co']);
   }, 120_000);
 
+  it('refuses a budget commit instead of posting it into actuals, and leaves every table untouched', async () => {
+    const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
+      email: 'client-budget@onefpa.test',
+      displayName: 'Client Budget',
+    });
+    const client = createApiClient({ getToken: () => minted.token, baseUrl });
+    const workspace = await client.createCompany({
+      companyName: 'Budget Guard Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-BG',
+      entityName: 'Budget Guard Co HQ',
+    });
+    await client.importChart(workspace.companyId, {
+      csvText: [
+        'code,name,type,normal_side,statement_line_key',
+        '1000,Cash,asset,debit,bs.asset.cash',
+        '4000,Service revenue,revenue,credit,pl.revenue.service',
+      ].join('\n'),
+    });
+
+    const csv = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-B1,2026-05-10,1000,Budgeted cash,100.00,0.00',
+      'JE-B1,2026-05-10,4000,Budgeted revenue,0.00,100.00',
+    ].join('\n');
+
+    const batchesBefore = await countBatches(workspace.companyId);
+    let rejected: unknown = null;
+    try {
+      await client.commitImport(workspace.companyId, {
+        kind: 'budget',
+        sourceFilename: 'budget_2026.csv',
+        csvText: csv,
+      });
+    } catch (error) {
+      rejected = error;
+    }
+    expect(rejected).toBeInstanceOf(ApiClientError);
+    expect((rejected as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((rejected as ApiClientError).details['supportedKinds']).toEqual(['actuals']);
+
+    // Nothing was written and no budget number can leak into actuals.
+    expect(await countBatches(workspace.companyId)).toBe(batchesBefore);
+    const grid = await client.getTrialBalance(workspace.companyId, { period: 'P05' });
+    expect(grid.totalDebit).toBe('0.00');
+    expect(grid.totalCredit).toBe('0.00');
+    expect(grid.sources).toEqual([]);
+
+    // The same rows committed as actuals still post, so the guard is about kind, not content.
+    const actual = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'budget_2026.csv',
+      csvText: csv,
+    });
+    expect(actual.importedCount).toBe(2);
+    const after = await client.getTrialBalance(workspace.companyId, { period: 'P05' });
+    expect(after.totalDebit).toBe('100.00');
+  }, 120_000);
+
   it('imports a chart of accounts atomically, then posts an import against it', async () => {
     const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
       email: 'client-chart@onefpa.test',
