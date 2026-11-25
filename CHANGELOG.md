@@ -21,6 +21,7 @@ Milestone M1 is **not** complete; these are the verified increments so far (evid
 - Versioned CoA mapping: source codes discovered from retained import rows resolve through one `/core/mapping` kernel shared by preview and commit; every real edit writes a new audited version, with an inline two-pane mapper and typed quarantines (`WI-0028`, G1/G10).
 - Budget-vs-Actual: `/core/variance` now builds account-level BvA rows (plan null ≠ zero plan, account-type favorability, separate `unplannedActual`), `GET /api/companies/:companyId/bva?period=` joins the current plan version to the trial balance, and the Statements BvA tab renders it with a G5 tie-out to the statement figures (`WI-0026`).
 - Budget commits are refused by the GL write path instead of being posted as actuals (`WI-0024`).
+- Planning workspace inside the Model Grid screen (`WI-0032`, `DEC-015`): an Actuals/Planning view switch on the existing seventh screen, a scenario inventory with each scenario's current plan version, a rolling forecast that tags every cell `actual`/`forecast` and prints `not posted`/`not planned` instead of zeros, and a scenario comparison that obeys the zero-base rules — all rendered from server decimal strings with per-read loading, typed error and retry states. `GET …/planning/rolling-forecast` now resolves an omitted `cutoffPeriod` to the last period with an active-batch posting, so the opening view is a real rolling forecast (`DEC-016`).
 
 ### Changed
 - S-COMMIT (INT8) is enforced from an objective codex boundary (`DEC-007`) instead of a fixed-size exemption list.

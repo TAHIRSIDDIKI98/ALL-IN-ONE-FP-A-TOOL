@@ -79,6 +79,29 @@ test.describe('OneFP&A M1 Spine Harness', () => {
   });
 
   /**
+   * M2 planning is a VIEW inside the Model Grid, not an eighth screen (§9.1): the tab swaps the
+   * panel, the single `h1` stays, and an unauthenticated visitor is told to sign in rather than shown
+   * a fabricated forecast.
+   */
+  test('keeps planning inside the Model Grid with one h1 and an honest planning empty state', async ({
+    page,
+  }) => {
+    await page.goto('/model-grid');
+    await expect(page.locator('h1')).toContainText(/Model Grid/i);
+
+    const planningTab = page.getByRole('tab', { name: 'Planning' });
+    await planningTab.click();
+    await expect(planningTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('h1')).toHaveCount(1);
+    await expect(page).toHaveURL(/\/model-grid$/);
+
+    await expect(page.getByRole('tabpanel', { name: 'Planning view' })).toContainText(
+      /Sign in and create a company workspace before reading planning scenarios/,
+    );
+    await expect(page.getByRole('status')).toHaveCount(0);
+  });
+
+  /**
    * Sandbox sign-in mints a server token, the setup wizard creates the company server-side, and a
    * RELOAD plus second sign-in proves the server kept it: the app now routes straight to the Import
    * Wizard instead of asking for setup again.

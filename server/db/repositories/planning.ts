@@ -367,6 +367,34 @@ async function loadScenarioFacts(
   };
 }
 
+/**
+ * Last period of the fiscal year that actually has an active-batch posting. Used only when the
+ * caller omits `cutoffPeriod`: the rolling forecast then opens on the real close boundary instead of
+ * an arbitrary month, and a company with no postings honestly reports a pure forecast horizon.
+ */
+async function lastPostedPeriodCode(
+  db: SqlExecutor,
+  companyId: string,
+  fiscalYear: number,
+): Promise<string | null> {
+  const res = await db.query<{ code: string }>(
+    `SELECT fp.code
+       FROM gl_line gl
+       JOIN gl_entry ge
+         ON ge.company_id = gl.company_id AND ge.id = gl.entry_id
+       JOIN fiscal_period fp
+         ON fp.company_id = ge.company_id AND fp.id = ge.period_id
+      WHERE gl.company_id = $1
+        AND fp.fiscal_year = $2
+        AND fp.is_adjustment = false
+        AND ${activeBatchPredicate('ge')}
+      ORDER BY fp.period_no DESC
+      LIMIT 1`,
+    [companyId, fiscalYear],
+  );
+  return res.rows[0]?.code ?? null;
+}
+
 export async function getRollingForecast(
   db: SqlExecutor,
   params: {
@@ -433,9 +461,14 @@ export async function getRollingForecast(
     params.scenarioName,
   );
 
+  const resolvedCutoff =
+    params.cutoffPeriod === null
+      ? await lastPostedPeriodCode(db, params.companyId, params.fiscalYear)
+      : params.cutoffPeriod;
+
   const outcome = buildRollingForecast({
     periods,
-    cutoffPeriod: params.cutoffPeriod,
+    cutoffPeriod: resolvedCutoff,
     actuals: actualFacts,
     forecast: forecastFacts,
     currencyScale: scale,
