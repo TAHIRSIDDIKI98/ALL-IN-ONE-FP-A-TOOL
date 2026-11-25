@@ -182,6 +182,7 @@ describe('7-Screen Spine Inventory, Landmarks & Five-State Honesty (U1–U3, §9
       expect(html).toContain(row.value);
       if (row.detail !== null) expect(html).toContain(row.detail);
     }
+    expect(html).toContain('>Board Pack Export</h1>');
     expect(html).toContain('Export XLSX');
     expect(html).toContain('Export PDF');
     expect(html).toContain('Partial workspace data');

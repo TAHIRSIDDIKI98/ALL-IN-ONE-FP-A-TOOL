@@ -100,7 +100,7 @@ export default function BoardPackPage({ onNavigate, forcedState }: SpinePageProp
   if (forcedState === 'error' || loadState === 'error') {
     return (
       <ErrorState
-        title="Board Pack"
+        title="Board Pack Export"
         code={loadError?.code ?? 'STATEMENT_TIE_OUT_FAILED'}
         message={loadError?.message ?? 'Unable to reconcile the board pack against the ledger.'}
         onRetry={() => setReloadKey((key) => key + 1)}
@@ -111,7 +111,7 @@ export default function BoardPackPage({ onNavigate, forcedState }: SpinePageProp
   if (companyId === null || authToken === null) {
     return (
       <EmptyState
-        title="Board Pack"
+        title="Board Pack Export"
         disclosure="Sign in and create a company workspace before exporting a pack; every figure is produced by the server from committed postings."
         ctaLabel="Go to Sign In"
         ctaPath="/sign-in"
@@ -123,7 +123,7 @@ export default function BoardPackPage({ onNavigate, forcedState }: SpinePageProp
   if (pack === null) {
     return (
       <EmptyState
-        title="Board Pack"
+        title="Board Pack Export"
         disclosure="Committed GL postings are required before a board pack can be assembled."
         ctaLabel="Import Ledger Data"
         ctaPath="/import"
@@ -146,7 +146,7 @@ export default function BoardPackPage({ onNavigate, forcedState }: SpinePageProp
   if (pack.sources.length === 0) {
     return (
       <EmptyState
-        title="Board Pack"
+        title="Board Pack Export"
         disclosure="No committed source file exists for this company, so there is no board-pack figure to display or export."
         ctaLabel="Import Ledger Data"
         ctaPath="/import"
@@ -189,7 +189,7 @@ export function BoardPackPreview(props: BoardPackPreviewProps): ReactElement {
   const { pack, periods, period, partial, onPeriodChange, onExport } = props;
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold text-slate-900">Board Pack</h1>
+      <h1 className="text-xl font-semibold text-slate-900">Board Pack Export</h1>
       <p className="text-sm text-slate-600">
         {pack.companyName} · {pack.baseCurrency} · {pack.basis}
       </p>
