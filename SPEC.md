@@ -145,6 +145,7 @@ Enforced by `/scripts/schema-scope`: any table outside this set fails the build.
   - Resolves `percent_of_account` dependencies via Kahn's topological sort; rejects cycles (`CYCLE_DETECTED:<codes>`), self-references (`SELF_REFERENCE_DRIVER:<code>`), unknown sources (`UNKNOWN_DRIVER_SOURCE:<driver>-><target>`), duplicate driver accounts, and empty/duplicate periods.
   - Every computed line carries `source: 'driver' | 'override'`, `driverKey`, and `assumptionLabel` (§1.6-4 Honesty Law).
 - **Rolling Forecast (`buildRollingForecast`)**: Stitches closed actuals (`period <= cutoffPeriod`) with forecast lines (`period > cutoffPeriod`). Every cell is explicitly tagged `basis: 'actual' | 'forecast'`. Absent cells remain `null` (Null Law §3.1) and are counted in `missingCellCount`; `actualSubtotal + forecastSubtotal == fullHorizonTotal` exact.
+- **Forecast cutoff resolution**: `GET /api/companies/:companyId/planning/rolling-forecast?year=&scenario=[&cutoffPeriod=]` treats an **omitted** `cutoffPeriod` as “last posted period”: the server resolves it to the highest `fiscal_period.period_no` of that fiscal year that has a line in an ACTIVE import batch, and reports that code in `cutoffPeriod`. A company with no active postings keeps the pure-forecast horizon (`cutoffPeriod: 'NONE'`, every cell `forecast`). An explicit `cutoffPeriod` is honoured exactly as before, and an unknown code is still a typed `PERIOD_NOT_FOUND` (422).
 - **Scenario Comparison (`compareScenarios`)**: Compares `base` vs `target` scenarios account-by-account using §3.5 zero-base rules (`0 vs 0 -> 0.00%`, `x vs 0 -> n/m`). Accounts absent from one scenario keep `null` on that side and `deltaPctStatus: 'null'` — never fabricated as zero.
 
 ---
@@ -169,6 +170,16 @@ Exactly seven screens at M1 exit:
 7. `BoardPackPage` (`/board-pack` — preview + XLSX/PDF export)
 
 Every screen implements all five states (`loading`, `empty`, `error`, `partial`, `populated`), WCAG AA landmarks + single skip-link, exact drill-to-source (`Σrows == displayed`), and zero fabricated values.
+
+### 5.1 M2 planning views — inside the Model Grid, not new screens (WI-0032)
+
+The §9.1 seven-screen inventory is unchanged at M2. Planning appears as a **view** of the seventh screen (`/model-grid?tab=planning`), exactly as BvA is a view of Statements (`DEC-015`).
+
+- **View switch**: the Model Grid keeps ONE `h1` (“Model Grid”) and one skip link, and exposes `role="tablist"` with `Actuals` and `Planning`. The tab is reflected in `?tab=`; no route is added.
+- **Scenario inventory**: every scenario of the company with its kind and its CURRENT plan-version number/label (`no current version` when none). Selecting a row sets the rolling-forecast scenario; a previous selection survives only while that scenario still exists.
+- **Rolling forecast**: rendered strictly from `RollingForecastResponse`. Each period header names its basis (`actual` / `forecast`); a `null` cell prints `not posted` (actual basis) or `not planned` (forecast basis) and is never shown as `0`; per-row `missingCellCount` and the horizon `totalMissingCells` are displayed; a scenario with `planVersionNo: null` carries a partial banner stating no plan amount was inferred. The cutoff control defaults to **Automatic — last period with actual postings** (server-resolved, §3.7) and every explicit `Pnn` is selectable.
+- **Scenario comparison**: base/target selectors, then the server's `ScenarioComparisonRow`s. `deltaPctStatus: 'zero'` prints the server's zero percent, `'nm'` prints `n/m`, `'null'` prints `not planned` with a comparability column (`not planned in base` / `not planned in target`), and totals are the server's.
+- **States**: loading, empty (no scenario, with an Import-Wizard CTA), error (typed code + retry of the exact failed read: scenarios, forecast, or comparison) and partial (missing cells, no current plan version, one scenario only, or base = target) are all explicit; there is no fabricated forecast, percentage, or second scenario. Browser money arithmetic is zero: every amount is a server decimal string (§5.2).
 
 ---
 

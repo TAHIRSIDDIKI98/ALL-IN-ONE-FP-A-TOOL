@@ -1604,6 +1604,27 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(revRow?.forecastSubtotal).toBe('2310.00');
     expect(revRow?.fullHorizonTotal).toBe('3510.00');
 
+    // 4b. Omitting cutoffPeriod resolves to the LAST period that actually posted (P01 here), so the
+    // automatic opening view of the planning screen is a real rolling forecast, not an arbitrary month.
+    const rfAutoRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/planning/rolling-forecast?year=2026&scenario=${encodeURIComponent('Base Forecast')}`,
+      { headers: bearer(owner) },
+    );
+    expect(rfAutoRes.status).toBe(200);
+    const rfAuto = (await rfAutoRes.json()) as {
+      cutoffPeriod: string;
+      actualPeriods: string[];
+      forecastPeriods: string[];
+      totalActual: string;
+      totalForecast: string;
+    };
+    expect(rfAuto.cutoffPeriod).toBe('P01');
+    expect(rfAuto.actualPeriods).toEqual(['P01']);
+    expect(rfAuto.forecastPeriods.length).toBe(11);
+    expect(rfAuto.forecastPeriods.slice(0, 2)).toEqual(['P02', 'P03']);
+    expect(rfAuto.totalActual).toBe('2400.00');
+    expect(rfAuto.totalForecast).toBe('3003.00');
+
     // 5. Scenario comparison (Base 4303.00 vs Upside 4500+1350=5850.00 -> delta +1547.00)
     const cmpRes = await fetch(
       `${baseUrl}/api/companies/${companyId}/planning/compare?year=2026&base=${encodeURIComponent('Base Forecast')}&target=${encodeURIComponent('Upside Forecast')}`,
