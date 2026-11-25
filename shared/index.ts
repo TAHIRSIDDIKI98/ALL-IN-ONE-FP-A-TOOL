@@ -20,9 +20,6 @@ export type NormalSide = z.infer<typeof NormalSideSchema>;
 export const StatementKindSchema = z.enum(['pl', 'bs', 'cf']);
 export type StatementKind = z.infer<typeof StatementKindSchema>;
 
-export const CalendarKindSchema = z.enum(['12month', '445', '454', '544', '52_53', '13x4']);
-export type CalendarKind = z.infer<typeof CalendarKindSchema>;
-
 export const ScreenStateSchema = z.enum(['loading', 'empty', 'error', 'partial', 'populated']);
 export type ScreenState = z.infer<typeof ScreenStateSchema>;
 
