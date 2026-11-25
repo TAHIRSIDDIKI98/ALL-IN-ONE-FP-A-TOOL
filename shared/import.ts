@@ -30,7 +30,11 @@ export type QuarantineRecord = z.infer<typeof QuarantineRecordSchema>;
 export const ImportCommitRequestSchema = z.object({
   kind: z.enum(['actuals', 'budget']),
   sourceFilename: z.string().trim().min(1).max(200),
-  csvText: z.string().min(1).max(5_000_000),
+  /**
+   * Transport ceiling only. The business limit (5 MB, §4.4) is enforced by the route with a typed
+   * IMPORT_FILE_TOO_LARGE, so an over-limit file never reports as a generic validation failure.
+   */
+  csvText: z.string().min(1).max(6_000_000),
 });
 
 export type ImportCommitRequest = z.infer<typeof ImportCommitRequestSchema>;

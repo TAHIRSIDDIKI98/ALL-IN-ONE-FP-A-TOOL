@@ -6,6 +6,8 @@ import { createSpineApp } from './app.js';
 import { createSandboxTokenVerifier, issueSandboxToken, type VerifiedIdentity } from './auth/session.js';
 import { openSandboxDatabase, type DatabaseHandle } from './db/client.js';
 import { applyMigrations } from './db/migrate.js';
+import { seedChartOfAccounts } from './db/repositories/import.js';
+import { MESSY_CSV } from './db/testing/corpus-fixtures.js';
 
 const SECRET = 'server-test-sandbox-secret-long-enough';
 
@@ -32,6 +34,14 @@ function bearer(identity: VerifiedIdentity): Record<string, string> {
     authorization: `Bearer ${issueSandboxToken({ identity, secret: SECRET, ttlMs: 600_000 })}`,
     'content-type': 'application/json',
   };
+}
+
+async function countBatches(companyId: string): Promise<number> {
+  const res = await db.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM import_batch WHERE company_id = $1`,
+    [companyId],
+  );
+  return Number(res.rows[0]?.count ?? 'NaN');
 }
 
 async function listen(app: ReturnType<typeof createSpineApp>): Promise<{ server: Server; baseUrl: string }> {
@@ -326,4 +336,153 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(text).not.toContain('at ');
     expect(text).not.toContain('SECRET');
   });
+
+  it('commits an import over HTTP and serves the trial balance and drill-down from it', async () => {
+    const create = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({
+        companyName: 'HTTP Import Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'ENT-HTTP',
+        entityName: 'HTTP Import Co HQ',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const { companyId } = (await create.json()) as { companyId: string };
+
+    // Chart of accounts arrives through the setup path (CoA import screen); seeded here directly.
+    await db.transaction((tx) =>
+      seedChartOfAccounts(tx, {
+        companyId,
+        accounts: [
+          { code: '001200', name: 'Inventory', type: 'asset', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'bs.asset.inventory', active: true },
+          { code: '2000', name: 'Accounts Payable', type: 'liability', normalSide: 'credit', parentCode: null, isPostable: true, statementLineKey: 'bs.liability.ap', active: true },
+        ],
+      }),
+    );
+
+    const commit = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ kind: 'actuals', sourceFilename: 'erp_mixed_gl.csv', csvText: MESSY_CSV }),
+    });
+    expect(commit.status).toBe(201);
+    const committed = (await commit.json()) as {
+      batchId: string;
+      rowsIn: number;
+      importedCount: number;
+      quarantinedCount: number;
+      totalDebits: string;
+      totalCredits: string;
+      sourceHash: string;
+      replacedBatchId: string | null;
+      quarantined: Array<{ rowNo: number; reason: string }>;
+    };
+    expect(committed.rowsIn).toBe(11);
+    expect(committed.importedCount).toBe(2);
+    expect(committed.quarantinedCount).toBe(9);
+    expect(committed.totalDebits).toBe('2500.00');
+    expect(committed.totalCredits).toBe('2500.00');
+    expect(committed.sourceHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(committed.replacedBatchId).toBeNull();
+    expect(committed.quarantined.every((row) => row.reason.length > 0)).toBe(true);
+
+    const tbResponse = await fetch(`${baseUrl}/api/companies/${companyId}/trial-balance`, {
+      headers: bearer(OWNER),
+    });
+    expect(tbResponse.status).toBe(200);
+    const tb = (await tbResponse.json()) as {
+      totalDebit: string;
+      totalCredit: string;
+      isBalanced: boolean;
+      sources: Array<{ batchId: string; sourceFilename: string }>;
+      rows: Array<{ code: string; totalDebit: string; totalCredit: string }>;
+    };
+    expect(tb.isBalanced).toBe(true);
+    expect(tb.totalDebit).toBe('2500.00');
+    expect(tb.totalCredit).toBe('2500.00');
+    expect(tb.sources).toEqual([expect.objectContaining({ batchId: committed.batchId, sourceFilename: 'erp_mixed_gl.csv' })]);
+    expect(tb.rows.map((row) => row.code)).toEqual(['001200', '2000']);
+
+    const drillResponse = await fetch(
+      `${baseUrl}/api/companies/${companyId}/accounts/001200/drill?period=P01`,
+      { headers: bearer(OWNER) },
+    );
+    expect(drillResponse.status).toBe(200);
+    const drill = (await drillResponse.json()) as {
+      accountCode: string;
+      throughPeriodCode: string | null;
+      totalDebit: string;
+      rows: Array<{ rowNo: number; sourceFilename: string; rawCells: string[]; debit: string }>;
+    };
+    expect(drill.accountCode).toBe('001200');
+    expect(drill.throughPeriodCode).toBe('P01');
+    expect(drill.totalDebit).toBe('2500.00');
+    expect(drill.rows.length).toBeGreaterThan(0);
+    expect(drill.rows[0]?.sourceFilename).toBe('erp_mixed_gl.csv');
+    expect(drill.rows[0]?.rawCells.length).toBeGreaterThanOrEqual(6);
+  }, 120_000);
+
+  it('rejects foreign-tenant, unauthenticated, oversized, and malformed import commits without writing', async () => {
+    const bootstrap = await fetch(`${baseUrl}/api/session/workspace`, { headers: bearer(OWNER) });
+    const ownerBody = (await bootstrap.json()) as { companies: Array<{ id: string }> };
+    const companyId = ownerBody.companies[0]?.id ?? '';
+    expect(companyId).not.toBe('');
+
+    const payload = JSON.stringify({ kind: 'actuals', sourceFilename: 'x.csv', csvText: MESSY_CSV });
+    const batchesBefore = await countBatches(companyId);
+
+    const unauthenticated = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: payload,
+    });
+    expect(unauthenticated.status).toBe(401);
+    expect(((await unauthenticated.json()) as { error: { code: string } }).error.code).toBe('SESSION_REQUIRED');
+
+    const foreign = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: bearer(INTRUDER),
+      body: payload,
+    });
+    expect(foreign.status).toBe(403);
+    expect(((await foreign.json()) as { error: { code: string } }).error.code).toBe('TENANT_FORBIDDEN');
+
+    const oversized = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ kind: 'actuals', sourceFilename: 'big.csv', csvText: 'x'.repeat(5_000_001) }),
+    });
+    expect(oversized.status).toBe(413);
+    expect(((await oversized.json()) as { error: { code: string } }).error.code).toBe('IMPORT_FILE_TOO_LARGE');
+
+    const beyondParserLimit = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ kind: 'actuals', sourceFilename: 'huge.csv', csvText: 'x'.repeat(7_000_000) }),
+    });
+    expect(beyondParserLimit.status).toBe(413);
+    expect(((await beyondParserLimit.json()) as { error: { code: string } }).error.code).toBe('IMPORT_FILE_TOO_LARGE');
+
+    const malformed = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: '{not json',
+    });
+    expect(malformed.status).toBe(422);
+    expect(((await malformed.json()) as { error: { code: string } }).error.code).toBe('VALIDATION_FAILED');
+
+    const unknownPeriod = await fetch(
+      `${baseUrl}/api/companies/${companyId}/trial-balance?period=P99`,
+      { headers: bearer(OWNER) },
+    );
+    expect(unknownPeriod.status).toBe(422);
+    expect(((await unknownPeriod.json()) as { error: { code: string } }).error.code).toBe('PERIOD_NOT_FOUND');
+
+    // Not one rejected request wrote a batch (§8.7: a failure must leave no partial state).
+    expect(await countBatches(companyId)).toBe(batchesBefore);
+  }, 120_000);
 });

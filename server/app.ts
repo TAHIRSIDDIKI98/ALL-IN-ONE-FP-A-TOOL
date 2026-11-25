@@ -22,6 +22,10 @@ import {
   type TokenVerifier,
 } from './auth/session.js';
 import type { DatabaseHandle } from './db/client.js';
+import { ImportCommitRequestSchema, ImportCommitResultSchema } from '../shared/import.js';
+import { AccountDrilldownSchema, TrialBalanceReportSchema } from '../shared/reports.js';
+import { commitImport } from './db/repositories/import.js';
+import { getAccountDrilldown, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
   findAppUserByFirebaseUid,
@@ -29,6 +33,9 @@ import {
   isActorMember,
   listActorCompanies,
 } from './db/repositories/setup.js';
+
+/** Hard byte ceiling for an import upload (§4.4). Checked before any parsing or database work. */
+const MAX_IMPORT_BYTES = 5_000_000;
 
 export interface SpineContext {
   readonly db: DatabaseHandle;
@@ -52,13 +59,85 @@ function parseBody<S extends z.ZodTypeAny>(schema: S, body: unknown): z.infer<S>
   return parsed.data;
 }
 
+function readUuidParam(rawValue: string | string[] | undefined): string {
+  const value = Array.isArray(rawValue) ? (rawValue[0] ?? '') : (rawValue ?? '');
+  if (!z.string().uuid().safeParse(value).success) {
+    throw new AppError('TENANT_FORBIDDEN');
+  }
+  return value;
+}
+
+function readPeriodQuery(rawValue: unknown): string | null {
+  if (rawValue === undefined) return null;
+  const parsed = z.string().trim().min(1).max(16).safeParse(rawValue);
+  if (!parsed.success) {
+    throw new AppError('VALIDATION_FAILED', {
+      userMessage: 'The period query must be a single period code such as P01.',
+      details: { issues: ['period: expected a non-empty period code'] },
+    });
+  }
+  return parsed.data;
+}
+
 export function createSpineApp(context: SpineContext) {
   const { db, verifier, sandboxSecret } = context;
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '2mb' }));
 
   const requireAuth = createSessionMiddleware(verifier);
+  // The import route is the only endpoint that may receive a large body, so it owns its parser and
+  // is registered BEFORE the standard parser; every other route keeps the tight 2 MB limit (§4.4).
+  const importBody = express.json({ limit: '6mb' });
+  const standardJson = express.json({ limit: '2mb' });
+
+  /**
+   * Session identity AND membership of the named company, in that order: a foreign tenant gets the
+   * same TENANT_FORBIDDEN it would get for a company that does not exist (§3.2, no enumeration).
+   */
+  async function requireCompanyActor(
+    req: Request,
+  ): Promise<{ readonly companyId: string; readonly userId: string }> {
+    const identity = requireSession(req);
+    const companyId = readUuidParam(req.params['companyId']);
+    const user = await findAppUserByFirebaseUid(db, identity.firebaseUid);
+    if (user === null || !(await isActorMember(db, companyId, user.id))) {
+      throw new AppError('TENANT_FORBIDDEN');
+    }
+    return { companyId, userId: user.id };
+  }
+
+  app.post(
+    '/api/companies/:companyId/import/commit',
+    requireAuth,
+    importBody,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(ImportCommitRequestSchema, req.body);
+        const bytes = Buffer.byteLength(body.csvText, 'utf8');
+        if (bytes > MAX_IMPORT_BYTES) {
+          throw new AppError('IMPORT_FILE_TOO_LARGE', {
+            details: { bytes, maxBytes: MAX_IMPORT_BYTES },
+          });
+        }
+        const result = await db.transaction((tx) =>
+          commitImport(tx, {
+            companyId,
+            actorId: userId,
+            kind: body.kind,
+            sourceFilename: body.sourceFilename,
+            csvText: body.csvText,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(ImportCommitResultSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.use(standardJson);
 
   app.get('/healthz', (_req: Request, res: Response) => {
     res.status(200).json({ ok: true, service: 'onefpa-api', milestone: 'M1' });
@@ -81,7 +160,7 @@ export function createSpineApp(context: SpineContext) {
   if (sandboxSecret !== null && verifier.kind === 'sandbox-hmac') {
     app.post('/api/session/sandbox-token', (req: Request, res: Response, next: NextFunction) => {
       try {
-          const body = parseBody(SandboxTokenRequestSchema, req.body);
+        const body = parseBody(SandboxTokenRequestSchema, req.body);
         const token = issueSandboxToken({
           identity: {
             firebaseUid: `sandbox:${body.email.toLowerCase()}`,
@@ -159,16 +238,7 @@ export function createSpineApp(context: SpineContext) {
     requireAuth,
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const identity = requireSession(req);
-        const rawCompanyId = req.params['companyId'];
-        const companyId = Array.isArray(rawCompanyId) ? rawCompanyId[0] ?? '' : rawCompanyId ?? '';
-        if (!z.string().uuid().safeParse(companyId).success) {
-          throw new AppError('TENANT_FORBIDDEN');
-        }
-        const user = await findAppUserByFirebaseUid(db, identity.firebaseUid);
-        if (user === null || !(await isActorMember(db, companyId, user.id))) {
-          throw new AppError('TENANT_FORBIDDEN');
-        }
+        const { companyId } = await requireCompanyActor(req);
         const workspace = await getCompanyWorkspace(db, companyId);
         if (workspace === null) {
           throw new AppError('NOT_FOUND', {
@@ -242,6 +312,45 @@ export function createSpineApp(context: SpineContext) {
     }
   });
 
+  app.get(
+    '/api/companies/:companyId/trial-balance',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const period = readPeriodQuery(req.query['period']);
+        const report = await getTrialBalance(db, {
+          companyId,
+          ...(period === null ? {} : { throughPeriodCode: period }),
+        });
+        res.status(200).json(TrialBalanceReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    '/api/companies/:companyId/accounts/:accountCode/drill',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const rawCode = req.params['accountCode'];
+        const accountCode = Array.isArray(rawCode) ? (rawCode[0] ?? '') : (rawCode ?? '');
+        const period = readPeriodQuery(req.query['period']);
+        const drill = await getAccountDrilldown(db, {
+          companyId,
+          accountCode,
+          ...(period === null ? {} : { throughPeriodCode: period }),
+        });
+        res.status(200).json(AccountDrilldownSchema.parse(drill));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   app.use('/api', (_req: Request, _res: Response, next: NextFunction) => {
     next(new AppError('NOT_FOUND'));
   });
@@ -249,6 +358,21 @@ export function createSpineApp(context: SpineContext) {
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof AppError) {
       res.status(err.httpStatus).json({ error: err.toBody() });
+      return;
+    }
+    const bodyParserType = (err as { type?: unknown }).type;
+    if (bodyParserType === 'entity.too.large') {
+      const tooLarge = new AppError('IMPORT_FILE_TOO_LARGE', {
+        details: { maxBytes: MAX_IMPORT_BYTES },
+      });
+      res.status(tooLarge.httpStatus).json({ error: tooLarge.toBody() });
+      return;
+    }
+    if (bodyParserType === 'entity.parse.failed') {
+      const malformed = new AppError('VALIDATION_FAILED', {
+        userMessage: 'The request body is not valid JSON.',
+      });
+      res.status(malformed.httpStatus).json({ error: malformed.toBody() });
       return;
     }
     const fallback = new AppError('INTERNAL_ERROR');
