@@ -1,10 +1,18 @@
 import type { ReactElement } from 'react';
-import { EmptyState, ErrorState, LoadingState, PartialBanner } from '../components/StateFrame.js';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateFrame.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
+/**
+ * Chart-of-Accounts Mapper (MASTER_PROMPT §9.3.4).
+ *
+ * The screen exists and is reachable, but the mapping workflow itself is NOT part of this work
+ * item: until it lands, an honest empty state states exactly what is missing instead of showing a
+ * fabricated mapping table (§1.6-2, §9.2). Unmapped account codes are already quarantined with
+ * reasons by the import commit, so nothing is silently dropped while this screen is unavailable.
+ */
 export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProps): ReactElement {
-  const { lastImport, quarantinedMappings, mapAccountCode } = useWorkspaceStore();
+  const { company, authToken } = useWorkspaceStore();
 
   if (forcedState === 'loading') {
     return <LoadingState label="Loading Chart of Accounts mappings..." />;
@@ -15,51 +23,25 @@ export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProp
       <ErrorState
         title="Chart of Accounts Mapper"
         code="MAP_TARGET_INVALID"
-        message="Unable to load CoA mapping table for the active import batch."
+        message="Unable to load the CoA mapping table for the active import batch."
         onRetry={() => onNavigate('/coa-mapper')}
       />
     );
   }
 
-  if (forcedState === 'empty' || !lastImport) {
-    return (
-      <EmptyState
-        title="Chart of Accounts Mapper"
-        disclosure="No GL import batch is available to map. Stage an import batch first to inspect source codes and quarantine conflicts."
-        ctaLabel="Open Import Wizard"
-        ctaPath="/import"
-        onNavigate={onNavigate}
-      />
-    );
-  }
-
-  const unmappedRows = lastImport.quarantined.filter((q) => q.reason.startsWith('UNMAPPED_ACCOUNT:'));
+  const signedIn = company !== null && authToken !== null;
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-6 space-y-4">
-      <h1 className="text-xl font-semibold text-slate-900">Chart of Accounts Mapper</h1>
-      {unmappedRows.length > 0 && (
-        <PartialBanner detail={`${unmappedRows.length} source account code(s) require explicit mapping or quarantine confirmation.`} />
-      )}
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => mapAccountCode('9999', '6500')}
-          className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Map Unmapped to Other OpEx (6500)
-        </button>
-        <button
-          type="button"
-          onClick={() => onNavigate('/model-grid')}
-          className="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          Proceed to Model Grid
-        </button>
-      </div>
-      <div className="text-xs text-slate-600 font-mono">
-        Quarantined exceptions recorded: {Object.keys(quarantinedMappings).length + lastImport.quarantined.length}
-      </div>
-    </section>
+    <EmptyState
+      title="Chart of Accounts Mapper"
+      disclosure={
+        signedIn
+          ? 'The interactive account-mapping workflow is not available yet, so there are no mappings to display. Unmapped account codes are quarantined by the import commit with a named reason, and the trial balance only ever reports mapped accounts.'
+          : 'Sign in and create a company workspace before mapping source account codes; unmapped codes are quarantined with reasons by the import commit.'
+      }
+      ctaLabel={signedIn ? 'Open Import Wizard' : 'Go to Sign In'}
+      ctaPath={signedIn ? '/import' : '/sign-in'}
+      onNavigate={onNavigate}
+    />
   );
 }

@@ -54,3 +54,38 @@ export const ImportCommitResultSchema = z.object({
 });
 
 export type ImportCommitResult = z.infer<typeof ImportCommitResultSchema>;
+
+/**
+ * Read-only import PREVIEW (Spine Gate G1/C6). It is produced by the SAME classifier the commit
+ * uses — including the journal-balance gate — so `importedCount` here is exactly what a commit of
+ * the same text would post, and `importedCount + quarantinedCount === rowsIn` always holds.
+ */
+export const CompanyImportPreviewRequestSchema = z.object({
+  /** Same transport ceiling as the commit request; the 5 MB business limit is enforced by the route. */
+  csvText: z.string().min(1).max(6_000_000),
+});
+
+export const ImportPreviewRowSchema = z.object({
+  rowNo: z.number().int().positive(),
+  entryRef: z.string(),
+  postingDate: z.string(),
+  accountCode: z.string(),
+  description: z.string(),
+  debit: z.string(),
+  credit: z.string(),
+});
+
+export const ImportPreviewReportSchema = z.object({
+  companyId: z.string().uuid(),
+  rowsIn: z.number().int().nonnegative(),
+  importedCount: z.number().int().nonnegative(),
+  quarantinedCount: z.number().int().nonnegative(),
+  duplicatesDetected: z.number().int().nonnegative(),
+  entryCount: z.number().int().nonnegative(),
+  totalDebits: z.string(),
+  totalCredits: z.string(),
+  imported: z.array(ImportPreviewRowSchema),
+  quarantined: z.array(QuarantineRecordSchema),
+});
+
+export type ImportPreviewReport = z.infer<typeof ImportPreviewReportSchema>;

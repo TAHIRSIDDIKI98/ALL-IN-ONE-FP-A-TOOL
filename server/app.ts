@@ -22,13 +22,18 @@ import {
   type TokenVerifier,
 } from './auth/session.js';
 import type { DatabaseHandle } from './db/client.js';
-import { ImportCommitRequestSchema, ImportCommitResultSchema } from '../shared/import.js';
+import {
+  ImportCommitRequestSchema,
+  ImportCommitResultSchema,
+  ImportPreviewReportSchema,
+  CompanyImportPreviewRequestSchema,
+} from '../shared/import.js';
 import {
   AccountDrilldownSchema,
   FinancialStatementsSchema,
   TrialBalanceReportSchema,
 } from '../shared/reports.js';
-import { commitImport } from './db/repositories/import.js';
+import { commitImport, previewImport } from './db/repositories/import.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
@@ -147,6 +152,33 @@ export function createSpineApp(context: SpineContext) {
           }),
         );
         res.status(201).json(ImportCommitResultSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Company-scoped preview: the server classifies the rows against ITS OWN chart and applies the
+   * journal-balance gate, so the browser never supplies (or invents) the set of mapped accounts.
+   * Read-only — a preview can never write a batch.
+   */
+  app.post(
+    '/api/companies/:companyId/import/preview',
+    requireAuth,
+    importBody,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const body = parseBody(CompanyImportPreviewRequestSchema, req.body);
+        const bytes = Buffer.byteLength(body.csvText, 'utf8');
+        if (bytes > MAX_IMPORT_BYTES) {
+          throw new AppError('IMPORT_FILE_TOO_LARGE', {
+            details: { bytes, maxBytes: MAX_IMPORT_BYTES },
+          });
+        }
+        const report = await previewImport(db, { companyId, csvText: body.csvText });
+        res.status(200).json(ImportPreviewReportSchema.parse(report));
       } catch (error) {
         next(error);
       }

@@ -629,4 +629,110 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     const afterSignIn = await authed.getSessionWorkspace();
     expect(afterSignIn.companies.map((company) => company.name)).toEqual(['Client Flow Co']);
   }, 120_000);
+
+  it('drives the import wizard and model grid contracts through the browser client against the real API', async () => {
+    const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
+      email: 'client-import@onefpa.test',
+      displayName: 'Client Import',
+    });
+    const client = createApiClient({ getToken: () => minted.token, baseUrl });
+    const workspace = await client.createCompany({
+      companyName: 'Client Import Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-CIMP',
+      entityName: 'Client Import Co HQ',
+    });
+    await db.transaction((tx) =>
+      seedChartOfAccounts(tx, {
+        companyId: workspace.companyId,
+        accounts: [
+          { code: '1000', name: 'Cash', type: 'asset', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'bs.asset.cash', active: true },
+          { code: '4000', name: 'Service Revenue', type: 'revenue', normalSide: 'credit', parentCode: null, isPostable: true, statementLineKey: 'pl.revenue.service', active: true },
+        ],
+      }),
+    );
+
+    const csv = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-C1,2026-02-10,1000,Cash received,1250.50,0.00',
+      'JE-C1,2026-02-10,4000,Service revenue,0.00,1250.50',
+      'JE-C2,2026-02-11,9999,Unmapped account,50.00,0.00',
+      'JE-C2,2026-02-11,1000,Unmapped counter,0.00,50.00',
+    ].join('\n');
+
+    // The empty grid proves the company has no postings yet; the preview needs nothing from the
+    // browser beyond the file text, because the server classifies against its own chart.
+    const emptyGrid = await client.getTrialBalance(workspace.companyId);
+    expect(emptyGrid.sources).toEqual([]);
+    expect(emptyGrid.rows.map((row) => row.code)).toEqual(['1000', '4000']);
+
+    const preview = await client.previewImport(workspace.companyId, { csvText: csv });
+    expect(preview.rowsIn).toBe(4);
+    expect(preview.importedCount).toBe(2);
+    expect(preview.quarantinedCount).toBe(2);
+    expect(preview.importedCount + preview.quarantinedCount).toBe(preview.rowsIn);
+    expect(preview.entryCount).toBe(1);
+    expect(preview.totalDebits).toBe('1250.50');
+    expect(preview.totalCredits).toBe('1250.50');
+    // The unmapped code is named, and the journal left half-posted is quarantined WHOLE.
+    expect(preview.quarantined.map((row) => row.reason)).toEqual([
+      'UNMAPPED_ACCOUNT:9999',
+      'UNBALANCED_ENTRY:JE-C2',
+    ]);
+    // Preview and commit must agree: nothing was written by the preview.
+    expect(await countBatches(workspace.companyId)).toBe(0);
+
+    const committed = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'client_import.csv',
+      csvText: csv,
+    });
+    expect(committed.rowsIn).toBe(4);
+    expect(committed.importedCount).toBe(2);
+    expect(committed.quarantinedCount).toBe(2);
+    expect(committed.entryCount).toBe(1);
+    expect(committed.replacedBatchId).toBeNull();
+    expect(committed.sourceHash).toMatch(/^[0-9a-f]{64}$/);
+
+    const grid = await client.getTrialBalance(workspace.companyId, { period: 'P02' });
+    expect(grid.isBalanced).toBe(true);
+    expect(grid.totalDebit).toBe('1250.50');
+    expect(grid.totalCredit).toBe('1250.50');
+    expect(grid.sources).toEqual([
+      expect.objectContaining({ batchId: committed.batchId, sourceFilename: 'client_import.csv' }),
+    ]);
+    const cashRow = grid.rows.find((row) => row.code === '1000');
+    expect(cashRow?.totalDebit).toBe('1250.50');
+    expect(cashRow?.naturalActivity).toBe('1250.50');
+
+    const drill = await client.getAccountDrilldown(workspace.companyId, '1000', { period: 'P02' });
+    // Σ of the contributing source rows must equal the grid row exactly (§9.4).
+    expect(drill.totalDebit).toBe(cashRow?.totalDebit);
+    expect(drill.totalCredit).toBe(cashRow?.totalCredit);
+    expect(drill.rows).toHaveLength(1);
+    expect(drill.rows[0]).toEqual(
+      expect.objectContaining({
+        sourceFilename: 'client_import.csv',
+        periodCode: 'P02',
+        rowNo: 2,
+      }),
+    );
+    expect(drill.rows[0]?.rawCells.length).toBeGreaterThanOrEqual(6);
+
+    // Re-committing the SAME source replaces atomically: one active batch, unchanged totals.
+    const recommitted = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'client_import.csv',
+      csvText: csv,
+    });
+    expect(recommitted.replacedBatchId).toBe(committed.batchId);
+    const afterReplace = await client.getTrialBalance(workspace.companyId, { period: 'P02' });
+    expect(afterReplace.totalDebit).toBe('1250.50');
+    expect(afterReplace.sources).toEqual([
+      expect.objectContaining({ batchId: recommitted.batchId }),
+    ]);
+    expect(await countBatches(workspace.companyId)).toBe(2);
+  }, 120_000);
 });

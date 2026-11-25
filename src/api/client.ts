@@ -99,6 +99,17 @@ export interface ApiClient {
     companyId: string,
     query: { readonly period: string; readonly fiscalYear?: number | null },
   ): Promise<FinancialStatementsPayload>;
+  previewImport(companyId: string, request: ImportPreviewRequest): Promise<ImportPreviewPayload>;
+  commitImport(companyId: string, request: ImportCommitRequest): Promise<ImportCommitPayload>;
+  getTrialBalance(
+    companyId: string,
+    query?: { readonly period?: string | null },
+  ): Promise<TrialBalancePayload>;
+  getAccountDrilldown(
+    companyId: string,
+    accountCode: string,
+    query?: { readonly period?: string | null },
+  ): Promise<AccountDrilldownPayload>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -187,6 +198,43 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         `/api/companies/${encodeURIComponent(companyId)}/statements?${params.toString()}`,
       );
     },
+    /**
+     * Company-scoped read-only preview. The SERVER classifies the rows against its own chart and
+     * applies the journal-balance gate, so the browser never supplies — or invents — the set of
+     * mapped accounts and the preview can never disagree with the commit (§1.6-7, G1).
+     */
+    previewImport: (companyId, previewRequest) =>
+      request<ImportPreviewPayload>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/import/preview`,
+        { csvText: previewRequest.csvText },
+      ),
+    commitImport: (companyId, commitRequest) =>
+      request<ImportCommitPayload>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/import/commit`,
+        { kind: commitRequest.kind, sourceFilename: commitRequest.sourceFilename, csvText: commitRequest.csvText },
+      ),
+    getTrialBalance: (companyId, query) => {
+      const params = new URLSearchParams();
+      if (query?.period !== undefined && query.period !== null) params.set('period', query.period);
+      const suffix = params.toString();
+      return request<TrialBalancePayload>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/trial-balance${suffix.length > 0 ? `?${suffix}` : ''}`,
+      );
+    },
+    getAccountDrilldown: (companyId, accountCode, query) => {
+      const params = new URLSearchParams();
+      if (query?.period !== undefined && query.period !== null) params.set('period', query.period);
+      const suffix = params.toString();
+      return request<AccountDrilldownPayload>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/accounts/${encodeURIComponent(accountCode)}/drill${
+          suffix.length > 0 ? `?${suffix}` : ''
+        }`,
+      );
+    },
   };
 }
 
@@ -237,4 +285,118 @@ export interface FinancialStatementsPayload {
     readonly checks: readonly { readonly id: string; readonly name: string; readonly passed: boolean; readonly detail: string }[];
   };
   readonly sources: readonly { readonly sourceFilename: string; readonly sourceHash: string }[];
+}
+
+/**
+ * Import preview/commit contracts (shared/import.ts + server/app.ts `/api/import/preview`).
+ * Money stays a canonical decimal string end to end (§5.2 E11).
+ */
+export interface ImportPreviewRequest {
+  readonly csvText: string;
+}
+
+export interface ImportPreviewRow {
+  readonly rowNo: number;
+  readonly entryRef: string;
+  readonly postingDate: string;
+  readonly accountCode: string;
+  readonly description: string;
+  readonly debit: string;
+  readonly credit: string;
+}
+
+export interface QuarantineReason {
+  readonly rowNo: number;
+  readonly reason: string;
+}
+
+export interface ImportPreviewPayload {
+  readonly companyId: string;
+  readonly rowsIn: number;
+  readonly importedCount: number;
+  readonly quarantinedCount: number;
+  readonly duplicatesDetected: number;
+  readonly entryCount: number;
+  readonly totalDebits: string;
+  readonly totalCredits: string;
+  readonly imported: readonly ImportPreviewRow[];
+  readonly quarantined: readonly QuarantineReason[];
+}
+
+export interface ImportCommitRequest {
+  readonly kind: 'actuals' | 'budget';
+  readonly sourceFilename: string;
+  readonly csvText: string;
+}
+
+export interface ImportCommitPayload {
+  readonly batchId: string;
+  readonly replacedBatchId: string | null;
+  readonly rowsIn: number;
+  readonly importedCount: number;
+  readonly quarantinedCount: number;
+  readonly duplicatesDetected: number;
+  readonly totalDebits: string;
+  readonly totalCredits: string;
+  readonly entryCount: number;
+  readonly sourceHash: string;
+  readonly quarantined: readonly QuarantineReason[];
+}
+
+/** Trial-balance read model (shared/reports.ts `TrialBalanceReportSchema`). */
+export interface TrialBalanceRowPayload {
+  readonly accountId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly type: string;
+  readonly normalSide: string;
+  readonly statementLineKey: string;
+  readonly totalDebit: string;
+  readonly totalCredit: string;
+  readonly naturalActivity: string;
+  readonly sheetContribution: string;
+}
+
+export interface TrialBalanceSourcePayload {
+  readonly batchId: string;
+  readonly sourceFilename: string;
+  readonly sourceHash: string;
+  readonly importedAt: string;
+}
+
+export interface TrialBalancePayload {
+  readonly companyId: string;
+  readonly throughPeriodCode: string | null;
+  readonly rows: readonly TrialBalanceRowPayload[];
+  readonly totalDebit: string;
+  readonly totalCredit: string;
+  readonly isBalanced: boolean;
+  readonly unbalancedEntryIds: readonly string[];
+  readonly sources: readonly TrialBalanceSourcePayload[];
+}
+
+/** Drill-to-source read model (shared/reports.ts `AccountDrilldownSchema`). */
+export interface AccountDrillRowPayload {
+  readonly entryId: string;
+  readonly entryDate: string;
+  readonly sourceRef: string | null;
+  readonly periodCode: string;
+  readonly debit: string;
+  readonly credit: string;
+  readonly batchId: string;
+  readonly sourceFilename: string;
+  readonly sourceHash: string;
+  readonly rowNo: number;
+  readonly rawCells: readonly string[];
+}
+
+export interface AccountDrilldownPayload {
+  readonly companyId: string;
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly throughPeriodCode: string | null;
+  readonly rows: readonly AccountDrillRowPayload[];
+  readonly totalDebit: string;
+  readonly totalCredit: string;
+  readonly naturalActivity: string;
 }
