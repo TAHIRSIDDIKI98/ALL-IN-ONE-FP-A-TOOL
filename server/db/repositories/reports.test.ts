@@ -1,16 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { money } from '../../../core/money/index.js';
-import { AccountDrilldownSchema, TrialBalanceReportSchema } from '../../../shared/reports.js';
 import { verifyCompanyAuditLog } from '../../audit/index.js';
 import { openSandboxDatabase, type DatabaseHandle } from '../client.js';
 import { applyMigrations } from '../migrate.js';
-import { getAccountDrilldown, getTrialBalance } from './reports.js';
+import { AccountDrilldownSchema, TrialBalanceReportSchema, FinancialStatementsSchema } from '../../../shared/reports.js';
+import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './reports.js';
 import {
   CORPUS,
   CORPUS_ORACLE,
   corpusCsv,
   importCorpus,
   seedCorpusCompany,
+  seedCorpusWithOpeningBalances,
 } from '../testing/corpus-fixtures.js';
 import { commitImport } from './import.js';
 
@@ -152,6 +153,12 @@ describe('WI-0016 trial balance and drill-to-source read model (G2, G3, G6)', ()
   }, 120_000);
 });
 
+function oracleValue(section: Record<string, string>, key: string): string {
+  const value = section[key];
+  if (value === undefined) throw new Error(`oracle is missing ${key}`);
+  return value;
+}
+
 function rowDebitsOf(tb: Awaited<ReturnType<typeof getTrialBalance>>, code: string) {
   const row = tb.rows.find((candidate) => candidate.code === code);
   if (row === undefined) throw new Error(`no trial-balance row for ${code}`);
@@ -163,3 +170,147 @@ function rowCreditsOf(tb: Awaited<ReturnType<typeof getTrialBalance>>, code: str
   if (row === undefined) throw new Error(`no trial-balance row for ${code}`);
   return money(row.totalCredit);
 }
+
+describe('WI-0018 articulating statements read model (G3, A1–A5)', () => {
+  it('builds P&L, balance sheet, cash flow and RE roll-forward that tie to the independent oracle', async () => {
+    const seeded = await seedCorpusWithOpeningBalances(db, {
+      companyName: 'Statements Co',
+      entityCode: 'ENT-STMT',
+    });
+    await importCorpus(db, { companyId: seeded.companyId, actorId: seeded.actorId });
+
+    const statements = await getFinancialStatements(db, {
+      companyId: seeded.companyId,
+      throughPeriodCode: 'P12',
+      fiscalYear: 2026,
+    });
+
+    expect(() => FinancialStatementsSchema.parse(statements)).not.toThrow();
+    expect(statements.range).toEqual({
+      fromPeriodCode: 'P01',
+      throughPeriodCode: 'P12',
+      fiscalYear: 2026,
+    });
+
+    // P&L line by line against the BigInt oracle.
+    for (const [field, expected] of Object.entries(CORPUS_ORACLE.pnl)) {
+      expect(statements.pnl[field as keyof typeof statements.pnl], field).toBe(expected);
+    }
+    // Balance sheet from the opening journal + period activity.
+    for (const [field, expected] of Object.entries(CORPUS_ORACLE.balanceSheet)) {
+      if (field === 'balanced') continue;
+      expect(statements.balanceSheet[field as keyof typeof statements.balanceSheet], field).toBe(expected);
+    }
+    expect(statements.balanceSheet.isBalanced).toBe(true);
+    // Indirect cash flow, including the beginning cash that comes from the prior-year journal.
+    for (const [field, expected] of Object.entries(CORPUS_ORACLE.cashFlow)) {
+      if (field === 'tiesToBsCash') continue;
+      expect(statements.cashFlow[field as keyof typeof statements.cashFlow], field).toBe(expected);
+    }
+    // Retained-earnings roll-forward (A4).
+    expect(statements.retainedEarnings.opening).toBe(CORPUS_ORACLE.retainedEarnings.opening);
+    expect(statements.retainedEarnings.netIncome).toBe(CORPUS_ORACLE.retainedEarnings.netIncome);
+    expect(statements.retainedEarnings.distributions).toBe(CORPUS_ORACLE.retainedEarnings.distributions);
+    expect(statements.retainedEarnings.closingTotal).toBe(CORPUS_ORACLE.retainedEarnings.closingTotal);
+    expect(statements.retainedEarnings.rollForwardValid).toBe(true);
+
+    // A1–A5 must all pass, and the two source files are both attributable.
+    expect(statements.articulation.valid).toBe(true);
+    expect(statements.articulation.checks.map((check) => check.id)).toEqual(['A1', 'A2', 'A3', 'A4', 'A5']);
+    for (const check of statements.articulation.checks) {
+      expect(check.passed, `${check.id} ${check.detail}`).toBe(true);
+    }
+    expect(statements.sources.map((source) => source.sourceFilename)).toEqual([
+      'opening_balance_sheet.csv',
+      'corpus_gl.csv',
+    ]);
+  }, 180_000);
+
+  it('serves year-to-date statements: every month articulates and the year closes the annual numbers', async () => {
+    const seeded = await seedCorpusWithOpeningBalances(db, {
+      companyName: 'Range Co',
+      entityCode: 'ENT-RANGE',
+    });
+    await importCorpus(db, { companyId: seeded.companyId, actorId: seeded.actorId });
+
+    let previousNetIncome = money('0');
+    let latest = await getFinancialStatements(db, {
+      companyId: seeded.companyId,
+      throughPeriodCode: 'P01',
+      fiscalYear: 2026,
+    });
+
+    for (let periodNo = 1; periodNo <= 12; periodNo += 1) {
+      const code = `P${String(periodNo).padStart(2, '0')}`;
+      const ytd = await getFinancialStatements(db, {
+        companyId: seeded.companyId,
+        throughPeriodCode: code,
+        fiscalYear: 2026,
+      });
+      // YTD always starts at the fiscal year's first period, whatever month is requested.
+      expect(ytd.range, code).toEqual({
+        fromPeriodCode: 'P01',
+        throughPeriodCode: code,
+        fiscalYear: 2026,
+      });
+      // Opening balances never move with the closing month: they come from the prior year only.
+      expect(ytd.retainedEarnings.opening, code).toBe(CORPUS_ORACLE.retainedEarnings.opening);
+      for (const check of ytd.articulation.checks) {
+        expect(check.passed, `${code} ${check.id} ${check.detail}`).toBe(true);
+      }
+      // Earnings accumulate monotonically and the balance sheet stays balanced at every month end.
+      expect(money(ytd.pnl.netIncome).gte(previousNetIncome), code).toBe(true);
+      expect(ytd.balanceSheet.isBalanced, code).toBe(true);
+      previousNetIncome = money(ytd.pnl.netIncome);
+      latest = ytd;
+    }
+
+    // The December YTD bundle is the annual statement set that ties to the oracle.
+    expect(latest.pnl.netIncome).toBe(CORPUS_ORACLE.pnl.netIncome);
+    expect(latest.pnl.revenue).toBe(CORPUS_ORACLE.pnl.revenue);
+    expect(latest.balanceSheet.cashBalance).toBe(CORPUS_ORACLE.balanceSheet.cashBalance);
+    expect(latest.cashFlow.endingCash).toBe(CORPUS_ORACLE.cashFlow.endingCash);
+    expect(latest.retainedEarnings.closingTotal).toBe(CORPUS_ORACLE.retainedEarnings.closingTotal);
+
+    // An adjustment-only or unknown period is still a typed error, never a silent fallback.
+    await expect(
+      getFinancialStatements(db, {
+        companyId: seeded.companyId,
+        throughPeriodCode: 'P99',
+        fiscalYear: 2026,
+      }),
+    ).rejects.toMatchObject({ code: 'PERIOD_NOT_FOUND', httpStatus: 422 });
+  }, 180_000);
+
+  it('refuses an ambiguous period code in a multi-year calendar instead of guessing a year', async () => {
+    const seeded = await seedCorpusWithOpeningBalances(db, {
+      companyName: 'Ambiguous Co',
+      entityCode: 'ENT-AMB',
+    });
+
+    // P01 exists in FY2025 and FY2026; without a fiscal year the request is ambiguous.
+    await expect(
+      getTrialBalance(db, { companyId: seeded.companyId, throughPeriodCode: 'P01' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', httpStatus: 422 });
+
+    const scoped = await getTrialBalance(db, {
+      companyId: seeded.companyId,
+      throughPeriodCode: 'P01',
+      fiscalYear: 2026,
+    });
+    expect(scoped.throughPeriodCode).toBe('P01');
+    expect(scoped.isBalanced).toBe(true);
+
+    const priorYear = await getTrialBalance(db, {
+      companyId: seeded.companyId,
+      throughPeriodCode: 'P12',
+      fiscalYear: 2025,
+    });
+    // The opening journal is the only prior-year posting: hand-computed from
+    // fixtures/corpus/corpus.json -> openingBalanceSheet, gross assets 4,950,000 on the debit side
+    // against liabilities 1,800,000 + equity 2,700,000 + accumulated depreciation 450,000.
+    expect(priorYear.totalDebit).toBe('4950000.00');
+    expect(priorYear.totalCredit).toBe('4950000.00');
+    expect(priorYear.isBalanced).toBe(true);
+  }, 180_000);
+});

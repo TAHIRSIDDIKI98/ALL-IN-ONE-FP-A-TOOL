@@ -23,9 +23,13 @@ import {
 } from './auth/session.js';
 import type { DatabaseHandle } from './db/client.js';
 import { ImportCommitRequestSchema, ImportCommitResultSchema } from '../shared/import.js';
-import { AccountDrilldownSchema, TrialBalanceReportSchema } from '../shared/reports.js';
+import {
+  AccountDrilldownSchema,
+  FinancialStatementsSchema,
+  TrialBalanceReportSchema,
+} from '../shared/reports.js';
 import { commitImport } from './db/repositories/import.js';
-import { getAccountDrilldown, getTrialBalance } from './db/repositories/reports.js';
+import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
   findAppUserByFirebaseUid,
@@ -74,6 +78,18 @@ function readPeriodQuery(rawValue: unknown): string | null {
     throw new AppError('VALIDATION_FAILED', {
       userMessage: 'The period query must be a single period code such as P01.',
       details: { issues: ['period: expected a non-empty period code'] },
+    });
+  }
+  return parsed.data;
+}
+
+function readFiscalYearQuery(rawValue: unknown): number | null {
+  if (rawValue === undefined) return null;
+  const parsed = z.coerce.number().int().min(1900).max(2200).safeParse(rawValue);
+  if (!parsed.success) {
+    throw new AppError('VALIDATION_FAILED', {
+      userMessage: 'The year query must be a four-digit fiscal year.',
+      details: { issues: ['year: expected an integer between 1900 and 2200'] },
     });
   }
   return parsed.data;
@@ -345,6 +361,32 @@ export function createSpineApp(context: SpineContext) {
           ...(period === null ? {} : { throughPeriodCode: period }),
         });
         res.status(200).json(AccountDrilldownSchema.parse(drill));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    '/api/companies/:companyId/statements',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const period = readPeriodQuery(req.query['period']);
+        if (period === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The statements endpoint requires ?period= (year-to-date through that period).',
+            details: { issues: ['period: required'] },
+          });
+        }
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        const statements = await getFinancialStatements(db, {
+          companyId,
+          throughPeriodCode: period,
+          ...(fiscalYear === null ? {} : { fiscalYear }),
+        });
+        res.status(200).json(FinancialStatementsSchema.parse(statements));
       } catch (error) {
         next(error);
       }

@@ -485,4 +485,85 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     // Not one rejected request wrote a batch (§8.7: a failure must leave no partial state).
     expect(await countBatches(companyId)).toBe(batchesBefore);
   }, 120_000);
+
+  it('serves year-to-date statements and rejects a statements request without a period', async () => {
+    const create = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({
+        companyName: 'HTTP Statements Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'ENT-STMT',
+        entityName: 'HTTP Statements Co HQ',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const { companyId } = (await create.json()) as { companyId: string };
+
+    await db.transaction((tx) =>
+      seedChartOfAccounts(tx, {
+        companyId,
+        accounts: [
+          { code: '1000', name: 'Cash', type: 'asset', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'bs.asset.cash', active: true },
+          { code: '4000', name: 'Service Revenue', type: 'revenue', normalSide: 'credit', parentCode: null, isPostable: true, statementLineKey: 'pl.revenue.service', active: true },
+        ],
+      }),
+    );
+
+    const commit = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'cash_sale.csv',
+        csvText: [
+          'entry_ref,date,account_code,description,debit,credit',
+          'JE-S1,2026-03-10,1000,Cash received,1000.00,0.00',
+          'JE-S1,2026-03-10,4000,Service revenue,0.00,1000.00',
+        ].join('\n'),
+      }),
+    });
+    expect(commit.status).toBe(201);
+
+    const missingPeriod = await fetch(`${baseUrl}/api/companies/${companyId}/statements`, {
+      headers: bearer(OWNER),
+    });
+    expect(missingPeriod.status).toBe(422);
+    expect(((await missingPeriod.json()) as { error: { code: string } }).error.code).toBe('VALIDATION_FAILED');
+
+    const foreign = await fetch(`${baseUrl}/api/companies/${companyId}/statements?period=P03`, {
+      headers: bearer(INTRUDER),
+    });
+    expect(foreign.status).toBe(403);
+    expect(((await foreign.json()) as { error: { code: string } }).error.code).toBe('TENANT_FORBIDDEN');
+
+    const statementsResponse = await fetch(
+      `${baseUrl}/api/companies/${companyId}/statements?period=P03`,
+      { headers: bearer(OWNER) },
+    );
+    expect(statementsResponse.status).toBe(200);
+    const statements = (await statementsResponse.json()) as {
+      range: { fromPeriodCode: string; throughPeriodCode: string; fiscalYear: number };
+      pnl: { revenue: string; netIncome: string };
+      balanceSheet: { isBalanced: boolean; totalAssets: string; totalEquity: string };
+      cashFlow: { endingCash: string };
+      retainedEarnings: { opening: string; closingTotal: string; rollForwardValid: boolean };
+      articulation: { valid: boolean; checks: Array<{ id: string; passed: boolean }> };
+    };
+    // Year-to-date: the range always opens at the fiscal year's first period.
+    expect(statements.range).toEqual({ fromPeriodCode: 'P01', throughPeriodCode: 'P03', fiscalYear: 2026 });
+    expect(statements.pnl.revenue).toBe('1000.00');
+    expect(statements.pnl.netIncome).toBe('1000.00');
+    expect(statements.balanceSheet.isBalanced).toBe(true);
+    expect(statements.balanceSheet.totalAssets).toBe('1000.00');
+    expect(statements.balanceSheet.totalEquity).toBe('1000.00');
+    expect(statements.cashFlow.endingCash).toBe('1000.00');
+    expect(statements.retainedEarnings.opening).toBe('0.00');
+    expect(statements.retainedEarnings.closingTotal).toBe('1000.00');
+    expect(statements.retainedEarnings.rollForwardValid).toBe(true);
+    expect(statements.articulation.valid).toBe(true);
+    expect(statements.articulation.checks.map((check) => check.id)).toEqual(['A1', 'A2', 'A3', 'A4', 'A5']);
+  }, 120_000);
 });

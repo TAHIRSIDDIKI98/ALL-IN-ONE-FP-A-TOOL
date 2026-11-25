@@ -3,7 +3,7 @@
 
 import Decimal from 'decimal.js';
 import { verifyArticulation, type ArticulationReport } from '../invariants.js';
-import { add, compare, money, negate, sub, sum } from '../money/index.js';
+import { add, compare, eq, money, negate, sub, sum } from '../money/index.js';
 
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
 export type NormalSide = 'debit' | 'credit';
@@ -627,11 +627,21 @@ export function computeIndirectCashFlow(input: IndirectCashFlowInput): IndirectC
   };
 }
 
+/** A4 as reported to the user: closing RE == opening RE + Net Income − distributions (§4.5). */
+export interface RetainedEarningsRollForward {
+  readonly opening: Decimal;
+  readonly netIncome: Decimal;
+  readonly distributions: Decimal;
+  readonly closingTotal: Decimal;
+  readonly rollForwardValid: boolean;
+}
+
 export interface FullStatementsBundle {
   readonly trialBalance: TrialBalanceResult;
   readonly pnl: PnlStatementResult;
   readonly balanceSheet: BalanceSheetResult;
   readonly cashFlow: IndirectCashFlowResult;
+  readonly retainedEarnings: RetainedEarningsRollForward;
   readonly articulation: ArticulationReport;
 }
 
@@ -767,11 +777,20 @@ export function buildArticulatingStatements(params: {
     bsCash: balanceSheet.cashBalance,
   });
 
+  const retainedEarnings: RetainedEarningsRollForward = {
+    opening: openingRe,
+    netIncome: pnl.netIncome,
+    distributions: distributionsMagnitude,
+    closingTotal: closingReTotal,
+    rollForwardValid: eq(closingReTotal, sub(add(openingRe, pnl.netIncome), distributionsMagnitude)),
+  };
+
   return {
     trialBalance,
     pnl,
     balanceSheet,
     cashFlow,
+    retainedEarnings,
     articulation,
   };
 }

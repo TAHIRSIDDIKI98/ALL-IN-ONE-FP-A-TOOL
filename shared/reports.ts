@@ -75,3 +75,77 @@ export const AccountDrilldownSchema = z.object({
 });
 
 export type AccountDrilldown = z.infer<typeof AccountDrilldownSchema>;
+
+/** One articulation check (A1–A5) as the statements screen reports it (§4.5, §5.6). */
+export const ArticulationCheckSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  passed: z.boolean(),
+  delta: z.string(),
+  detail: z.string(),
+});
+
+export const StatementPeriodRangeSchema = z.object({
+  fromPeriodCode: z.string(),
+  throughPeriodCode: z.string(),
+  fiscalYear: z.number().int(),
+});
+
+export const FinancialStatementsSchema = z.object({
+  companyId: z.string().uuid(),
+  range: StatementPeriodRangeSchema,
+  pnl: z.object({
+    byKey: z.record(z.string(), z.string()),
+    revenue: z.string(),
+    cogs: z.string(),
+    grossProfit: z.string(),
+    opex: z.string(),
+    ebitda: z.string(),
+    depreciation: z.string(),
+    ebit: z.string(),
+    nonOperatingNet: z.string(),
+    ebt: z.string(),
+    tax: z.string(),
+    netIncome: z.string(),
+  }),
+  balanceSheet: z.object({
+    byKey: z.record(z.string(), z.string()),
+    currentAssets: z.string(),
+    nonCurrentAssets: z.string(),
+    totalAssets: z.string(),
+    currentLiabilities: z.string(),
+    nonCurrentLiabilities: z.string(),
+    totalLiabilities: z.string(),
+    totalEquity: z.string(),
+    totalLiabilitiesAndEquity: z.string(),
+    cashBalance: z.string(),
+    balanceDelta: z.string(),
+    isBalanced: z.boolean(),
+  }),
+  cashFlow: z.object({
+    netIncome: z.string(),
+    nonCashAddbacks: z.string(),
+    deltaWorkingCapitalCashImpact: z.string(),
+    operatingCashFlow: z.string(),
+    investingCashFlow: z.string(),
+    freeCashFlow: z.string(),
+    financingCashFlow: z.string(),
+    netCashChange: z.string(),
+    beginningCash: z.string(),
+    endingCash: z.string(),
+  }),
+  retainedEarnings: z.object({
+    opening: z.string(),
+    netIncome: z.string(),
+    distributions: z.string(),
+    closingTotal: z.string(),
+    rollForwardValid: z.boolean(),
+  }),
+  articulation: z.object({
+    valid: z.boolean(),
+    checks: z.array(ArticulationCheckSchema),
+  }),
+  sources: z.array(TrialBalanceSourceSchema),
+});
+
+export type FinancialStatements = z.infer<typeof FinancialStatementsSchema>;

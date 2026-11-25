@@ -18,8 +18,9 @@ import type { SqlExecutor } from '../migrate.js';
  *    either `imported` or `quarantined` with a reason, and `imported + quarantined == row_count`
  *    is additionally enforced by the database's deferred row-accounting trigger (D5).
  *  - IDEMPOTENT REPLACE (G1/C7): `(company_id, kind, source_hash)` identifies a source. A second
- *    commit of the same source flips the previous batch to `replaced` and links it, so exactly
- *    one *active* batch can exist per source. Financial rows are NEVER hard-deleted (§4.2):
+ *    commit of the SAME source flips the previous batch to `replaced` and links it, so exactly one
+ *    *active* batch exists per source while different sources (opening balances, monthly actuals)
+ *    stay active side by side. Financial rows are NEVER hard-deleted (§4.2):
  *    the replaced batch keeps every raw row and every posting as immutable history, and every
  *    read (trial balance, statements) filters to active batches, so re-import can never
  *    double-count.
@@ -139,18 +140,25 @@ export async function seedChartOfAccounts(
   return { inserted, updated };
 }
 
+/**
+ * The ACTIVE batch for one SOURCE — `(company_id, kind, source_hash)` — which is the identity the
+ * idempotency contract keys on (G1/C7). A different file (e.g. the opening balance sheet and then
+ * the monthly actuals) is a different source and stays active: only a re-commit of the SAME source
+ * replaces the earlier batch.
+ */
 async function loadActiveBatch(
   db: SqlExecutor,
   companyId: string,
   kind: 'actuals' | 'budget',
+  sourceHash: string,
 ): Promise<string | null> {
   const res = await db.query<IdRow>(
     `SELECT id
        FROM import_batch
-      WHERE company_id = $1 AND kind = $2 AND status IN ('staged', 'committed')
+      WHERE company_id = $1 AND kind = $2 AND source_hash = $3 AND status IN ('staged', 'committed')
       ORDER BY imported_at DESC, id DESC
       LIMIT 1`,
-    [companyId, kind],
+    [companyId, kind, sourceHash],
   );
   return res.rows[0]?.id ?? null;
 }
@@ -224,19 +232,28 @@ export async function commitImport(
       userMessage: 'This company has no fiscal periods; complete company setup first.',
     });
   }
-  const periods: GeneratedPeriod[] = periodRes.rows.map((row) => ({
-    fiscalYear: row.fiscal_year,
-    fyLabel: `FY${row.fiscal_year}`,
-    periodNo: row.period_no,
-    code: row.code,
-    label: row.label,
-    quarter: (row.quarter as 1 | 2 | 3 | 4),
-    startDate: toIsoDate(row.start_date),
-    endDate: toIsoDate(row.end_date),
-    is53rdWeek: row.is_53rd_week,
-    isAdjustment: row.is_adjustment,
+  /**
+   * Periods are kept PAIRED with their row id. A 12-month calendar reuses `P01`…`P12` in every
+   * fiscal year, so resolving a date to a code and then looking the id up by that code silently
+   * posts into the wrong year (found by WI-0018: an opening journal dated 2025-12-31 landed in
+   * FY2026 P12). Resolution therefore stays positional.
+   */
+  const periodEntries = periodRes.rows.map((row) => ({
+    id: row.id,
+    period: {
+      fiscalYear: row.fiscal_year,
+      fyLabel: `FY${row.fiscal_year}`,
+      periodNo: row.period_no,
+      code: row.code,
+      label: row.label,
+      quarter: row.quarter as 1 | 2 | 3 | 4,
+      startDate: toIsoDate(row.start_date),
+      endDate: toIsoDate(row.end_date),
+      is53rdWeek: row.is_53rd_week,
+      isAdjustment: row.is_adjustment,
+    } satisfies GeneratedPeriod,
   }));
-  const periodIdByCode = new Map(periodRes.rows.map((row) => [row.code, row.id]));
+  const periods: GeneratedPeriod[] = periodEntries.map((entry) => entry.period);
 
   const parsed = evaluateMessyGlCsv({
     csvText: params.csvText,
@@ -258,7 +275,8 @@ export async function commitImport(
   const rowsWithPeriod: Array<{ row: ImportedGlRow; periodCode: string; periodId: string }> = [];
   for (const row of parsed.imported) {
     const period = resolvePeriodForDate(periods, row.postingDate);
-    const periodId = period === null ? undefined : periodIdByCode.get(period.code);
+    const matchIndex = period === null ? -1 : periods.indexOf(period);
+    const periodId = matchIndex < 0 ? undefined : periodEntries[matchIndex]?.id;
     if (period === null || periodId === undefined) {
       quarantined.push({ rowNo: row.rowNo, reason: `PERIOD_NOT_FOUND:${row.postingDate}` });
       continue;
@@ -296,7 +314,7 @@ export async function commitImport(
   const totalDebits = sum(postedRows.map((row) => row.debit));
   const totalCredits = sum(postedRows.map((row) => row.credit));
   const sourceHash = sha256Hex(params.csvText);
-  const priorBatchId = await loadActiveBatch(tx, params.companyId, params.kind);
+  const priorBatchId = await loadActiveBatch(tx, params.companyId, params.kind, sourceHash);
 
   if (priorBatchId !== null) {
     await tx.query(

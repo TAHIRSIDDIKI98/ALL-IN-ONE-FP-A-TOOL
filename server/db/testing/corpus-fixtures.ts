@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { compare, money, negate, serialize, sum } from '../../../core/money/index.js';
 import type { CoaSeedAccount } from '../../../shared/import.js';
 import type { CompanySetupRequest } from '../../../shared/setup.js';
 import type { DatabaseHandle } from '../client.js';
@@ -45,6 +46,7 @@ interface CorpusFile {
   readonly coa: readonly CorpusAccount[];
   readonly glEntries: readonly CorpusGlEntry[];
   readonly glLines: readonly CorpusGlLine[];
+  readonly openingBalanceSheet: Readonly<Record<string, string>>;
 }
 
 export const CORPUS: CorpusFile = JSON.parse(
@@ -101,9 +103,65 @@ export function corpusCsv(): string {
   return `${rows.join('\n')}\n`;
 }
 
+/**
+ * Renders the corpus opening balance sheet (keyed by statement_line_key) as one balanced opening
+ * journal dated the last day of the prior fiscal year, so the statements read model can derive the
+ * opening position from the GL alone instead of a second storage of the same numbers.
+ */
+export function openingBalanceCsv(postingDate = '2025-12-31'): string {
+  const rows = ['entry_ref,date,account_code,description,debit,credit'];
+  const debits: ReturnType<typeof money>[] = [];
+  const credits: ReturnType<typeof money>[] = [];
+  for (const [lineKey, amount] of Object.entries(CORPUS.openingBalanceSheet)) {
+    const account = CORPUS.coa.find((candidate) => candidate.statementLineKey === lineKey);
+    if (account === undefined) {
+      throw new Error(`opening balance key ${lineKey} has no corpus account`);
+    }
+    const contribution = money(amount);
+    if (contribution.isZero()) continue;
+    // The fixture is keyed by SHEET CONTRIBUTION (assets positive, liabilities and equity positive,
+    // contra-assets negative) — the same convention as computeSheetContribution(type, debit, credit)
+    // — so the sign is inverted by account TYPE, never by normal side (a contra-asset is an asset
+    // whose contribution is negative, not a credit-normal account).
+    const debitNormalSheet = account.type === 'asset' || account.type === 'expense';
+    let debit = money('0');
+    let credit = money('0');
+    if (debitNormalSheet) {
+      if (contribution.isNegative()) credit = negate(contribution);
+      else debit = contribution;
+    } else if (contribution.isNegative()) {
+      debit = negate(contribution);
+    } else {
+      credit = contribution;
+    }
+    debits.push(debit);
+    credits.push(credit);
+    const description = account.name.replace(/[,"\n]/g, ' ');
+    rows.push(
+      ['JE-OPEN', postingDate, account.code, description, serialize(debit, 2), serialize(credit, 2)].join(','),
+    );
+  }
+  // An unbalanced opening journal would be quarantined whole by the import gate and would silently
+  // hide the real problem, so the fixture refuses to emit one.
+  const debitTotal = sum(debits);
+  const creditTotal = sum(credits);
+  if (compare(debitTotal, creditTotal) !== 0) {
+    throw new Error(
+      `opening balance sheet does not balance: debits=${serialize(debitTotal)} credits=${serialize(creditTotal)}`,
+    );
+  }
+  return `${rows.join('\n')}\n`;
+}
+
 export async function seedCorpusCompany(
   db: DatabaseHandle,
-  params: { readonly companyName: string; readonly entityCode: string; readonly actor?: AppUserIdentity },
+  params: {
+    readonly companyName: string;
+    readonly entityCode: string;
+    readonly actor?: AppUserIdentity;
+    /** Opening balances live in the PRIOR fiscal year, so statements need a two-year calendar. */
+    readonly priorYear?: boolean;
+  },
 ): Promise<{ companyId: string; actorId: string }> {
   const actor: AppUserIdentity = params.actor ?? {
     firebaseUid: 'uid-import-owner',
@@ -114,8 +172,8 @@ export async function seedCorpusCompany(
     companyName: params.companyName,
     baseCurrency: 'USD',
     calendarKind: '12month',
-    fiscalYear: 2026,
-    yearCount: 1,
+    fiscalYear: params.priorYear === true ? 2025 : 2026,
+    yearCount: params.priorYear === true ? 2 : 1,
     entityCode: params.entityCode,
     entityName: `${params.companyName} HQ`,
   };
@@ -125,6 +183,25 @@ export async function seedCorpusCompany(
     await seedChartOfAccounts(tx, { companyId: workspace.companyId, accounts: corpusAccounts() });
     return { companyId: workspace.companyId, actorId };
   });
+}
+
+/** Seeds the two-year company and imports the opening journal into the prior year. */
+export async function seedCorpusWithOpeningBalances(
+  db: DatabaseHandle,
+  params: { readonly companyName: string; readonly entityCode: string },
+): Promise<{ companyId: string; actorId: string }> {
+  const seeded = await seedCorpusCompany(db, { ...params, priorYear: true });
+  await db.transaction((tx) =>
+    commitImport(tx, {
+      companyId: seeded.companyId,
+      actorId: seeded.actorId,
+      kind: 'actuals',
+      sourceFilename: 'opening_balance_sheet.csv',
+      csvText: openingBalanceCsv(),
+      occurredAt: OCCURRED_AT,
+    }),
+  );
+  return seeded;
 }
 
 export async function importCorpus(

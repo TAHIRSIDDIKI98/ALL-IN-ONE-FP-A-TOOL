@@ -1,7 +1,10 @@
-import { money, scaleForCurrency, serialize, sum } from '../../../core/money/index.js';
+import type Decimal from 'decimal.js';
+import { add, money, scaleForCurrency, serialize, sum } from '../../../core/money/index.js';
 import {
+  buildArticulatingStatements,
   buildTrialBalance,
   computeNaturalActivity,
+  computeSheetContribution,
   normalizeCode,
   type AccountType,
   type GlLineFact,
@@ -13,6 +16,7 @@ import type { StatementLineKey } from '../../../shared/spine.js';
 import type {
   AccountDrillRow,
   AccountDrilldown,
+  FinancialStatements,
   TrialBalanceReport,
   TrialBalanceRow,
   TrialBalanceSource,
@@ -65,6 +69,7 @@ interface PeriodKey {
 export interface TrialBalanceParams {
   readonly companyId: string;
   readonly throughPeriodCode?: string | null;
+  readonly fiscalYear?: number | null;
 }
 
 async function loadCompanyCurrency(db: SqlExecutor, companyId: string): Promise<string> {
@@ -78,27 +83,49 @@ async function loadCompanyCurrency(db: SqlExecutor, companyId: string): Promise<
 
 /**
  * Resolves a period code into its (fiscal_year, period_no) key so "through period" comparisons are
- * calendar-shaped rather than string-shaped (an adjustment period sits inside its own year).
+ * calendar-shaped rather than string-shaped. A 12-month calendar reuses `P01` in every fiscal year,
+ * so a code that matches more than one year is AMBIGUOUS and must be disambiguated by `fiscalYear`
+ * rather than silently resolved to whichever row the database returned first.
  */
+async function resolvePeriod(
+  db: SqlExecutor,
+  companyId: string,
+  periodCode: string,
+  fiscalYear?: number | null,
+): Promise<PeriodRow> {
+  const res = await db.query<PeriodRow>(
+    `SELECT id, code, fiscal_year, period_no
+       FROM fiscal_period
+      WHERE company_id = $1 AND code = $2${fiscalYear === undefined || fiscalYear === null ? '' : ' AND fiscal_year = $3'}
+      ORDER BY fiscal_year ASC`,
+    fiscalYear === undefined || fiscalYear === null
+      ? [companyId, periodCode]
+      : [companyId, periodCode, fiscalYear],
+  );
+  const first = res.rows[0];
+  if (first === undefined) {
+    throw new AppError('PERIOD_NOT_FOUND', {
+      userMessage: `Period ${periodCode} does not exist in this company calendar.`,
+      details: { periodCode, fiscalYear: fiscalYear ?? null },
+    });
+  }
+  if (res.rows.length > 1) {
+    throw new AppError('VALIDATION_FAILED', {
+      userMessage: `Period code ${periodCode} exists in more than one fiscal year; pass the fiscal year to disambiguate.`,
+      details: { periodCode, fiscalYears: res.rows.map((row) => row.fiscal_year) },
+    });
+  }
+  return first;
+}
+
 async function resolveThroughPeriod(
   db: SqlExecutor,
   companyId: string,
   periodCode: string | null | undefined,
+  fiscalYear?: number | null,
 ): Promise<{ code: string; key: PeriodKey } | null> {
   if (periodCode === null || periodCode === undefined) return null;
-  const res = await db.query<PeriodRow>(
-    `SELECT id, code, fiscal_year, period_no
-       FROM fiscal_period
-      WHERE company_id = $1 AND code = $2`,
-    [companyId, periodCode],
-  );
-  const row = res.rows[0];
-  if (row === undefined) {
-    throw new AppError('PERIOD_NOT_FOUND', {
-      userMessage: `Period ${periodCode} does not exist in this company calendar.`,
-      details: { periodCode },
-    });
-  }
+  const row = await resolvePeriod(db, companyId, periodCode, fiscalYear);
   return { code: row.code, key: { fiscalYear: row.fiscal_year, periodNo: row.period_no } };
 }
 
@@ -122,7 +149,12 @@ export async function getTrialBalance(
 ): Promise<TrialBalanceReport> {
   const currency = await loadCompanyCurrency(db, params.companyId);
   const scale = scaleForCurrency(currency);
-  const through = await resolveThroughPeriod(db, params.companyId, params.throughPeriodCode);
+  const through = await resolveThroughPeriod(
+    db,
+    params.companyId,
+    params.throughPeriodCode,
+    params.fiscalYear,
+  );
 
   const accountRes = await db.query<AccountRow>(
     `SELECT id, code, name, type, normal_side, is_contra, statement_line_key
@@ -209,11 +241,21 @@ export async function getTrialBalance(
  */
 export async function getAccountDrilldown(
   db: SqlExecutor,
-  params: { readonly companyId: string; readonly accountCode: string; readonly throughPeriodCode?: string | null },
+  params: {
+    readonly companyId: string;
+    readonly accountCode: string;
+    readonly throughPeriodCode?: string | null;
+    readonly fiscalYear?: number | null;
+  },
 ): Promise<AccountDrilldown> {
   const currency = await loadCompanyCurrency(db, params.companyId);
   const scale = scaleForCurrency(currency);
-  const through = await resolveThroughPeriod(db, params.companyId, params.throughPeriodCode);
+  const through = await resolveThroughPeriod(
+    db,
+    params.companyId,
+    params.throughPeriodCode,
+    params.fiscalYear,
+  );
   const code = normalizeCode(params.accountCode);
 
   const accountRes = await db.query<AccountRow>(
@@ -283,5 +325,208 @@ export async function getAccountDrilldown(
     totalDebit,
     totalCredit,
     naturalActivity,
+  };
+}
+
+export interface StatementsParams {
+  readonly companyId: string;
+  readonly throughPeriodCode: string;
+  readonly fiscalYear?: number | null;
+}
+
+/**
+ * Articulating statements (MASTER_PROMPT §4.5, §5.6; Spine G3): opening position + period activity
+ * → P&L, balance sheet, indirect cash flow, retained-earnings roll-forward, and the A1–A5 checks.
+ *
+ * Statements are YEAR-TO-DATE for the fiscal year of `throughPeriodCode`: activity runs from the
+ * year's first period through the requested period, and opening balances are the sheet
+ * contributions of every active posting strictly BEFORE that first period. A sub-year range would
+ * not articulate, because the unclosed earnings of the earlier months of the same year are still
+ * sitting in the P&L accounts rather than in retained earnings — the balance sheet would be short
+ * by exactly that amount. Both sides therefore come from the same immutable GL.
+ */
+export async function getFinancialStatements(
+  db: SqlExecutor,
+  params: StatementsParams,
+): Promise<FinancialStatements> {
+  const currency = await loadCompanyCurrency(db, params.companyId);
+  const scale = scaleForCurrency(currency);
+
+  const throughRow = await resolvePeriod(
+    db,
+    params.companyId,
+    params.throughPeriodCode,
+    params.fiscalYear,
+  );
+  const throughKey: PeriodKey = { fiscalYear: throughRow.fiscal_year, periodNo: throughRow.period_no };
+
+  const yearStartRes = await db.query<PeriodRow>(
+    `SELECT id, code, fiscal_year, period_no
+       FROM fiscal_period
+      WHERE company_id = $1 AND fiscal_year = $2
+      ORDER BY period_no ASC
+      LIMIT 1`,
+    [params.companyId, throughKey.fiscalYear],
+  );
+  const fromRow = yearStartRes.rows[0];
+  if (fromRow === undefined) {
+    throw new AppError('PERIOD_NOT_FOUND', {
+      userMessage: 'The fiscal year of the requested period has no periods.',
+      details: { periodCode: throughRow.code, fiscalYear: throughKey.fiscalYear },
+    });
+  }
+  const fromKey: PeriodKey = { fiscalYear: fromRow.fiscal_year, periodNo: fromRow.period_no };
+
+  const accountRes = await db.query<AccountRow>(
+    `SELECT id, code, name, type, normal_side, is_contra, statement_line_key
+       FROM account
+      WHERE company_id = $1 AND active = true
+      ORDER BY code ASC`,
+    [params.companyId],
+  );
+  const accounts: StatementAccountDef[] = accountRes.rows.map((row) => ({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    type: row.type as AccountType,
+    normalSide: row.normal_side as NormalSide,
+    isContra: row.is_contra,
+    statementLineKey: row.statement_line_key as StatementLineKey,
+  }));
+  const accountsById = new Map(accounts.map((account) => [account.id, account]));
+
+  const lineRes = await db.query<LineRow | (LineRow & { in_range: boolean })>(
+    `SELECT gl.entry_id, gl.account_id, gl.period_id, gl.debit::text AS debit, gl.credit::text AS credit,
+            (fp.fiscal_year > $2 OR (fp.fiscal_year = $2 AND fp.period_no >= $3)) AS in_range
+       FROM gl_line gl
+       JOIN gl_entry ge ON ge.id = gl.entry_id
+       JOIN fiscal_period fp ON fp.id = gl.period_id
+      WHERE gl.company_id = $1
+        AND ${activeBatchPredicate('ge')}
+        AND (fp.fiscal_year < $4 OR (fp.fiscal_year = $4 AND fp.period_no <= $5))
+      ORDER BY gl.entry_id ASC, gl.id ASC`,
+    [params.companyId, fromKey.fiscalYear, fromKey.periodNo, throughKey.fiscalYear, throughKey.periodNo],
+  );
+
+  const activity: GlLineFact[] = [];
+  const openingBalancesByKey = new Map<string, ReturnType<typeof money>>();
+  for (const row of lineRes.rows) {
+    const account = accountsById.get(row.account_id);
+    if (account === undefined) {
+      throw new AppError('INTERNAL_ERROR', {
+        userMessage: 'A posting references an account that is not active in this company.',
+        details: { accountId: row.account_id },
+      });
+    }
+    const debit = money(row.debit);
+    const credit = money(row.credit);
+    const inRange = (row as { in_range?: boolean }).in_range === true;
+    if (inRange) {
+      activity.push({
+        entryId: row.entry_id,
+        accountId: row.account_id,
+        periodId: row.period_id,
+        debit,
+        credit,
+      });
+      continue;
+    }
+    if (account.statementLineKey.startsWith('bs.')) {
+      const contribution = computeSheetContribution(account.type, debit, credit);
+      const prev = openingBalancesByKey.get(account.statementLineKey) ?? money('0');
+      openingBalancesByKey.set(account.statementLineKey, add(prev, contribution));
+    }
+  }
+
+  const bundle = buildArticulatingStatements({ accounts, openingBalancesByKey, periodGlLines: activity });
+
+  const toRecord = (map: ReadonlyMap<string, Decimal>): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const [key, value] of map.entries()) out[key] = serialize(value, scale);
+    return out;
+  };
+
+  const distributions = money(bundle.retainedEarnings.distributions);
+  const retainedEarnings = {
+    opening: serialize(bundle.retainedEarnings.opening, scale),
+    netIncome: serialize(bundle.retainedEarnings.netIncome, scale),
+    distributions: serialize(distributions, scale),
+    closingTotal: serialize(bundle.retainedEarnings.closingTotal, scale),
+    rollForwardValid: bundle.retainedEarnings.rollForwardValid,
+  };
+
+  const sourceRes = await db.query<Record<string, unknown>>(
+    `SELECT b.id AS "batchId", b.source_filename AS "sourceFilename", b.source_hash AS "sourceHash",
+            b.imported_at::text AS "importedAt"
+       FROM import_batch b
+      WHERE b.company_id = $1 AND b.status IN ('staged', 'committed')
+      ORDER BY b.imported_at ASC, b.id ASC`,
+    [params.companyId],
+  );
+
+  return {
+    companyId: params.companyId,
+    range: {
+      fromPeriodCode: fromRow.code,
+      throughPeriodCode: throughRow.code,
+      fiscalYear: fromKey.fiscalYear,
+    },
+    pnl: {
+      byKey: toRecord(bundle.pnl.byKey),
+      revenue: serialize(bundle.pnl.revenue, scale),
+      cogs: serialize(bundle.pnl.cogs, scale),
+      grossProfit: serialize(bundle.pnl.grossProfit, scale),
+      opex: serialize(bundle.pnl.opex, scale),
+      ebitda: serialize(bundle.pnl.ebitda, scale),
+      depreciation: serialize(bundle.pnl.depreciation, scale),
+      ebit: serialize(bundle.pnl.ebit, scale),
+      nonOperatingNet: serialize(bundle.pnl.nonOperatingNet, scale),
+      ebt: serialize(bundle.pnl.ebt, scale),
+      tax: serialize(bundle.pnl.tax, scale),
+      netIncome: serialize(bundle.pnl.netIncome, scale),
+    },
+    balanceSheet: {
+      byKey: toRecord(bundle.balanceSheet.byKey),
+      currentAssets: serialize(bundle.balanceSheet.currentAssets, scale),
+      nonCurrentAssets: serialize(bundle.balanceSheet.nonCurrentAssets, scale),
+      totalAssets: serialize(bundle.balanceSheet.totalAssets, scale),
+      currentLiabilities: serialize(bundle.balanceSheet.currentLiabilities, scale),
+      nonCurrentLiabilities: serialize(bundle.balanceSheet.nonCurrentLiabilities, scale),
+      totalLiabilities: serialize(bundle.balanceSheet.totalLiabilities, scale),
+      totalEquity: serialize(bundle.balanceSheet.totalEquity, scale),
+      totalLiabilitiesAndEquity: serialize(bundle.balanceSheet.totalLiabilitiesAndEquity, scale),
+      cashBalance: serialize(bundle.balanceSheet.cashBalance, scale),
+      balanceDelta: serialize(bundle.balanceSheet.balanceDelta, scale),
+      isBalanced: bundle.balanceSheet.isBalanced,
+    },
+    cashFlow: {
+      netIncome: serialize(bundle.cashFlow.netIncome, scale),
+      nonCashAddbacks: serialize(bundle.cashFlow.nonCashAddbacks, scale),
+      deltaWorkingCapitalCashImpact: serialize(bundle.cashFlow.deltaWorkingCapitalCashImpact, scale),
+      operatingCashFlow: serialize(bundle.cashFlow.operatingCashFlow, scale),
+      investingCashFlow: serialize(bundle.cashFlow.investingCashFlow, scale),
+      freeCashFlow: serialize(bundle.cashFlow.freeCashFlow, scale),
+      financingCashFlow: serialize(bundle.cashFlow.financingCashFlow, scale),
+      netCashChange: serialize(bundle.cashFlow.netCashChange, scale),
+      beginningCash: serialize(bundle.cashFlow.beginningCash, scale),
+      endingCash: serialize(bundle.cashFlow.endingCash, scale),
+    },
+    retainedEarnings,
+    articulation: {
+      valid: bundle.articulation.valid,
+      checks: bundle.articulation.checks.map((check) => ({
+        id: check.id,
+        name: check.name,
+        passed: check.passed,
+        delta: check.delta,
+        detail: check.detail,
+      })),
+    },
+    sources: sourceRes.rows.map((row) => ({
+      batchId: String(row['batchId']),
+      sourceFilename: String(row['sourceFilename']),
+      sourceHash: String(row['sourceHash']),
+      importedAt: String(row['importedAt']),
+    })),
   };
 }
