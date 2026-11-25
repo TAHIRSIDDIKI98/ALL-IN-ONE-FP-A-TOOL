@@ -90,6 +90,8 @@
 | `ci-process` | local `refs/pull/3/merge` checkout + `node scripts/work-integrity.mjs` | `1` | `2026-11-25T17:35:00Z` | **RED reproduced**: `S-COMMIT 739d44a: commit subject must follow conventional format: "Merge 3861410f… into 2ae6d728…"` + `commit body must cite its single WI-#### work item`. Cause: GitHub's synthetic PR-check merge subject was not in the existing platform-merge exemption. Fixed by DEC-011; rerun pending. |
 | `bundle-size` | `node scripts/bundle-size.mjs` | `0` | `2026-11-24T11:49:47Z` | `bundle-size green (initial JS: 120.64 KB gzip / 250.00 KB budget).` |
 
+| `ci-process` | CI run `45667643804` check-run annotation | `1` | `2026-11-25T17:44:00Z` | **RED**: `Unexpected root entry "verify-output.log" violates MASTER_PROMPT §3.3 / §8.1` (`Tests 1 failed | 153 passed (154)`). Fixed by DEC-013; rerun pending. |
+
 ---
 
 ## §Decisions
@@ -113,6 +115,8 @@
 | DEC-011 | 2026-11-25 | Extend the S-COMMIT platform-generated merge exemption to GitHub's synthetic PR-check subject `Merge <40-hex head> into <40-hex base>`; keep hand-made `Merge branch ...` commits in scope. | CI run `45665651628` failed verify in 7s after the history fix. Reproduced locally on `refs/pull/3/merge` (`739d44a`): `S-COMMIT 739d44a: commit subject must follow conventional format: "Merge 3861410… into 2ae6d72…"` plus the WI-body violation. The gate already exempts the other platform-written subject (`Merge pull request #N from …`); this is the same class, not a new waiver for authored commits. | (a) exempt all merge commits — rejected as gate weakening; (b) disable S-COMMIT in CI — rejected; (c) add exactly the second platform subject shape with a planted negative test — chosen. | N (implementation detail inside locked INT8) |
 
 | DEC-012 | 2026-11-25 | Promote `verify-output.log` failure lines to check-run annotations when the sandbox verify step fails. | CI run `45666254382` failed verify in 31s but the raw log host is unreachable from this sandbox and existing annotations only said `exit code 1`. §8.9/PR5 requires readable diagnostics before trusting or fixing a red run. | (a) guess the failing gate — rejected; (b) disable the gate — rejected; (c) reuse the existing annotation bridge on the verify log — chosen. | N (diagnostics-only workflow fix) |
+
+| DEC-013 | 2026-11-25 | Write CI `verify-output.log` and `playwright-output.log` to `$RUNNER_TEMP`, outside the checkout. | CI run `45667643804` failed `scripts/repo-layout.test.ts`: `Unexpected root entry "verify-output.log" violates MASTER_PROMPT §3.3 / §8.1`. The diagnosis bridge added in DEC-012 itself created a forbidden root file before vitest ran. | (a) allow the file in the layout allowlist — rejected, it weakens a §3.3 gate for a CI artifact; (b) stop capturing logs — rejected, red runs become undiagnosable; (c) capture outside the checkout and point annotations/artifacts there — chosen. | N (CI artifact location only) |
 
 ---
 

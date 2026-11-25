@@ -35,13 +35,13 @@ jobs:
           CI: 'true'
         run: |
           set -o pipefail
-          npm run verify | tee verify-output.log
+          npm run verify | tee "$RUNNER_TEMP/verify-output.log"
 
       # The raw log host is not reachable from every environment, so promote the failing gate's
       # own lines to check-run annotations just as the E2E step does (§8.9/PR5).
       - name: Publish sandbox gate failure annotations
         if: failure()
-        run: node scripts/publish-e2e-failure.mjs verify-output.log 'Sandbox verify'
+        run: node scripts/publish-e2e-failure.mjs "$RUNNER_TEMP/verify-output.log" 'Sandbox verify'
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -51,7 +51,7 @@ jobs:
           CI: 'true'
         run: |
           set -o pipefail
-          npx playwright test --config=e2e/playwright.config.ts 2>&1 | tee playwright-output.log
+          npx playwright test --config=e2e/playwright.config.ts 2>&1 | tee "$RUNNER_TEMP/playwright-output.log"
 
       # Artifact download is not reachable from every environment, so on failure the harness
       # promotes its own error lines to check-run annotations, which the REST API can always read.
@@ -59,7 +59,7 @@ jobs:
         if: failure()
         run: |
           set -o pipefail
-          node scripts/publish-e2e-failure.mjs playwright-output.log
+          node scripts/publish-e2e-failure.mjs "$RUNNER_TEMP/playwright-output.log"
 
       - name: Upload CI diagnostics & test reports (always, including failure — PR5)
         if: always()
@@ -67,7 +67,8 @@ jobs:
         with:
           name: ci-diagnostics-${{ github.run_id }}
           path: |
-            verify-output.log
+            ${{ runner.temp }}/verify-output.log
+            ${{ runner.temp }}/playwright-output.log
             playwright-report/
             test-results/
           if-no-files-found: warn
