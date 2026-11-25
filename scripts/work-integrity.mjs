@@ -315,7 +315,11 @@ function checkTaskboardAttestationsAndEvidence(rootDir) {
 const COMMIT_BASELINE_REL = join('scripts', 'commit-baseline.json');
 const CONVENTIONAL_SUBJECT_RE = /^(?:feat|fix|test|docs|chore)\([a-z0-9-]+\):\s+\S+/;
 const WI_CITATION_RE = /\bWI-\d{4}[A-Z]?\b/;
-const GITHUB_MERGE_SUBJECT_RE = /^Merge pull request #\d+ from \S+/;
+// GitHub writes two machine-only subject shapes: the merge of a PR into its base and the
+// synthetic PR-check commit `Merge <head sha> into <base sha>`. Neither carries an authored work
+// claim. Hand-made `Merge branch ...` commits remain in scope.
+const GITHUB_MERGE_SUBJECT_RE =
+  /^(?:Merge pull request #\d+ from \S+|Merge [0-9a-f]{40} into [0-9a-f]{40})$/;
 
 function commitHygieneViolations(subject, body) {
   const violations = [];

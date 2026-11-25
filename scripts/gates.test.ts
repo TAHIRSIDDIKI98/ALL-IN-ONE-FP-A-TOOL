@@ -359,6 +359,12 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
       return ws;
     };
     expect(runGate('scripts/work-integrity.mjs', mergeRepo('Merge pull request #7 from owner/topic')).status).toBe(0);
+    // GitHub's PR check run checks out a synthetic `Merge <sha> into <sha>` commit; it is
+    // platform-generated in exactly the same way as the `Merge pull request #N` commit.
+    expect(
+      runGate('scripts/work-integrity.mjs', mergeRepo(`Merge ${'a'.repeat(40)} into ${'b'.repeat(40)}`)).status,
+    ).toBe(0);
+
     const authoredMerge = runGate('scripts/work-integrity.mjs', mergeRepo('Merge branch topic'));
     expect(authoredMerge.status).toBe(1);
     expect(authoredMerge.stderr).toContain('commit subject must follow conventional format');
