@@ -212,4 +212,393 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(statements.articulation.valid).toBe(true);
     expect(statements.sources[0]?.sourceFilename).toBe('cash_sale.csv');
   });
+
+  it('previews an import on the company-scoped route with only the CSV and string money', async () => {
+    const { fetchImpl, calls } = fakeFetch(() => ({
+      status: 200,
+      body: {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        rowsIn: 3,
+        entryCount: 1,
+        importedCount: 2,
+        quarantinedCount: 1,
+        duplicatesDetected: 0,
+        totalDebits: '2500.00',
+        totalCredits: '2500.00',
+        imported: [
+          {
+            rowNo: 2,
+            entryRef: 'JE-1',
+            postingDate: '2026-01-04',
+            accountCode: '001200',
+            description: 'Bank',
+            debit: '2500.00',
+            credit: '0.00',
+          },
+        ],
+        quarantined: [{ rowNo: 3, reason: 'UNMAPPED_ACCOUNT:9999' }],
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const preview = await client.previewImport('11111111-1111-4111-8111-111111111111', {
+      csvText: 'entry_ref,date,account_code\nJE-1,2026-01-04,001200\n',
+    });
+
+    expect(calls[0]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/import/preview',
+    );
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.headers['authorization']).toBe('Bearer token-123');
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({
+      csvText: 'entry_ref,date,account_code\nJE-1,2026-01-04,001200\n',
+    });
+    expect(preview.importedCount + preview.quarantinedCount).toBe(preview.rowsIn);
+    expect(preview.totalDebits).toBe('2500.00');
+    expect(preview.quarantined[0]?.reason).toBe('UNMAPPED_ACCOUNT:9999');
+  });
+
+  it('commits an import on the company-scoped route and keeps the row accounting verbatim', async () => {
+    const { fetchImpl, calls } = fakeFetch(() => ({
+      status: 201,
+      body: {
+        batchId: '44444444-4444-4444-8444-444444444444',
+        replacedBatchId: '55555555-5555-4555-8555-555555555555',
+        rowsIn: 11,
+        importedCount: 2,
+        quarantinedCount: 9,
+        duplicatesDetected: 0,
+        totalDebits: '2500.00',
+        totalCredits: '2500.00',
+        entryCount: 1,
+        sourceHash: 'b'.repeat(64),
+        quarantined: [{ rowNo: 4, reason: 'UNBALANCED_ENTRY:JE-2' }],
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const committed = await client.commitImport('11111111-1111-4111-8111-111111111111', {
+      kind: 'actuals',
+      sourceFilename: 'erp_mixed_gl.csv',
+      csvText: 'x',
+    });
+
+    expect(calls[0]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/import/commit',
+    );
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({
+      kind: 'actuals',
+      sourceFilename: 'erp_mixed_gl.csv',
+      csvText: 'x',
+    });
+    expect(committed.importedCount + committed.quarantinedCount).toBe(committed.rowsIn);
+    expect(committed.replacedBatchId).toBe('55555555-5555-4555-8555-555555555555');
+    expect(committed.entryCount).toBe(1);
+  });
+
+  it('reads the trial balance with optional period scoping and preserves leading-zero account codes', async () => {
+    const { fetchImpl, calls } = fakeFetch(() => ({
+      status: 200,
+      body: {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        throughPeriodCode: 'P03',
+        rows: [
+          {
+            accountId: '66666666-6666-4666-8666-666666666666',
+            code: '001200',
+            name: 'Operating bank account',
+            type: 'asset',
+            normalSide: 'debit',
+            statementLineKey: 'bs.cash',
+            totalDebit: '2500.00',
+            totalCredit: '0.00',
+            naturalActivity: '2500.00',
+            sheetContribution: '2500.00',
+          },
+        ],
+        totalDebit: '2500.00',
+        totalCredit: '2500.00',
+        isBalanced: true,
+        unbalancedEntryIds: [],
+        sources: [
+          {
+            batchId: '44444444-4444-4444-8444-444444444444',
+            sourceFilename: 'erp_mixed_gl.csv',
+            sourceHash: 'c'.repeat(64),
+            importedAt: '2026-11-25T12:00:00.000Z',
+          },
+        ],
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const scoped = await client.getTrialBalance('11111111-1111-4111-8111-111111111111', {
+      period: 'P03',
+    });
+    const unscoped = await client.getTrialBalance('11111111-1111-4111-8111-111111111111');
+
+    expect(calls[0]?.url).toBe('/api/companies/11111111-1111-4111-8111-111111111111/trial-balance?period=P03');
+    expect(calls[1]?.url).toBe('/api/companies/11111111-1111-4111-8111-111111111111/trial-balance');
+    expect(scoped.rows[0]?.code).toBe('001200');
+    expect(typeof scoped.rows[0]?.naturalActivity).toBe('string');
+    expect(scoped.isBalanced).toBe(true);
+    expect(unscoped.sources[0]?.sourceFilename).toBe('erp_mixed_gl.csv');
+  });
+
+  it('drills to source with the account code URL-encoded and reports the typed server failure', async () => {
+    const drillBody = {
+      companyId: '11111111-1111-4111-8111-111111111111',
+      accountCode: '001200',
+      accountName: 'Operating bank account',
+      throughPeriodCode: 'P03',
+      rows: [
+        {
+          entryId: '77777777-7777-4777-8777-777777777777',
+          entryDate: '2026-01-04',
+          sourceRef: 'JE-1',
+          periodCode: 'P01',
+          debit: '2500.00',
+          credit: '0.00',
+          batchId: '44444444-4444-4444-8444-444444444444',
+          sourceFilename: 'erp_mixed_gl.csv',
+          sourceHash: 'd'.repeat(64),
+          rowNo: 2,
+          rawCells: ['JE-1', '2026-01-04', '001200', 'Bank', '2500.00', ''],
+        },
+      ],
+      totalDebit: '2500.00',
+      totalCredit: '0.00',
+      naturalActivity: '2500.00',
+    };
+    let call = 0;
+    const { fetchImpl, calls } = fakeFetch(() => {
+      call += 1;
+      return call === 1
+        ? { status: 200, body: drillBody }
+        : {
+            status: 422,
+            body: {
+              error: {
+                code: 'PERIOD_NOT_FOUND',
+                userMessage: 'No fiscal period matches P99.',
+                httpStatus: 422,
+                details: { period: 'P99' },
+              },
+            },
+          };
+    });
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const drill = await client.getAccountDrilldown(
+      '11111111-1111-4111-8111-111111111111',
+      '001200',
+      { period: 'P03' },
+    );
+
+    expect(calls[0]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/accounts/001200/drill?period=P03',
+    );
+    expect(drill.totalDebit).toBe('2500.00');
+    expect(drill.rows[0]?.rawCells).toHaveLength(6);
+    expect(drill.rows[0]?.rowNo).toBe(2);
+
+    let caught: unknown = null;
+    try {
+      await client.getAccountDrilldown('11111111-1111-4111-8111-111111111111', '001200', {
+        period: 'P99',
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ApiClientError);
+    expect((caught as ApiClientError).code).toBe('PERIOD_NOT_FOUND');
+    expect((caught as ApiClientError).httpStatus).toBe(422);
+  });
+
+  it('reads the chart of accounts and imports a chart CSV through the company-scoped routes', async () => {
+    const account = {
+      code: '001200',
+      name: 'Operating bank account',
+      type: 'asset',
+      normalSide: 'debit',
+      isContra: false,
+      isPostable: true,
+      statementLineKey: 'bs.asset.cash',
+      parentCode: null,
+      active: true,
+      version: 1,
+    };
+    let call = 0;
+    const { fetchImpl, calls } = fakeFetch(() => {
+      call += 1;
+      return call === 1
+        ? { status: 200, body: { companyId: '11111111-1111-4111-8111-111111111111', accounts: [account] } }
+        : {
+            status: 201,
+            body: {
+              companyId: '11111111-1111-4111-8111-111111111111',
+              rowCount: 1,
+              inserted: 1,
+              updated: 0,
+              accounts: [account],
+            },
+          };
+    });
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const chart = await client.getChart('11111111-1111-4111-8111-111111111111');
+    const imported = await client.importChart('11111111-1111-4111-8111-111111111111', {
+      csvText: 'code,name,type,normal_side,statement_line_key\n001200,Bank,asset,debit,bs.asset.cash\n',
+    });
+
+    expect(calls[0]?.url).toBe('/api/companies/11111111-1111-4111-8111-111111111111/accounts');
+    expect(calls[1]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/chart/import',
+    );
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({
+      csvText: 'code,name,type,normal_side,statement_line_key\n001200,Bank,asset,debit,bs.asset.cash\n',
+    });
+    // Leading zeros survive the wire in both directions.
+    expect(chart.accounts[0]?.code).toBe('001200');
+    expect(imported.inserted).toBe(1);
+    expect(imported.rowCount).toBe(1);
+    expect(imported.accounts[0]?.statementLineKey).toBe('bs.asset.cash');
+  });
+
+  it('reads and imports a fiscal-year budget through the company-scoped routes', async () => {
+    const budget = {
+      companyId: '11111111-1111-4111-8111-111111111111',
+      fiscalYear: 2026,
+      scenarioId: null,
+      scenarioName: null,
+      planVersionId: null,
+      versionNo: null,
+      lineCount: 0,
+      totalAmount: '0.00',
+      lines: [],
+      accounts: [],
+    };
+    let call = 0;
+    const { fetchImpl, calls } = fakeFetch(() => {
+      call += 1;
+      return call === 1
+        ? { status: 200, body: budget }
+        : { status: 201, body: { ...budget, rowCount: 1, lineCount: 1, totalAmount: '12500.00' } };
+    });
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    await client.getBudget('11111111-1111-4111-8111-111111111111', { fiscalYear: 2026 });
+    const imported = await client.importBudget('11111111-1111-4111-8111-111111111111', {
+      csvText: 'account_code,period,amount\n4000,P01,12500.00\n',
+      fiscalYear: 2026,
+      sourceFilename: 'fy2026-budget.csv',
+    });
+
+    expect(calls[0]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/budget?year=2026',
+    );
+    expect(calls[1]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/budget/import',
+    );
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({
+      csvText: 'account_code,period,amount\n4000,P01,12500.00\n',
+      fiscalYear: 2026,
+      sourceFilename: 'fy2026-budget.csv',
+    });
+    expect(imported.totalAmount).toBe('12500.00');
+    expect(imported.rowCount).toBe(1);
+  });
+
+  it('reads Budget-vs-Actual for a period without inventing a plan for unplanned accounts', async () => {
+    const report = {
+      companyId: '11111111-1111-4111-8111-111111111111',
+      fiscalYear: 2026,
+      throughPeriodCode: 'P04',
+      scenarioId: '22222222-2222-4222-8222-222222222222',
+      scenarioName: 'Budget FY2026',
+      planVersionId: '33333333-3333-4333-8333-333333333333',
+      versionNo: 2,
+      hasPlan: true,
+      rows: [
+        {
+          accountCode: '4000',
+          accountName: 'Service revenue',
+          accountType: 'revenue',
+          actual: '750.25',
+          plan: '38000.00',
+          varianceAmount: '-37249.75',
+          variancePctKind: 'computed',
+          variancePctFormatted: '-98.03%',
+          favorability: 'unfavorable',
+        },
+        {
+          accountCode: '1000',
+          accountName: 'Cash',
+          accountType: 'asset',
+          actual: '750.25',
+          plan: null,
+          varianceAmount: null,
+          variancePctKind: 'null',
+          variancePctFormatted: null,
+          favorability: 'na',
+        },
+      ],
+      totals: {
+        actual: '1500.50',
+        plan: '38000.00',
+        unplannedActual: '750.25',
+        varianceAmount: '-37249.75',
+        plannedRows: 1,
+        unplannedRows: 1,
+        favorable: 0,
+        unfavorable: 1,
+        neutral: 0,
+        na: 1,
+      },
+      byType: [{ accountType: 'revenue', actual: '750.25', plan: '38000.00', varianceAmount: '-37249.75' }],
+    };
+    const { fetchImpl, calls } = fakeFetch(() => ({ status: 200, body: report }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const bva = await client.getBva('11111111-1111-4111-8111-111111111111', {
+      period: 'P04',
+      fiscalYear: 2026,
+    });
+
+    expect(calls[0]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/bva?period=P04&year=2026',
+    );
+    expect(bva.rows[0]?.varianceAmount).toBe('-37249.75');
+    expect(bva.rows[1]?.plan).toBeNull();
+    expect(bva.rows[1]?.favorability).toBe('na');
+    expect(bva.totals.unplannedActual).toBe('750.25');
+  });
+
+  it('surfaces a rejected chart file with its row-level issues so the screen can show them verbatim', async () => {
+    const { fetchImpl } = fakeFetch(() => ({
+      status: 422,
+      body: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          userMessage: 'The chart file has 2 rejected row(s); nothing was written.',
+          httpStatus: 422,
+          details: { issues: ['row 3: INVALID_TYPE:bank', 'row 4: DUPLICATE_CODE:1000'] },
+        },
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    let caught: unknown = null;
+    try {
+      await client.importChart('11111111-1111-4111-8111-111111111111', { csvText: 'code\n1000' });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ApiClientError);
+    expect((caught as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((caught as ApiClientError).details['issues']).toEqual([
+      'row 3: INVALID_TYPE:bank',
+      'row 4: DUPLICATE_CODE:1000',
+    ]);
+  });
 });

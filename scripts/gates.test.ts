@@ -202,98 +202,170 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     expect(cleanRepo.status).toBe(0);
   });
 
-  it('S-COMMIT requires conventional subjects + WI citation, and honours exactly one reason-recorded imported-history baseline', () => {
-    const ws = makeTempWorkspace();
-    writeFileSync(join(ws, 'TASKBOARD.md'), '## §Decisions\n| DEC-005 | 2026-11-25 | imported baseline | x | x | Y |\n');
-
-    const git = (args: string[]) => {
-      const res = spawnSync('git', args, { cwd: ws, encoding: 'utf8' });
-      expect(res.status).toBe(0);
+  it('S-COMMIT enforces conventional subjects + WI citation after the recorded boundary and rejects a boundary that hides a violation', () => {
+    const repo = (
+      commits: readonly { readonly subject: string; readonly body?: string }[],
+    ): { readonly ws: string; readonly hashes: readonly string[] } => {
+      const ws = makeTempWorkspace();
+      writeFileSync(
+        join(ws, 'TASKBOARD.md'),
+        '## \u00a7Decisions\n| DEC-007 | 2026-11-25 | s-commit enforcement boundary | ratified | \u2014 | Y |\n',
+      );
+      const run = (args: string[]) => spawnSync('git', args, { cwd: ws, encoding: 'utf8' });
+      expect(run(['init', '-q']).status).toBe(0);
+      const hashes: string[] = [];
+      for (const commit of commits) {
+        const args = [
+          '-c',
+          'user.email=gate@test.local',
+          '-c',
+          'user.name=Gate Test',
+          'commit',
+          '--allow-empty',
+          '-m',
+          commit.subject,
+        ];
+        if (commit.body !== undefined) args.push('-m', commit.body);
+        expect(run(args).status).toBe(0);
+        hashes.push(run(['rev-parse', 'HEAD']).stdout.trim());
+      }
+      return { ws, hashes };
     };
-    git(['init', '-q']);
-    git(['-c', 'user.email=gate@test.local', '-c', 'user.name=Gate Test', 'commit', '--allow-empty', '-m', 'chore: integrate Vite middleware into custom server']);
-    const badHash = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ws, encoding: 'utf8' }).stdout.trim();
+    const writeBaseline = (ws: string, body: unknown): void => {
+      mkdirSync(join(ws, 'scripts'), { recursive: true });
+      writeFileSync(join(ws, 'scripts', 'commit-baseline.json'), JSON.stringify(body));
+    };
+    const BOUNDARY_REASON =
+      'Pre-codex history predates S-COMMIT and is published history that \u00a78.9 forbids rewriting.';
 
-    // 1. A non-conventional commit with no WI citation is red.
-    const red = runGate('scripts/work-integrity.mjs', ws);
+    // 1. A compliant history with a compliant boundary is green.
+    const clean = repo([
+      { subject: 'chore(integrity): enforce the work-integrity codex', body: 'WI-0005C evidence' },
+      { subject: 'feat(spine): add persistence', body: 'WI-0012 evidence' },
+    ]);
+    writeBaseline(clean.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: clean.hashes[0],
+      note: BOUNDARY_REASON,
+    });
+    expect(runGate('scripts/work-integrity.mjs', clean.ws).status).toBe(0);
+
+    // 2. A commit AFTER the boundary that breaks either rule is red.
+    const dirty = repo([
+      { subject: 'chore(integrity): enforce the work-integrity codex', body: 'WI-0005C evidence' },
+      { subject: 'REFRESH' },
+    ]);
+    writeBaseline(dirty.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: dirty.hashes[0],
+      note: BOUNDARY_REASON,
+    });
+    const red = runGate('scripts/work-integrity.mjs', dirty.ws);
     expect(red.status).toBe(1);
     expect(red.stderr).toContain('commit subject must follow conventional format');
     expect(red.stderr).toContain('commit body must cite its single WI-#### work item');
 
-    // 2. The single reason-recorded baseline entry (citing a real DEC) turns it green.
-    mkdirSync(join(ws, 'scripts'), { recursive: true });
-    const baselinePath = join(ws, 'scripts', 'commit-baseline.json');
-    writeFileSync(
-      baselinePath,
-      JSON.stringify({
-        decision: 'DEC-005',
-        exempt: [{ hash: badHash, reason: 'Repository import commit predating S-COMMIT enforcement.' }],
-      }),
-    );
-    const green = runGate('scripts/work-integrity.mjs', ws);
-    expect(green.status).toBe(0);
+    // 3. Pointing the boundary AT the violating commit cannot hide it: the boundary must comply.
+    writeBaseline(dirty.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: dirty.hashes[1],
+      note: BOUNDARY_REASON,
+    });
+    const selfBoundary = runGate('scripts/work-integrity.mjs', dirty.ws);
+    expect(selfBoundary.status).toBe(1);
+    expect(selfBoundary.stderr).toContain('S-COMMIT boundary');
+    expect(selfBoundary.stderr).toContain('commit subject must follow conventional format');
 
-    // 3. Baseline citing a decision absent from TASKBOARD.md is red.
-    writeFileSync(
-      baselinePath,
-      JSON.stringify({
-        decision: 'DEC-777',
-        exempt: [{ hash: badHash, reason: 'Repository import commit predating S-COMMIT enforcement.' }],
-      }),
-    );
-    const unknownDecision = runGate('scripts/work-integrity.mjs', ws);
-    expect(unknownDecision.status).toBe(1);
-    expect(unknownDecision.stderr).toContain('does not appear in TASKBOARD.md');
-
-    // 4. A stale (non-ancestor) exemption is red.
-    writeFileSync(
-      baselinePath,
-      JSON.stringify({
-        decision: 'DEC-005',
-        exempt: [
-          {
-            hash: 'f'.repeat(40),
-            reason: 'Repository import commit predating S-COMMIT enforcement.',
-          },
-        ],
-      }),
-    );
-    const stale = runGate('scripts/work-integrity.mjs', ws);
+    // 4. A boundary that is not an ancestor of HEAD is red (history rewritten under the gate).
+    writeBaseline(clean.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: 'f'.repeat(40),
+      note: BOUNDARY_REASON,
+    });
+    const stale = runGate('scripts/work-integrity.mjs', clean.ws);
     expect(stale.status).toBe(1);
     expect(stale.stderr).toContain('is not an ancestor of HEAD');
 
-    // 5. Bulk exemptions are rejected: future work must fix forward.
-    mkdirSync(join(ws, 'src'), { recursive: true });
-    writeFileSync(join(ws, 'src', 'a.ts'), 'export const a = 1;\n');
-    const compliant = (subject: string) =>
-      spawnSync(
-        'git',
-        ['-c', 'user.email=gate@test.local', '-c', 'user.name=Gate Test', 'commit', '--allow-empty', '-m', subject, '-m', 'WI-0001 evidence'],
-        { cwd: ws, encoding: 'utf8' },
-      );
-    expect(
-      spawnSync('git', ['add', '.'], { cwd: ws, encoding: 'utf8' }).status,
-    ).toBe(0);
-    expect(compliant('fix(integrity): widen the commit hygiene gate').status).toBe(0);
-    const secondHash = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ws, encoding: 'utf8' }).stdout.trim();
-
-    writeFileSync(
-      baselinePath,
-      JSON.stringify({
-        decision: 'DEC-005',
-        exempt: [
-          { hash: badHash, reason: 'Repository import commit predating S-COMMIT enforcement.' },
-          { hash: secondHash, reason: 'Repository import commit predating S-COMMIT enforcement.' },
-        ],
-      }),
+    // 5. A malformed boundary hash, a missing rationale, or an undecided boundary are all red.
+    writeBaseline(clean.ws, { decision: 'DEC-007', enforcedFrom: 'abc', note: BOUNDARY_REASON });
+    expect(runGate('scripts/work-integrity.mjs', clean.ws).stderr).toContain(
+      'must declare a full 40-character lowercase enforcedFrom commit hash',
     );
-    const bulk = runGate('scripts/work-integrity.mjs', ws);
-    expect(bulk.status).toBe(1);
-    expect(bulk.stderr).toContain('at most 1 imported commit may be exempted');
+    writeBaseline(clean.ws, { decision: 'DEC-007', enforcedFrom: clean.hashes[0], note: 'short' });
+    expect(runGate('scripts/work-integrity.mjs', clean.ws).stderr).toContain(
+      'must record why the enforcement boundary starts there',
+    );
 
-    // 6. In a repository whose entire history is compliant, no baseline is needed and the gate is green.
+    // 6. A boundary citing a decision that is absent from TASKBOARD.md is red.
+    const undecided = repo([
+      { subject: 'chore(integrity): enforce the work-integrity codex', body: 'WI-0005C evidence' },
+    ]);
+    writeBaseline(undecided.ws, {
+      decision: 'DEC-777',
+      enforcedFrom: undecided.hashes[0],
+      note: BOUNDARY_REASON,
+    });
+    const unknownDecision = runGate('scripts/work-integrity.mjs', undecided.ws);
+    expect(unknownDecision.status).toBe(1);
+    expect(unknownDecision.stderr).toContain('does not appear in TASKBOARD.md');
+
+    // 7. A GitHub pull-request merge commit is platform-generated and out of scope; a hand-made
+    //    merge commit is authored and must still comply.
+    const mergeRepo = (mergeMessage: string): string => {
+      const ws = makeTempWorkspace();
+      writeFileSync(
+        join(ws, 'TASKBOARD.md'),
+        '## \u00a7Decisions\n| DEC-007 | 2026-11-25 | s-commit enforcement boundary | ratified | \u2014 | Y |\n',
+      );
+      const run = (args: string[]) => spawnSync('git', args, { cwd: ws, encoding: 'utf8' });
+      expect(run(['init', '-q']).status).toBe(0);
+      const commit = (subject: string) =>
+        run([
+          '-c',
+          'user.email=gate@test.local',
+          '-c',
+          'user.name=Gate Test',
+          'commit',
+          '--allow-empty',
+          '-m',
+          subject,
+          '-m',
+          'WI-0005C evidence',
+        ]);
+      expect(commit('chore(integrity): enforce the work-integrity codex').status).toBe(0);
+      const boundary = run(['rev-parse', 'HEAD']).stdout.trim();
+      expect(run(['checkout', '-q', '-b', 'topic']).status).toBe(0);
+      expect(commit('feat(spine): add a topic branch').status).toBe(0);
+      expect(run(['checkout', '-q', '-']).status).toBe(0);
+      expect(
+        run([
+          '-c',
+          'user.email=gate@test.local',
+          '-c',
+          'user.name=Gate Test',
+          'merge',
+          '--no-ff',
+          '-q',
+          '-m',
+          mergeMessage,
+          'topic',
+        ]).status,
+      ).toBe(0);
+      mkdirSync(join(ws, 'scripts'), { recursive: true });
+      writeFileSync(
+        join(ws, 'scripts', 'commit-baseline.json'),
+        JSON.stringify({ decision: 'DEC-007', enforcedFrom: boundary, note: BOUNDARY_REASON }),
+      );
+      return ws;
+    };
+    expect(runGate('scripts/work-integrity.mjs', mergeRepo('Merge pull request #7 from owner/topic')).status).toBe(0);
+    const authoredMerge = runGate('scripts/work-integrity.mjs', mergeRepo('Merge branch topic'));
+    expect(authoredMerge.status).toBe(1);
+    expect(authoredMerge.stderr).toContain('commit subject must follow conventional format');
+
+    // 8. In a repository whose entire history is compliant, no baseline is needed and the gate is green.
     const cleanWs = makeTempWorkspace();
-    writeFileSync(join(cleanWs, 'TASKBOARD.md'), '## §Decisions\n| DEC-005 | 2026-11-25 | imported baseline | x | x | Y |\n');
+    writeFileSync(join(cleanWs, 'TASKBOARD.md'), '## \u00a7Decisions\n| DEC-007 | 2026-11-25 | s-commit enforcement boundary | ratified | \u2014 | Y |\n');
     const cleanGit = (args: string[]) => {
       const res = spawnSync('git', args, { cwd: cleanWs, encoding: 'utf8' });
       expect(res.status).toBe(0);

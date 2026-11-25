@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { GeneratedFiscalYear } from '../../core/calendar/index.js';
-import type { MessyImportResult } from '../../core/import/index.js';
 import type { ScreenUiState } from '../../shared/spine.js';
 
 export interface WorkspaceCompany {
@@ -22,7 +21,6 @@ export interface WorkspaceStoreState {
   readonly sessionError: string | null;
   readonly userEmail: string | null;
   readonly company: WorkspaceCompany | null;
-  readonly lastImport: MessyImportResult | null;
   readonly mappingDecisions: Readonly<Record<string, string>>;
   readonly quarantinedMappings: Readonly<Record<string, string>>;
   readonly setAuthToken: (token: string | null) => void;
@@ -31,7 +29,6 @@ export interface WorkspaceStoreState {
   readonly signInSuccess: (email: string) => void;
   readonly signOut: () => void;
   readonly saveCompany: (company: WorkspaceCompany) => void;
-  readonly saveImportResult: (result: MessyImportResult) => void;
   readonly mapAccountCode: (sourceCode: string, targetAccountCode: string) => void;
   readonly quarantineAccountCode: (sourceCode: string, reason: string) => void;
 }
@@ -42,7 +39,6 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
   sessionError: null,
   userEmail: null,
   company: null,
-  lastImport: null,
   mappingDecisions: {},
   quarantinedMappings: {},
 
@@ -57,12 +53,10 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       sessionError: null,
       userEmail: null,
       company: null,
-      lastImport: null,
-      mappingDecisions: {},
+          mappingDecisions: {},
       quarantinedMappings: {},
     }),
   saveCompany: (company: WorkspaceCompany) => set({ company }),
-  saveImportResult: (result: MessyImportResult) => set({ lastImport: result }),
   mapAccountCode: (sourceCode: string, targetAccountCode: string) =>
     set((prev) => ({
       mappingDecisions: { ...prev.mappingDecisions, [sourceCode]: targetAccountCode },

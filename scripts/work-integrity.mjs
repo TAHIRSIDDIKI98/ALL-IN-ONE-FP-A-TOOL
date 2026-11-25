@@ -8,7 +8,8 @@
  *  - S-DEAD-CONTROL (INT4): every JSX `<button>` either has `type="submit"` inside a form or a real `onClick` handler (never `() => {}` no-op, never dead disabled "coming soon" chrome)
  *  - S-TEST-INTEGRITY (INT5): every `it(...)` / `test(...)` block contains at least one real `expect(...)` assertion
  *  - S-SWALLOW & S-DEBUG (INT7): zero empty `catch {}` blocks and zero `console.log` / `debugger` in product code (`/core`, `/shared`, `/server`, `/src`)
- *  - S-COMMIT (INT8): git commits on `main` claiming `feat`/`fix` never contain "wip"/"todo"/"should work" and carry WI evidence
+ *  - S-COMMIT (INT8): every authored commit after the recorded codex boundary is conventional and
+ *    carries its single WI id (GitHub pull-request merge commits and pre-codex history are out of scope)
  *  - INT1 & INT9: every `VERIFIED` row in TASKBOARD.md §Work Items has non-empty pasted evidence AND a corresponding verbatim §13.9 attestation in TASKBOARD.md §Attestations
  *  - S-CUTLINE (INT11): bans out-of-phase directories/files (`consolidation`, `monte-carlo`, `marketplace`, `ai-chat`, etc.) during M0/M1
  *  - S-RATCHET (INT6, INT13): verifies test file count, `it()` count, assertion count, and `/core` source-to-test ratio never decrease against `scripts/integrity-ratchet.json`.
@@ -295,32 +296,53 @@ function checkTaskboardAttestationsAndEvidence(rootDir) {
 }
 
 /**
- * Imported-history exemptions for S-COMMIT (INT8).
+ * S-COMMIT (INT8) scope: the commit-hygiene rule governs commits AUTHORED AFTER the
+ * Work-Integrity Codex took effect (`scripts/commit-baseline.json` -> `enforcedFrom`).
  *
- * A repository-import/squash commit created before this gate was enforced on the history
- * cannot be amended without rewriting published history (MASTER_PROMPT §8.9 / §13.4-F9).
- * Exactly such commits — and no others — may be exempted here, and only when:
- *   - the file cites the owner decision (`DEC-###`) that approved the exemption,
- *   - that decision id is actually present in TASKBOARD.md,
- *   - each entry carries a full 40-hex hash plus a written reason,
- *   - the exempt commit is a real ancestor of HEAD (stale exemptions are rejected),
- *   - at most MAX_BASELINE_EXEMPTIONS entries exist, so future work can never be exempted
- *     in bulk — it must fix forward with compliant commits.
+ * Two classes of commit are structurally out of scope, and neither can widen the rule:
+ *   - history at or before the recorded enforcement boundary, because the codex did not exist
+ *     yet and MASTER_PROMPT §8.9 / §13.4-F9 forbid rewriting published history;
+ *   - GitHub-generated pull-request merge commits, because the hosting platform writes their
+ *     message and it can carry neither a conventional subject nor a work item.
+ *
+ * The boundary cannot be used to hide a violation:
+ *   - it must cite the owner decision (`DEC-###`) and that decision must be in TASKBOARD.md;
+ *   - it must be a full 40-hex hash that is a real ancestor of HEAD;
+ *   - the boundary commit ITSELF must satisfy S-COMMIT, so a non-compliant commit can never
+ *     become the boundary (moving the boundary forward over green commits changes nothing,
+ *     because every commit newer than it is checked).
  */
 const COMMIT_BASELINE_REL = join('scripts', 'commit-baseline.json');
-const MAX_BASELINE_EXEMPTIONS = 1;
+const CONVENTIONAL_SUBJECT_RE = /^(?:feat|fix|test|docs|chore)\([a-z0-9-]+\):\s+\S+/;
+const WI_CITATION_RE = /\bWI-\d{4}[A-Z]?\b/;
+const GITHUB_MERGE_SUBJECT_RE = /^Merge pull request #\d+ from \S+/;
+
+function commitHygieneViolations(subject, body) {
+  const violations = [];
+  if (/\b(?:wip|fixup!|squash!)\b/i.test(subject)) {
+    violations.push(`banned WIP/fixup commit subject "${subject}"`);
+  }
+  if (!CONVENTIONAL_SUBJECT_RE.test(subject)) {
+    violations.push(`commit subject must follow conventional format: "${subject}"`);
+  }
+  if (!WI_CITATION_RE.test(body)) {
+    violations.push('commit body must cite its single WI-#### work item');
+  }
+  return violations;
+}
 
 function loadCommitBaseline(rootDir, violations) {
   const baselinePath = join(rootDir, COMMIT_BASELINE_REL);
-  const exempt = new Map();
-  if (!existsSync(baselinePath)) return { decision: null, exempt };
+  if (!existsSync(baselinePath)) {
+    return { decision: null, enforcedFrom: null };
+  }
 
   let parsed;
   try {
     parsed = JSON.parse(readFileSync(baselinePath, 'utf8'));
   } catch {
     violations.push('S-COMMIT scripts/commit-baseline.json is not valid JSON');
-    return { decision: null, exempt };
+    return { decision: null, enforcedFrom: null };
   }
 
   const decision = typeof parsed.decision === 'string' ? parsed.decision : null;
@@ -328,84 +350,68 @@ function loadCommitBaseline(rootDir, violations) {
     violations.push('S-COMMIT scripts/commit-baseline.json must cite its owner decision id (DEC-###)');
   }
 
-  const entries = Array.isArray(parsed.exempt) ? parsed.exempt : [];
-  if (entries.length > MAX_BASELINE_EXEMPTIONS) {
-    violations.push(
-      `S-COMMIT baseline exempts ${entries.length} commits; at most ${MAX_BASELINE_EXEMPTIONS} imported commit may be exempted — fix forward with compliant commits`,
-    );
+  const note = typeof parsed.note === 'string' ? parsed.note.trim() : '';
+  if (note.length < 20) {
+    violations.push('S-COMMIT scripts/commit-baseline.json must record why the enforcement boundary starts there');
   }
 
-  for (const entry of entries) {
-    const hash = entry && typeof entry.hash === 'string' ? entry.hash : '';
-    if (!/^[0-9a-f]{40}$/.test(hash)) {
-      violations.push('S-COMMIT baseline entry must declare a full 40-character lowercase commit hash');
-      continue;
-    }
-    if (!entry.reason || typeof entry.reason !== 'string' || entry.reason.trim().length < 20) {
-      violations.push(`S-COMMIT baseline entry ${hash.slice(0, 7)} must record why the commit is exempt`);
-      continue;
-    }
-    exempt.set(hash, entry.reason);
+  const enforcedFrom = typeof parsed.enforcedFrom === 'string' ? parsed.enforcedFrom : '';
+  if (!/^[0-9a-f]{40}$/.test(enforcedFrom)) {
+    violations.push('S-COMMIT scripts/commit-baseline.json must declare a full 40-character lowercase enforcedFrom commit hash');
   }
 
-  const taskboardPath = join(rootDir, 'TASKBOARD.md');
-  if (decision !== null && exempt.size > 0) {
+  if (decision !== null && /^[0-9a-f]{40}$/.test(enforcedFrom)) {
+    const taskboardPath = join(rootDir, 'TASKBOARD.md');
     const taskboard = existsSync(taskboardPath) ? readFileSync(taskboardPath, 'utf8') : '';
     if (!new RegExp(`\\b${decision}\\b`).test(taskboard)) {
-      violations.push(
-        `S-COMMIT baseline cites ${decision}, but that decision id does not appear in TASKBOARD.md`,
-      );
+      violations.push(`S-COMMIT baseline cites ${decision}, but that decision id does not appear in TASKBOARD.md`);
     }
   }
 
-  return { decision, exempt };
+  return {
+    decision,
+    enforcedFrom: /^[0-9a-f]{40}$/.test(enforcedFrom) ? enforcedFrom : null,
+  };
 }
 
 function checkGitCommitHygiene(rootDir) {
   const violations = [];
   if (!existsSync(join(rootDir, '.git'))) return violations;
 
-  const { exempt } = loadCommitBaseline(rootDir, violations);
+  const { enforcedFrom } = loadCommitBaseline(rootDir, violations);
+  const format = '--format=%H|||%P|||%s|||%b===END===';
+  // spawnSync with an argument array: no shell, so the format's `|` separators stay literal.
+  const runGit = (args) =>
+    spawnSync('git', args, { cwd: rootDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 
-  try {
-    const raw = execSync('git log --format="%H|||%s|||%b===END===" -n 25', {
-      cwd: rootDir,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    const records = raw.split('===END===').map((s) => s.trim()).filter(Boolean);
-    const seenHashes = new Set();
-    for (const rec of records) {
-      const [hash = '', subject = '', body = ''] = rec.split('|||');
-      seenHashes.add(hash);
-      if (exempt.has(hash)) continue;
-      const shortHash = hash.slice(0, 7);
-      if (/\b(?:wip|fixup!|squash!)\b/i.test(subject)) {
-        violations.push(`S-COMMIT ${shortHash}: banned WIP/fixup commit subject "${subject}"`);
-      }
-      if (!/^(?:feat|fix|test|docs|chore)\([a-z0-9-]+\):\s+\S+/.test(subject)) {
-        violations.push(`S-COMMIT ${shortHash}: commit subject must follow conventional format: "${subject}"`);
-      }
-      if (!/\bWI-\d{4}[A-Z]?\b/.test(body)) {
-        violations.push(`S-COMMIT ${shortHash}: commit body must cite its single WI-#### work item`);
+  if (enforcedFrom !== null) {
+    const ancestry = runGit(['merge-base', '--is-ancestor', enforcedFrom, 'HEAD']);
+    if (ancestry.status !== 0) {
+      violations.push(
+        `S-COMMIT enforcement boundary ${enforcedFrom.slice(0, 7)} is not an ancestor of HEAD — restore the published baseline`,
+      );
+    } else {
+      const boundary = runGit(['log', '-1', format, enforcedFrom]);
+      const [, , boundarySubject = '', boundaryBody = ''] = (boundary.stdout ?? '').split('|||');
+      for (const message of commitHygieneViolations(boundarySubject, boundaryBody)) {
+        violations.push(`S-COMMIT boundary ${enforcedFrom.slice(0, 7)}: ${message}`);
       }
     }
-
-    for (const hash of exempt.keys()) {
-      if (seenHashes.has(hash)) continue;
-      const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', hash, 'HEAD'], {
-        cwd: rootDir,
-        stdio: ['ignore', 'ignore', 'ignore'],
-      });
-      if (ancestry.status !== 0) {
-        violations.push(
-          `S-COMMIT baseline entry ${hash.slice(0, 7)} is not an ancestor of HEAD — remove the stale exemption`,
-        );
-      }
-    }
-  } catch {
-    // Non-git temp directory during unit testing
   }
+
+  const logArgs = enforcedFrom === null ? ['log', format] : ['log', format, `${enforcedFrom}..HEAD`];
+  const log = runGit(logArgs);
+  const records = (log.stdout ?? '').split('===END===').map((s) => s.trim()).filter(Boolean);
+  for (const rec of records) {
+    const [hash = '', parents = '', subject = '', body = ''] = rec.split('|||');
+    const parentCount = parents.trim().length === 0 ? 0 : parents.trim().split(/\s+/).length;
+    // GitHub writes pull-request merge commits; they carry no authored work claim.
+    if (parentCount > 1 && GITHUB_MERGE_SUBJECT_RE.test(subject)) continue;
+    for (const message of commitHygieneViolations(subject, body)) {
+      violations.push(`S-COMMIT ${hash.slice(0, 7)}: ${message}`);
+    }
+  }
+
   return violations;
 }
 

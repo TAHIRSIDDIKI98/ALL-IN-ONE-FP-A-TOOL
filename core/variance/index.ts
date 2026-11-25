@@ -3,7 +3,7 @@
 
 import Decimal from 'decimal.js';
 import { verifyPvmInvariant } from '../invariants.js';
-import { add, allocate, div, money, mul, negate, sub, sum } from '../money/index.js';
+import { add, allocate, div, money, mul, negate, serialize, sub, sum } from '../money/index.js';
 import type { AccountType } from '../statements/index.js';
 
 export type VariancePctKind = 'computed' | 'zero' | 'nm' | 'null';
@@ -250,5 +250,192 @@ export function computePvmDecomposition(
     volumeVariance,
     mixVariance,
     invariantPassed: check.passed,
+  };
+}
+
+export interface BudgetVarianceAccountInput {
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly accountType: AccountType;
+  /** Natural-sign ACTUAL activity as a canonical decimal string; null when there is none. */
+  readonly actual: string | null;
+  /**
+   * Planned amount as a canonical decimal string, or null when NO plan line exists for this
+   * account. A missing plan is never coerced to `0` (§5.7 zero-base rule).
+   */
+  readonly plan: string | null;
+}
+
+export interface BudgetVarianceRow {
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly accountType: AccountType;
+  readonly actual: string | null;
+  readonly plan: string | null;
+  readonly varianceAmount: string | null;
+  readonly variancePctKind: VariancePctKind;
+  readonly variancePctFormatted: string | null;
+  readonly favorability: Favorability;
+}
+
+export interface BudgetVarianceTypeTotal {
+  readonly accountType: AccountType;
+  readonly actual: string;
+  readonly plan: string;
+  readonly varianceAmount: string;
+}
+
+export interface BudgetVarianceTotals {
+  readonly actual: string;
+  readonly plan: string;
+  /** ACTUAL on rows that have no plan line; keeps `actual = plannedActual + unplannedActual` honest. */
+  readonly unplannedActual: string;
+  readonly varianceAmount: string;
+  readonly plannedRows: number;
+  readonly unplannedRows: number;
+  readonly favorable: number;
+  readonly unfavorable: number;
+  readonly neutral: number;
+  readonly na: number;
+}
+
+export interface BudgetVarianceResult {
+  readonly rows: readonly BudgetVarianceRow[];
+  readonly totals: BudgetVarianceTotals;
+  readonly byType: readonly BudgetVarianceTypeTotal[];
+}
+
+/**
+ * Budget-vs-Actual row model (§3.5, §5.7; Spine Gate G5).
+ *
+ * - `variance = actual - plan` (the only direction `computeVariance` allows) and favorability is
+ *   derived from the account type, so a revenue over-plan is favorable while an expense over-plan
+ *   is not.
+ * - A row is emitted only when there is something to say: an account with a plan line, or with
+ *   non-zero actual activity. An account with neither is omitted rather than shown as `0 vs 0`.
+ * - An account with actual activity but NO plan line keeps `plan = null`, `variance = null`,
+ *   `variancePctKind = 'null'` and `favorability = 'na'` — the viewer sees "not planned", never an
+ *   invented zero plan and never an `n/m` pretending the plan was `0`.
+ * - A planned account with no GL activity is compared against the true `0` the trial balance
+ *   reports for it; that zero is data, not a fabrication.
+ * - Totals sum only what exists: `plan` covers planned rows, `varianceAmount` covers rows that have
+ *   both sides, and `unplannedActual` is reported separately so the actual total can never silently
+ *   absorb an unplanned amount.
+ *
+ * All arithmetic is Decimal through `/core/money`; there is no `Math.abs` and no float.
+ */
+export function buildBudgetVariance(params: {
+  readonly accounts: readonly BudgetVarianceAccountInput[];
+  readonly basis: VarianceBasis;
+  readonly scale?: number;
+}): BudgetVarianceResult {
+  const scale = params.scale ?? 2;
+  const rows: BudgetVarianceRow[] = [];
+
+  for (const account of params.accounts) {
+    const actual = account.actual === null ? null : money(account.actual);
+    const plan = account.plan === null ? null : money(account.plan);
+    const actualIsSilent = actual === null || actual.isZero();
+    if (plan === null && actualIsSilent) continue;
+
+    const variance = computeVariance({
+      accountType: account.accountType,
+      // A planned account is compared against the true 0 the trial balance reports for it; an
+      // unplanned account keeps whatever actual it has (so the row still shows the real money).
+      actual: plan === null ? actual : (actual ?? money('0')),
+      plan,
+      basis: params.basis,
+    });
+
+    rows.push({
+      accountCode: account.accountCode,
+      accountName: account.accountName,
+      accountType: account.accountType,
+      actual: variance.actual === null ? null : serialize(variance.actual, scale),
+      plan: variance.plan === null ? null : serialize(variance.plan, scale),
+      varianceAmount:
+        variance.varianceAmount === null ? null : serialize(variance.varianceAmount, scale),
+      variancePctKind: variance.variancePctKind,
+      variancePctFormatted: variance.variancePctFormatted,
+      favorability: variance.favorability,
+    });
+  }
+
+  rows.sort((a, b) => (a.accountCode < b.accountCode ? -1 : a.accountCode > b.accountCode ? 1 : 0));
+
+  let actualTotal = money('0');
+  let planTotal = money('0');
+  let unplannedActual = money('0');
+  let varianceTotal = money('0');
+  let plannedRows = 0;
+  let unplannedRows = 0;
+  let favorable = 0;
+  let unfavorable = 0;
+  let neutral = 0;
+  let na = 0;
+
+  const typeActual = new Map<AccountType, Decimal>();
+  const typePlan = new Map<AccountType, Decimal>();
+  const typeVariance = new Map<AccountType, Decimal>();
+
+  for (const row of rows) {
+    const rowActual = row.actual === null ? money('0') : money(row.actual);
+    actualTotal = add(actualTotal, rowActual);
+    if (row.plan === null) {
+      unplannedRows += 1;
+      unplannedActual = add(unplannedActual, rowActual);
+    } else {
+      plannedRows += 1;
+      planTotal = add(planTotal, money(row.plan));
+    }
+    if (row.varianceAmount !== null) {
+      varianceTotal = add(varianceTotal, money(row.varianceAmount));
+    }
+    if (row.favorability === 'favorable') favorable += 1;
+    else if (row.favorability === 'unfavorable') unfavorable += 1;
+    else if (row.favorability === 'neutral') neutral += 1;
+    else na += 1;
+
+    typeActual.set(row.accountType, add(typeActual.get(row.accountType) ?? money('0'), rowActual));
+    if (row.plan !== null) {
+      typePlan.set(
+        row.accountType,
+        add(typePlan.get(row.accountType) ?? money('0'), money(row.plan)),
+      );
+    }
+    if (row.varianceAmount !== null) {
+      typeVariance.set(
+        row.accountType,
+        add(typeVariance.get(row.accountType) ?? money('0'), money(row.varianceAmount)),
+      );
+    }
+  }
+
+  const byType: BudgetVarianceTypeTotal[] = (
+    ['asset', 'liability', 'equity', 'revenue', 'expense'] as const
+  )
+    .filter((accountType) => typeActual.has(accountType))
+    .map((accountType) => ({
+      accountType,
+      actual: serialize(typeActual.get(accountType) ?? money('0'), scale),
+      plan: serialize(typePlan.get(accountType) ?? money('0'), scale),
+      varianceAmount: serialize(typeVariance.get(accountType) ?? money('0'), scale),
+    }));
+
+  return {
+    rows,
+    totals: {
+      actual: serialize(actualTotal, scale),
+      plan: serialize(planTotal, scale),
+      unplannedActual: serialize(unplannedActual, scale),
+      varianceAmount: serialize(varianceTotal, scale),
+      plannedRows,
+      unplannedRows,
+      favorable,
+      unfavorable,
+      neutral,
+      na,
+    },
+    byType,
   };
 }

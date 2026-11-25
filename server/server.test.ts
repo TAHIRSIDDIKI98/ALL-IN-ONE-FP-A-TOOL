@@ -9,6 +9,7 @@ import { applyMigrations } from './db/migrate.js';
 import { ApiClientError, createApiClient } from '../src/api/client.js';
 import { seedChartOfAccounts } from './db/repositories/import.js';
 import { MESSY_CSV } from './db/testing/corpus-fixtures.js';
+import { verifyCompanyAuditLog } from './audit/index.js';
 
 const SECRET = 'server-test-sandbox-secret-long-enough';
 
@@ -628,5 +629,481 @@ describe('M1 Express spine API (/server/app.ts)', () => {
 
     const afterSignIn = await authed.getSessionWorkspace();
     expect(afterSignIn.companies.map((company) => company.name)).toEqual(['Client Flow Co']);
+  }, 120_000);
+
+  it('refuses a budget commit instead of posting it into actuals, and leaves every table untouched', async () => {
+    const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
+      email: 'client-budget@onefpa.test',
+      displayName: 'Client Budget',
+    });
+    const client = createApiClient({ getToken: () => minted.token, baseUrl });
+    const workspace = await client.createCompany({
+      companyName: 'Budget Guard Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-BG',
+      entityName: 'Budget Guard Co HQ',
+    });
+    await client.importChart(workspace.companyId, {
+      csvText: [
+        'code,name,type,normal_side,statement_line_key',
+        '1000,Cash,asset,debit,bs.asset.cash',
+        '4000,Service revenue,revenue,credit,pl.revenue.service',
+      ].join('\n'),
+    });
+
+    const csv = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-B1,2026-05-10,1000,Budgeted cash,100.00,0.00',
+      'JE-B1,2026-05-10,4000,Budgeted revenue,0.00,100.00',
+    ].join('\n');
+
+    const batchesBefore = await countBatches(workspace.companyId);
+    let rejected: unknown = null;
+    try {
+      await client.commitImport(workspace.companyId, {
+        kind: 'budget',
+        sourceFilename: 'budget_2026.csv',
+        csvText: csv,
+      });
+    } catch (error) {
+      rejected = error;
+    }
+    expect(rejected).toBeInstanceOf(ApiClientError);
+    expect((rejected as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((rejected as ApiClientError).details['supportedKinds']).toEqual(['actuals']);
+
+    // Nothing was written and no budget number can leak into actuals.
+    expect(await countBatches(workspace.companyId)).toBe(batchesBefore);
+    const grid = await client.getTrialBalance(workspace.companyId, { period: 'P05' });
+    expect(grid.totalDebit).toBe('0.00');
+    expect(grid.totalCredit).toBe('0.00');
+    expect(grid.sources).toEqual([]);
+
+    // The same rows committed as actuals still post, so the guard is about kind, not content.
+    const actual = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'budget_2026.csv',
+      csvText: csv,
+    });
+    expect(actual.importedCount).toBe(2);
+    const after = await client.getTrialBalance(workspace.companyId, { period: 'P05' });
+    expect(after.totalDebit).toBe('100.00');
+  }, 120_000);
+
+  it('imports a chart of accounts atomically, then posts an import against it', async () => {
+    const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
+      email: 'client-chart@onefpa.test',
+      displayName: 'Client Chart',
+    });
+    const client = createApiClient({ getToken: () => minted.token, baseUrl });
+    const workspace = await client.createCompany({
+      companyName: 'Chart Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-CHART',
+      entityName: 'Chart Co HQ',
+    });
+
+    // A brand-new company has NO chart, so every import row would quarantine as unmapped.
+    const before = await client.getChart(workspace.companyId);
+    expect(before.accounts).toEqual([]);
+
+    const chartCsv = [
+      'code,name,type,normal_side,statement_line_key,parent_code,is_postable',
+      '1000,Cash,asset,debit,bs.asset.cash,,true',
+      '001200,Operating bank account,asset,debit,bs.asset.cash,1000,true',
+      '4000,Service revenue,revenue,credit,pl.revenue.service,,true',
+    ].join('\n');
+    const importedChart = await client.importChart(workspace.companyId, { csvText: chartCsv });
+    expect(importedChart.rowCount).toBe(3);
+    expect(importedChart.inserted).toBe(3);
+    expect(importedChart.updated).toBe(0);
+    expect(importedChart.accounts.map((account) => account.code)).toEqual(['001200', '1000', '4000']);
+    expect(importedChart.accounts[0]?.parentCode).toBe('1000');
+
+    // Re-importing the SAME chart updates in place and duplicates nothing.
+    const reimported = await client.importChart(workspace.companyId, { csvText: chartCsv });
+    expect(reimported.inserted).toBe(0);
+    expect(reimported.updated).toBe(3);
+    expect(reimported.accounts).toHaveLength(3);
+    expect(reimported.accounts.find((account) => account.code === '1000')?.version).toBe(2);
+
+    // A chart with one invalid row is rejected WHOLE: nothing is written.
+    const rejected = await client
+      .importChart(workspace.companyId, {
+        csvText: [
+          'code,name,type,normal_side,statement_line_key',
+          '5000,Cost of goods sold,expense,debit,pl.cogs.direct',
+          '6000,Broken,bank,debit,pl.opex.other',
+        ].join('\n'),
+      })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect(rejected).toBeInstanceOf(ApiClientError);
+    expect((rejected as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((rejected as ApiClientError).details['issues']).toEqual(['row 3: INVALID_TYPE:bank']);
+    const afterReject = await client.getChart(workspace.companyId);
+    expect(afterReject.accounts).toHaveLength(3);
+
+    // Now the import can post: the same CSV that would have quarantined everything posts.
+    const journal = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-CH1,2026-04-10,001200,Cash received,750.25,0.00',
+      'JE-CH1,2026-04-10,4000,Service revenue,0.00,750.25',
+    ].join('\n');
+    const preview = await client.previewImport(workspace.companyId, { csvText: journal });
+    expect(preview.importedCount).toBe(2);
+    expect(preview.quarantinedCount).toBe(0);
+    const committed = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'chart_co.csv',
+      csvText: journal,
+    });
+    expect(committed.importedCount).toBe(2);
+    expect(committed.totalDebits).toBe('750.25');
+
+    const grid = await client.getTrialBalance(workspace.companyId, { period: 'P04' });
+    expect(grid.totalDebit).toBe('750.25');
+    expect(grid.totalCredit).toBe('750.25');
+    const revenueRow = grid.rows.find((row) => row.code === '4000');
+    expect(revenueRow?.naturalActivity).toBe('750.25');
+
+    // Every write is chained (§3.4, G10): company.create + chart.import ×2 + import.commit.
+    const chain = await verifyCompanyAuditLog(db, workspace.companyId);
+    expect(chain.valid).toBe(true);
+    expect(chain.checkedCount).toBe(4);
+
+    // Cross-tenant: another identity cannot read or write this company's chart.
+    await expect(
+      createApiClient({
+        getToken: () => issueSandboxToken({ identity: INTRUDER, secret: SECRET, ttlMs: 60_000 }),
+        baseUrl,
+      }).getChart(workspace.companyId),
+    ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN' });
+  }, 120_000);
+
+  it('stores a budget as a plan version without touching the GL, and versions it on re-import', async () => {
+    const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
+      email: 'client-budget@onefpa.test',
+      displayName: 'Client Budget',
+    });
+    const client = createApiClient({ getToken: () => minted.token, baseUrl });
+    const workspace = await client.createCompany({
+      companyName: 'Budget Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-BUDGET',
+      entityName: 'Budget Co HQ',
+    });
+    await db.transaction((tx) =>
+      seedChartOfAccounts(tx, {
+        companyId: workspace.companyId,
+        accounts: [
+          { code: '1000', name: 'Cash', type: 'asset', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'bs.asset.cash', active: true },
+          { code: '4000', name: 'Service Revenue', type: 'revenue', normalSide: 'credit', parentCode: null, isPostable: true, statementLineKey: 'pl.revenue.service', active: true },
+          { code: '5000', name: 'Salaries', type: 'expense', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'pl.opex.payroll', active: true },
+          { code: '6000', name: 'Software', type: 'expense', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'pl.opex.other', active: true },
+        ],
+      }),
+    );
+
+    // No budget yet: an honest empty report, never an invented all-zero plan, and a BvA that says
+    // plainly there is no plan instead of comparing against a fabricated zero.
+    const bvaBeforeAnyData = await client.getBva(workspace.companyId, { period: 'P04' });
+    expect(bvaBeforeAnyData.hasPlan).toBe(false);
+    expect(bvaBeforeAnyData.scenarioId).toBeNull();
+    expect(bvaBeforeAnyData.rows).toEqual([]);
+
+    // No budget yet: an honest empty report, never an invented all-zero plan.
+    const empty = await client.getBudget(workspace.companyId, { fiscalYear: 2026 });
+    expect(empty.scenarioId).toBeNull();
+    expect(empty.planVersionId).toBeNull();
+    expect(empty.versionNo).toBeNull();
+    expect(empty.lineCount).toBe(0);
+    expect(empty.lines).toEqual([]);
+
+    const budgetCsv = [
+      'account_code,period,amount',
+      '4000,P01,12500.00',
+      '4000,P02,12500.00',
+      '4000,P03,13000.00',
+      '5000,P01,4200.00',
+      '5000,P02,4200.00',
+      '5000,P03,4400.00',
+      '6000,P01,1800.00',
+      '6000,P02,1800.00',
+      '6000,P03,1900.00',
+    ].join('\n');
+
+    const imported = await client.importBudget(workspace.companyId, {
+      csvText: budgetCsv,
+      fiscalYear: 2026,
+      sourceFilename: 'fy2026-budget.csv',
+    });
+    expect(imported.rowCount).toBe(9);
+    expect(imported.lineCount).toBe(9);
+    expect(imported.versionNo).toBe(1);
+    expect(imported.scenarioName).toBe('Budget FY2026');
+    expect(imported.totalAmount).toBe('56300.00');
+    expect(imported.accounts.map((account) => `${account.accountCode}=${account.amount}`)).toEqual([
+      '4000=38000.00',
+      '5000=12800.00',
+      '6000=5500.00',
+    ]);
+
+    // A budget is NOT an actual: the trial balance stays empty.
+    const afterBudget = await client.getTrialBalance(workspace.companyId);
+    expect(afterBudget.totalDebit).toBe('0.00');
+    expect(afterBudget.totalCredit).toBe('0.00');
+    expect(afterBudget.rows.every((row) => row.naturalActivity === '0.00')).toBe(true);
+
+    // Re-importing the same plan creates version 2 and duplicates no plan line.
+    const reimported = await client.importBudget(workspace.companyId, {
+      csvText: budgetCsv,
+      fiscalYear: 2026,
+      sourceFilename: 'fy2026-budget.csv',
+    });
+    expect(reimported.versionNo).toBe(2);
+    expect(reimported.lineCount).toBe(9);
+    expect(reimported.totalAmount).toBe('56300.00');
+    const planRows = await db.query<{ total: number; versions: number; current: number }>(
+      `SELECT (SELECT COUNT(*)::int FROM plan_line WHERE company_id = $1) AS total,
+              (SELECT COUNT(*)::int FROM plan_version WHERE company_id = $1) AS versions,
+              (SELECT COUNT(*)::int FROM plan_version WHERE company_id = $1 AND is_current) AS current`,
+      [workspace.companyId],
+    );
+    expect(planRows.rows[0]).toEqual({ total: 18, versions: 2, current: 1 });
+
+    // A plan line for an account that does not exist is rejected with a named reason, and writes nothing.
+    const unmapped = await client
+      .importBudget(workspace.companyId, {
+        csvText: ['account_code,period,amount', '9999,P01,100.00'].join('\n'),
+        fiscalYear: 2026,
+      })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect(unmapped).toBeInstanceOf(ApiClientError);
+    expect((unmapped as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((unmapped as ApiClientError).details['issues']).toEqual(['row 2: UNMAPPED_ACCOUNT:9999']);
+
+    // A period code outside the requested fiscal year is rejected the same way.
+    const wrongYear = await client
+      .importBudget(workspace.companyId, {
+        csvText: ['account_code,period,amount', '4000,P01,100.00'].join('\n'),
+        fiscalYear: 2030,
+      })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect((wrongYear as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((wrongYear as ApiClientError).details['issues']).toEqual([
+      'row 2: UNKNOWN_PERIOD:P01 (fiscal year 2030)',
+    ]);
+
+    const stillTwo = await client.getBudget(workspace.companyId, { fiscalYear: 2026 });
+    expect(stillTwo.versionNo).toBe(2);
+    expect(stillTwo.lineCount).toBe(9);
+
+    // Actuals still post normally alongside the plan; the GL holds only the actual 750.25.
+    const journal = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-B1,2026-04-10,1000,Cash received,750.25,0.00',
+      'JE-B1,2026-04-10,4000,Service revenue,0.00,750.25',
+    ].join('\n');
+    const committed = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'budget_co_actuals.csv',
+      csvText: journal,
+    });
+    expect(committed.totalCredits).toBe('750.25');
+    const gl = await client.getTrialBalance(workspace.companyId);
+    expect(gl.totalDebit).toBe('750.25');
+    expect(
+      gl.rows
+        .filter((row) => row.naturalActivity !== '0.00')
+        .map((row) => `${row.code}=${row.naturalActivity}`),
+    ).toEqual(['1000=750.25', '4000=750.25']);
+
+    // BvA: plan year-to-date through P04 (all nine lines) against the actuals that exist.
+    const bva = await client.getBva(workspace.companyId, { period: 'P04' });
+    expect(bva.hasPlan).toBe(true);
+    expect(bva.versionNo).toBe(2);
+    expect(bva.throughPeriodCode).toBe('P04');
+
+    const revenueRow = bva.rows.find((row) => row.accountCode === '4000');
+    expect(revenueRow).toMatchObject({
+      accountType: 'revenue',
+      actual: '750.25',
+      plan: '38000.00',
+      varianceAmount: '-37249.75',
+      favorability: 'unfavorable',
+    });
+    const salariesRow = bva.rows.find((row) => row.accountCode === '5000');
+    expect(salariesRow).toMatchObject({
+      actual: '0.00',
+      plan: '12800.00',
+      varianceAmount: '-12800.00',
+      favorability: 'favorable',
+    });
+    // An account with actuals but no plan line is NOT compared against an invented zero plan.
+    const cashRow = bva.rows.find((row) => row.accountCode === '1000');
+    expect(cashRow).toMatchObject({
+      actual: '750.25',
+      plan: null,
+      varianceAmount: null,
+      variancePctKind: 'null',
+      favorability: 'na',
+    });
+    expect(bva.totals).toMatchObject({
+      actual: '1500.50',
+      plan: '56300.00',
+      unplannedActual: '750.25',
+      varianceAmount: '-55549.75',
+      plannedRows: 3,
+      unplannedRows: 1,
+      favorable: 2,
+      unfavorable: 1,
+      neutral: 0,
+      na: 1,
+    });
+
+    // The earlier period only compares the plan months that have elapsed.
+    const bvaP02 = await client.getBva(workspace.companyId, { period: 'P02' });
+    expect(bvaP02.rows.find((row) => row.accountCode === '4000')).toMatchObject({
+      actual: '0.00',
+      plan: '25000.00',
+      varianceAmount: '-25000.00',
+    });
+
+    // G5 tie-out: the BvA actual totals ARE the statement figures for every account type.
+    const statements = await client.getStatements(workspace.companyId, { period: 'P04' });
+    const revenueTotal = bva.byType.find((total) => total.accountType === 'revenue');
+    const expenseTotal = bva.byType.find((total) => total.accountType === 'expense');
+    expect(revenueTotal?.actual).toBe(statements.pnl.revenue);
+    expect(revenueTotal?.plan).toBe('38000.00');
+    expect(expenseTotal?.actual).toBe('0.00');
+    expect(expenseTotal?.plan).toBe('18300.00');
+    expect(statements.pnl.netIncome).toBe('750.25');
+
+    // company.create + 2 × budget.import + import.commit; the two rejected budgets wrote nothing.
+    const chain = await verifyCompanyAuditLog(db, workspace.companyId);
+    expect(chain.valid).toBe(true);
+    expect(chain.checkedCount).toBe(4);
+
+    await expect(
+      createApiClient({
+        getToken: () => issueSandboxToken({ identity: INTRUDER, secret: SECRET, ttlMs: 60_000 }),
+        baseUrl,
+      }).getBudget(workspace.companyId, { fiscalYear: 2026 }),
+    ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN' });
+  }, 120_000);
+
+  it('drives the import wizard and model grid contracts through the browser client against the real API', async () => {
+    const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
+      email: 'client-import@onefpa.test',
+      displayName: 'Client Import',
+    });
+    const client = createApiClient({ getToken: () => minted.token, baseUrl });
+    const workspace = await client.createCompany({
+      companyName: 'Client Import Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-CIMP',
+      entityName: 'Client Import Co HQ',
+    });
+    await db.transaction((tx) =>
+      seedChartOfAccounts(tx, {
+        companyId: workspace.companyId,
+        accounts: [
+          { code: '1000', name: 'Cash', type: 'asset', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'bs.asset.cash', active: true },
+          { code: '4000', name: 'Service Revenue', type: 'revenue', normalSide: 'credit', parentCode: null, isPostable: true, statementLineKey: 'pl.revenue.service', active: true },
+        ],
+      }),
+    );
+
+    const csv = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-C1,2026-02-10,1000,Cash received,1250.50,0.00',
+      'JE-C1,2026-02-10,4000,Service revenue,0.00,1250.50',
+      'JE-C2,2026-02-11,9999,Unmapped account,50.00,0.00',
+      'JE-C2,2026-02-11,1000,Unmapped counter,0.00,50.00',
+    ].join('\n');
+
+    // The empty grid proves the company has no postings yet; the preview needs nothing from the
+    // browser beyond the file text, because the server classifies against its own chart.
+    const emptyGrid = await client.getTrialBalance(workspace.companyId);
+    expect(emptyGrid.sources).toEqual([]);
+    expect(emptyGrid.rows.map((row) => row.code)).toEqual(['1000', '4000']);
+
+    const preview = await client.previewImport(workspace.companyId, { csvText: csv });
+    expect(preview.rowsIn).toBe(4);
+    expect(preview.importedCount).toBe(2);
+    expect(preview.quarantinedCount).toBe(2);
+    expect(preview.importedCount + preview.quarantinedCount).toBe(preview.rowsIn);
+    expect(preview.entryCount).toBe(1);
+    expect(preview.totalDebits).toBe('1250.50');
+    expect(preview.totalCredits).toBe('1250.50');
+    // The unmapped code is named, and the journal left half-posted is quarantined WHOLE.
+    expect(preview.quarantined.map((row) => row.reason)).toEqual([
+      'UNMAPPED_ACCOUNT:9999',
+      'UNBALANCED_ENTRY:JE-C2',
+    ]);
+    // Preview and commit must agree: nothing was written by the preview.
+    expect(await countBatches(workspace.companyId)).toBe(0);
+
+    const committed = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'client_import.csv',
+      csvText: csv,
+    });
+    expect(committed.rowsIn).toBe(4);
+    expect(committed.importedCount).toBe(2);
+    expect(committed.quarantinedCount).toBe(2);
+    expect(committed.entryCount).toBe(1);
+    expect(committed.replacedBatchId).toBeNull();
+    expect(committed.sourceHash).toMatch(/^[0-9a-f]{64}$/);
+
+    const grid = await client.getTrialBalance(workspace.companyId, { period: 'P02' });
+    expect(grid.isBalanced).toBe(true);
+    expect(grid.totalDebit).toBe('1250.50');
+    expect(grid.totalCredit).toBe('1250.50');
+    expect(grid.sources).toEqual([
+      expect.objectContaining({ batchId: committed.batchId, sourceFilename: 'client_import.csv' }),
+    ]);
+    const cashRow = grid.rows.find((row) => row.code === '1000');
+    expect(cashRow?.totalDebit).toBe('1250.50');
+    expect(cashRow?.naturalActivity).toBe('1250.50');
+
+    const drill = await client.getAccountDrilldown(workspace.companyId, '1000', { period: 'P02' });
+    // Σ of the contributing source rows must equal the grid row exactly (§9.4).
+    expect(drill.totalDebit).toBe(cashRow?.totalDebit);
+    expect(drill.totalCredit).toBe(cashRow?.totalCredit);
+    expect(drill.rows).toHaveLength(1);
+    expect(drill.rows[0]).toEqual(
+      expect.objectContaining({
+        sourceFilename: 'client_import.csv',
+        periodCode: 'P02',
+        rowNo: 2,
+      }),
+    );
+    expect(drill.rows[0]?.rawCells.length).toBeGreaterThanOrEqual(6);
+
+    // Re-committing the SAME source replaces atomically: one active batch, unchanged totals.
+    const recommitted = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'client_import.csv',
+      csvText: csv,
+    });
+    expect(recommitted.replacedBatchId).toBe(committed.batchId);
+    const afterReplace = await client.getTrialBalance(workspace.companyId, { period: 'P02' });
+    expect(afterReplace.totalDebit).toBe('1250.50');
+    expect(afterReplace.sources).toEqual([
+      expect.objectContaining({ batchId: recommitted.batchId }),
+    ]);
+    expect(await countBatches(workspace.companyId)).toBe(2);
   }, 120_000);
 });

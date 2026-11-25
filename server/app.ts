@@ -11,6 +11,16 @@ import {
   type SandboxTokenResponse,
 } from '../shared/spine.js';
 import {
+  ChartImportRequestSchema,
+  ChartImportResultSchema,
+  ChartOfAccountsReportSchema,
+} from '../shared/chart.js';
+import {
+  BudgetImportRequestSchema,
+  BudgetImportResultSchema,
+  BudgetReportSchema,
+} from '../shared/budget.js';
+import {
   CompanySetupRequestSchema,
   SessionWorkspaceResponseSchema,
   type SessionWorkspaceResponse,
@@ -22,13 +32,22 @@ import {
   type TokenVerifier,
 } from './auth/session.js';
 import type { DatabaseHandle } from './db/client.js';
-import { ImportCommitRequestSchema, ImportCommitResultSchema } from '../shared/import.js';
+import {
+  ImportCommitRequestSchema,
+  ImportCommitResultSchema,
+  ImportPreviewReportSchema,
+  CompanyImportPreviewRequestSchema,
+} from '../shared/import.js';
 import {
   AccountDrilldownSchema,
   FinancialStatementsSchema,
   TrialBalanceReportSchema,
 } from '../shared/reports.js';
-import { commitImport } from './db/repositories/import.js';
+import { commitImport, previewImport } from './db/repositories/import.js';
+import { importChart, listChartAccounts } from './db/repositories/chart.js';
+import { getBudget, importBudget } from './db/repositories/budget.js';
+import { getBvaReport } from './db/repositories/bva.js';
+import { BvaReportSchema } from '../shared/bva.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
@@ -147,6 +166,33 @@ export function createSpineApp(context: SpineContext) {
           }),
         );
         res.status(201).json(ImportCommitResultSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Company-scoped preview: the server classifies the rows against ITS OWN chart and applies the
+   * journal-balance gate, so the browser never supplies (or invents) the set of mapped accounts.
+   * Read-only — a preview can never write a batch.
+   */
+  app.post(
+    '/api/companies/:companyId/import/preview',
+    requireAuth,
+    importBody,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const body = parseBody(CompanyImportPreviewRequestSchema, req.body);
+        const bytes = Buffer.byteLength(body.csvText, 'utf8');
+        if (bytes > MAX_IMPORT_BYTES) {
+          throw new AppError('IMPORT_FILE_TOO_LARGE', {
+            details: { bytes, maxBytes: MAX_IMPORT_BYTES },
+          });
+        }
+        const report = await previewImport(db, { companyId, csvText: body.csvText });
+        res.status(200).json(ImportPreviewReportSchema.parse(report));
       } catch (error) {
         next(error);
       }
@@ -329,6 +375,100 @@ export function createSpineApp(context: SpineContext) {
   });
 
   app.get(
+    '/api/companies/:companyId/accounts',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const accounts = await listChartAccounts(db, companyId);
+        res.status(200).json(ChartOfAccountsReportSchema.parse({ companyId, accounts }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Chart-of-accounts import. All-or-nothing: the pure /core parser validates every row first, and
+   * the accounts + their audit row commit in ONE transaction (G1/G10).
+   */
+  app.post(
+    '/api/companies/:companyId/chart/import',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(ChartImportRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          importChart(tx, {
+            companyId,
+            actorId: userId,
+            csvText: body.csvText,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(ChartImportResultSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Budget (plan) read model for one fiscal year. An absent budget reports nulls and zero lines —
+   * the screen shows an honest empty state instead of an invented all-zero plan.
+   */
+  app.get(
+    '/api/companies/:companyId/budget',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        if (fiscalYear === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The budget endpoint requires ?year= (the fiscal year being planned).',
+            details: { issues: ['year: required'] },
+          });
+        }
+        const report = await getBudget(db, { companyId, fiscalYear });
+        res.status(200).json(BudgetReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Budget import. The pure /core parser validates every row first, account/period codes are
+   * resolved against this company's own chart and calendar, and the scenario + plan version + plan
+   * lines + audit row commit in ONE transaction (G4/G10). Nothing here can reach `gl_entry`.
+   */
+  app.post(
+    '/api/companies/:companyId/budget/import',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(BudgetImportRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          importBudget(tx, {
+            companyId,
+            actorId: userId,
+            csvText: body.csvText,
+            fiscalYear: body.fiscalYear,
+            sourceFilename: body.sourceFilename ?? null,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(BudgetImportResultSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
     '/api/companies/:companyId/trial-balance',
     requireAuth,
     async (req: Request, res: Response, next: NextFunction) => {
@@ -340,6 +480,37 @@ export function createSpineApp(context: SpineContext) {
           ...(period === null ? {} : { throughPeriodCode: period }),
         });
         res.status(200).json(TrialBalanceReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Budget-vs-Actual for the year to date through ?period=. Plan comes from the current plan
+   * version, actual from the trial-balance read model, and the join is done in /core/variance so
+   * the screen can never compute a variance the engine did not (§3.5, G5).
+   */
+  app.get(
+    '/api/companies/:companyId/bva',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const period = readPeriodQuery(req.query['period']);
+        if (period === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The BvA endpoint requires ?period= (year-to-date through that period).',
+            details: { issues: ['period: required'] },
+          });
+        }
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        const report = await getBvaReport(db, {
+          companyId,
+          throughPeriodCode: period,
+          fiscalYear,
+        });
+        res.status(200).json(BvaReportSchema.parse(report));
       } catch (error) {
         next(error);
       }

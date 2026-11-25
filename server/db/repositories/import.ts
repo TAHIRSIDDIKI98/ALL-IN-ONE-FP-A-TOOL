@@ -4,7 +4,12 @@ import { evaluateMessyGlCsv, parseCsvRecords, type ImportedGlRow } from '../../.
 import { STORAGE_SCALE, compare, scaleForCurrency, serialize, sum } from '../../../core/money/index.js';
 import { expectedNormalSideForType, normalizeCode } from '../../../core/statements/index.js';
 import { AppError } from '../../../shared/errors.js';
-import type { CoaSeedAccount, ImportCommitResult, QuarantineRecord } from '../../../shared/import.js';
+import type {
+  CoaSeedAccount,
+  ImportCommitResult,
+  ImportPreviewReport,
+  QuarantineRecord,
+} from '../../../shared/import.js';
 import { appendAuditLog } from '../../audit/index.js';
 import type { SqlExecutor } from '../migrate.js';
 
@@ -168,10 +173,13 @@ async function loadActiveBatch(
  * so a replaced batch can never be double-counted (§4.2 append-only replacement).
  */
 export function activeBatchPredicate(entryAlias = 'gl_entry'): string {
+  // Status AND kind: only an active ACTUALS batch may reach a trial balance, statement or drill, so
+  // a batch of another kind could never be counted as actuals even if one were written (§4.2).
   return `EXISTS (
   SELECT 1 FROM import_batch active_batch
    WHERE active_batch.id = ${entryAlias}.batch_id
      AND active_batch.status IN ('staged', 'committed')
+     AND active_batch.kind = 'actuals'
 )`;
 }
 
@@ -184,17 +192,57 @@ export interface ImportCommitParams {
   readonly occurredAt: string;
 }
 
-export async function commitImport(
-  tx: SqlExecutor,
-  params: ImportCommitParams,
-): Promise<ImportCommitResult> {
+/**
+ * The ONE import classifier (K3: one canonical definition).
+ *
+ * Both `previewImport` and `commitImport` call this, so the preview can never disagree with the
+ * commit about which rows will post: the read-only preview route reports exactly the accounting a
+ * commit of the same text would produce (Spine Gate G1, Corpus Gate C6).
+ */
+export interface PostableImportRow {
+  readonly row: ImportedGlRow;
+  readonly periodCode: string;
+  readonly periodId: string;
+}
+
+export interface PostableGroup {
+  readonly ref: string;
+  readonly rows: readonly PostableImportRow[];
+}
+
+export interface ImportClassification {
+  readonly rowsIn: number;
+  readonly parsedImported: readonly ImportedGlRow[];
+  readonly quarantined: readonly QuarantineRecord[];
+  readonly duplicatesDetected: number;
+  readonly totalDebits: string;
+  readonly totalCredits: string;
+  readonly entryCount: number;
+  readonly sourceHash: string;
+  readonly currency: string;
+  readonly currencyScale: number;
+  readonly entityId: string;
+  readonly accountIdByCode: ReadonlyMap<string, string>;
+  readonly postable: readonly PostableGroup[];
+  readonly rawCellsByRow: ReadonlyMap<number, readonly string[]>;
+}
+
+export interface ImportClassificationParams {
+  readonly companyId: string;
+  readonly csvText: string;
+}
+
+export async function classifyImport(
+  db: SqlExecutor,
+  params: ImportClassificationParams,
+): Promise<ImportClassification> {
   if (params.csvText.trim().length === 0) {
     throw new AppError('IMPORT_FILE_UNREADABLE', {
       userMessage: 'The import file is empty.',
     });
   }
 
-  const companyRes = await tx.query<CurrencyRow>(
+  const companyRes = await db.query<CurrencyRow>(
     `SELECT base_currency FROM company WHERE id = $1`,
     [params.companyId],
   );
@@ -203,7 +251,7 @@ export async function commitImport(
     throw new AppError('NOT_FOUND', { userMessage: 'The company could not be found.' });
   }
 
-  const entityRes = await tx.query<IdRow>(
+  const entityRes = await db.query<IdRow>(
     `SELECT id FROM entity WHERE company_id = $1 AND active = true ORDER BY code ASC LIMIT 1`,
     [params.companyId],
   );
@@ -214,13 +262,13 @@ export async function commitImport(
     });
   }
 
-  const accountRes = await tx.query<AccountRow>(
+  const accountRes = await db.query<AccountRow>(
     `SELECT id, code FROM account WHERE company_id = $1 AND active = true`,
     [params.companyId],
   );
   const accountIdByCode = new Map(accountRes.rows.map((row) => [row.code, row.id]));
 
-  const periodRes = await tx.query<PeriodRow>(
+  const periodRes = await db.query<PeriodRow>(
     `SELECT id, code, start_date, end_date, is_adjustment, is_53rd_week, fiscal_year, period_no, quarter, label
        FROM fiscal_period
       WHERE company_id = $1
@@ -272,7 +320,7 @@ export async function commitImport(
   }));
 
   // 1. Every imported row must resolve to a fiscal period of THIS company's calendar (§4.6).
-  const rowsWithPeriod: Array<{ row: ImportedGlRow; periodCode: string; periodId: string }> = [];
+  const rowsWithPeriod: PostableImportRow[] = [];
   for (const row of parsed.imported) {
     const period = resolvePeriodForDate(periods, row.postingDate);
     const matchIndex = period === null ? -1 : periods.indexOf(period);
@@ -286,14 +334,14 @@ export async function commitImport(
 
   // 2. Double-entry gate: a journal ref posts only if it balances to the cent. An unbalanced ref
   //    is quarantined whole — never posted unbalanced, never partially posted.
-  const byRef = new Map<string, Array<{ row: ImportedGlRow; periodCode: string; periodId: string }>>();
+  const byRef = new Map<string, PostableImportRow[]>();
   for (const entry of rowsWithPeriod) {
     const bucket = byRef.get(entry.row.entryRef);
     if (bucket === undefined) byRef.set(entry.row.entryRef, [entry]);
     else bucket.push(entry);
   }
 
-  const postable: Array<{ ref: string; rows: Array<{ row: ImportedGlRow; periodCode: string; periodId: string }> }> = [];
+  const postable: PostableGroup[] = [];
   for (const [ref, rows] of byRef) {
     const debits = sum(rows.map((r) => r.row.debit));
     const credits = sum(rows.map((r) => r.row.credit));
@@ -313,7 +361,58 @@ export async function commitImport(
   const postedRows = postable.flatMap((group) => group.rows.map((entry) => entry.row));
   const totalDebits = sum(postedRows.map((row) => row.debit));
   const totalCredits = sum(postedRows.map((row) => row.credit));
-  const sourceHash = sha256Hex(params.csvText);
+  return {
+    rowsIn: parsed.rowsIn,
+    parsedImported: parsed.imported,
+    quarantined,
+    duplicatesDetected: parsed.duplicatesDetected,
+    totalDebits: serialize(totalDebits, scaleForCurrency(currency)),
+    totalCredits: serialize(totalCredits, scaleForCurrency(currency)),
+    entryCount: postable.length,
+    sourceHash: sha256Hex(params.csvText),
+    currency,
+    currencyScale: scaleForCurrency(currency),
+    entityId,
+    accountIdByCode,
+    postable,
+    rawCellsByRow,
+  };
+}
+
+export async function commitImport(
+  tx: SqlExecutor,
+  params: ImportCommitParams,
+): Promise<ImportCommitResult> {
+  /**
+   * G4 is not implemented yet: a budget belongs in `plan_version`/`plan_line`, which the read models
+   * do not consume. Posting a budget file as journals here would silently mix plan numbers into the
+   * trial balance and every statement, so the commit refuses it and writes nothing (§1.4-1, §13.3).
+   */
+  if (params.kind !== 'actuals') {
+    throw new AppError('VALIDATION_FAILED', {
+      userMessage:
+        'Only actuals can be committed in this build. A budget is stored as plan lines (a later spine item), and posting it as a journal would corrupt the trial balance.',
+      details: { kind: params.kind, supportedKinds: ['actuals'] },
+    });
+  }
+
+  const classification = await classifyImport(tx, {
+    companyId: params.companyId,
+    csvText: params.csvText,
+  });
+  const {
+    rowsIn,
+    parsedImported,
+    quarantined,
+    duplicatesDetected,
+    sourceHash,
+    currency,
+    currencyScale,
+    entityId,
+    accountIdByCode,
+    postable,
+    rawCellsByRow,
+  } = classification;
   const priorBatchId = await loadActiveBatch(tx, params.companyId, params.kind, sourceHash);
 
   if (priorBatchId !== null) {
@@ -334,7 +433,7 @@ export async function commitImport(
       params.kind,
       params.sourceFilename,
       sourceHash,
-      parsed.rowsIn,
+      rowsIn,
       priorBatchId,
       params.actorId,
     ],
@@ -360,7 +459,7 @@ export async function commitImport(
         details: { rowNo },
       });
     }
-    const importedRow = parsed.imported.find((r) => r.rowNo === rowNo);
+    const importedRow = parsedImported.find((r) => r.rowNo === rowNo);
     const parsedFields =
       importedRow === undefined
         ? { reason: reason ?? 'UNKNOWN' }
@@ -462,7 +561,6 @@ export async function commitImport(
     batchId,
   ]);
 
-  const currencyScale = scaleForCurrency(currency);
   await appendAuditLog(tx, {
     companyId: params.companyId,
     actorId: params.actorId,
@@ -474,12 +572,12 @@ export async function commitImport(
       kind: params.kind,
       sourceFilename: params.sourceFilename,
       sourceHash,
-      rowsIn: parsed.rowsIn,
+      rowsIn,
       imported: importedRowIds.size,
       quarantined: quarantined.length,
       entries: entryCreated,
-      totalDebits: serialize(totalDebits, currencyScale),
-      totalCredits: serialize(totalCredits, currencyScale),
+      totalDebits: classification.totalDebits,
+      totalCredits: classification.totalCredits,
     },
     occurredAt: params.occurredAt,
   });
@@ -487,14 +585,48 @@ export async function commitImport(
   return {
     batchId,
     replacedBatchId: priorBatchId,
-    rowsIn: parsed.rowsIn,
+    rowsIn,
     importedCount: importedRowIds.size,
     quarantinedCount: quarantined.length,
-    duplicatesDetected: parsed.duplicatesDetected,
-    totalDebits: serialize(totalDebits, currencyScale),
-    totalCredits: serialize(totalCredits, currencyScale),
+    duplicatesDetected,
+    totalDebits: classification.totalDebits,
+    totalCredits: classification.totalCredits,
     entryCount: entryCreated,
     sourceHash,
-    quarantined,
+    quarantined: [...quarantined],
+  };
+}
+
+/**
+ * Read-only preview over the SAME classifier the commit uses (§9.3.3, Spine Gate G1). Nothing is
+ * written: no batch, no raw row, no posting, no audit entry. The counts reported here are exactly
+ * the counts a commit of the same text would produce, which is what makes the wizard's row
+ * accounting honest before and after the commit.
+ */
+export async function previewImport(
+  db: SqlExecutor,
+  params: ImportClassificationParams,
+): Promise<ImportPreviewReport> {
+  const classification = await classifyImport(db, params);
+  const postedRows = classification.postable.flatMap((group) => group.rows);
+  return {
+    companyId: params.companyId,
+    rowsIn: classification.rowsIn,
+    importedCount: postedRows.length,
+    quarantinedCount: classification.quarantined.length,
+    duplicatesDetected: classification.duplicatesDetected,
+    entryCount: classification.postable.length,
+    totalDebits: classification.totalDebits,
+    totalCredits: classification.totalCredits,
+    imported: postedRows.map((entry) => ({
+      rowNo: entry.row.rowNo,
+      entryRef: entry.row.entryRef,
+      postingDate: entry.row.postingDate,
+      accountCode: entry.row.accountCode,
+      description: entry.row.description,
+      debit: serialize(entry.row.debit, classification.currencyScale),
+      credit: serialize(entry.row.credit, classification.currencyScale),
+    })),
+    quarantined: [...classification.quarantined],
   };
 }
