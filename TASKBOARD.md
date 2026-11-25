@@ -8,7 +8,7 @@
 ## §Position
 - **Current Milestone**: `M1 THE SPINE` (opened 2026-11-25 by owner directive — `DEC-006`; M0 items `WI-0001..WI-0011` `VERIFIED`)
 - **Current WI**: `WI-0028` (`VERIFIED` — versioned source→account mapping resolves through one kernel shared by preview and commit; the mapper shows real source codes, versions and typed quarantines)
-- **Next WI**: none inside M1 — all planned M1 work items are `VERIFIED`; the remaining action is the owner merge gate on PR #3 and the final G1–G10 review. Period close/lock/reopen stays `DEFERRED(M3)` under §12.6 (`CLS1–4`) by DEC-008.
+- **Next WI**: none inside M1 — all planned M1 work items are `VERIFIED`, PR #3 was merged at `bb52242`, and `docs/m1-gate-review.md` records G1–G10 GREEN. Period close/lock/reopen stays `DEFERRED(M3)` under §12.6 (`CLS1–4`) by DEC-008.
 - **Red Gates**: CI E2E red on PR #3 (run `45656337556`) — board-pack `h1` no longer matched the harness contract; fix in progress, see §Gates. Session-start `work-integrity` red (`BLK-002`: shallow clone could not see the DEC-007 ancestry boundary) resolved by the owner reconnecting GitHub and `git fetch --unshallow`; `npm run verify` **GREEN 16/16 in 43.8s** (budget 60s, ~16s headroom). The older session-start red was also `work-integrity` (S-COMMIT) on four published commits that the previous one-entry exemption could not describe; `WI-0021A`/`DEC-007` replaced the exemption list with an objective enforcement boundary.
 
 ---
@@ -93,6 +93,8 @@
 
 | `ci-process` | CI run `45667643804` check-run annotation | `1` | `2026-11-25T17:44:00Z` | **RED**: `Unexpected root entry "verify-output.log" violates MASTER_PROMPT §3.3 / §8.1` (`Tests 1 failed | 153 passed (154)`). Fixed by DEC-013; rerun pending. |
 | `ci-process` | GitHub Actions run `45668054546` on `73c622d` (PR #3) | `0` | `2026-11-25T17:49:00Z` | **GREEN**: both `Run sandbox verification suite` and `Run Playwright Spine Harness` succeeded; all sandbox-and-e2e steps green. This is the first run tied to the final HEAD after DEC-007/010/011/012/013 and the WI-0027 product fix; no false green (full history, `pipefail`, no root log file). |
+| `e2e-ci` | GitHub Actions run `45672240494` on `adbbaf6` (PR #3 final head, merged as `bb52242`) | `0` | `2026-11-25T18:14:00Z` | **GREEN**: `Sandbox Gates, Build & Playwright E2E` passed in 1m41s, including verify and the Chromium spine harness. PR #3 was merged by owner command at `2026-11-25T18:13:03Z`; no open M1 work items remain. |
+| `m1-review` | M1 Spine Gates G1–G10 review | `0` | `2026-11-25T18:16:00Z` | **GREEN**: `docs/m1-gate-review.md` records gate-by-gate evidence, the owner merge gate, the final verify (`54503ms`) and CI run `45672240494`. Q-004 remains CI-gated; period close remains `DEFERRED(M3)`. |
 
 ---
 
