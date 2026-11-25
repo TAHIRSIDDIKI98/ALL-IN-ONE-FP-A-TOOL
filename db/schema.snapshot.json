@@ -3,31 +3,51 @@
   "migration": "db/migrations/0001_m1_spine.sql",
   "tableCount": 18,
   "tables": [
+    "account",
     "app_user",
+    "audit_log",
+    "coa_mapping",
     "company",
-    "membership",
+    "department",
+    "entity",
     "fiscal_calendar",
     "fiscal_period",
-    "statement_line",
-    "account",
-    "entity",
-    "department",
-    "coa_mapping",
-    "import_batch",
-    "import_row_raw",
     "gl_entry",
     "gl_line",
-    "scenario",
-    "plan_version",
+    "import_batch",
+    "import_row_raw",
+    "membership",
     "plan_line",
-    "audit_log"
+    "plan_version",
+    "scenario",
+    "statement_line"
   ],
   "moneyColumns": [
-    { "table": "gl_entry", "column": "total_debit", "type": "NUMERIC(28,6)" },
-    { "table": "gl_entry", "column": "total_credit", "type": "NUMERIC(28,6)" },
-    { "table": "gl_line", "column": "debit", "type": "NUMERIC(28,6)" },
-    { "table": "gl_line", "column": "credit", "type": "NUMERIC(28,6)" },
-    { "table": "plan_line", "column": "amount", "type": "NUMERIC(28,6)" }
+    {
+      "table": "gl_entry",
+      "column": "total_debit",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "gl_entry",
+      "column": "total_credit",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "gl_line",
+      "column": "debit",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "gl_line",
+      "column": "credit",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "plan_line",
+      "column": "amount",
+      "type": "NUMERIC(28,6)"
+    }
   ],
   "deferredTriggers": [
     "trg_gl_entry_balance_header",
@@ -37,5 +57,3783 @@
   ],
   "immutabilityTriggers": [
     "trg_audit_log_append_only"
+  ],
+  "columns": [
+    {
+      "table": "account",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "account",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account",
+      "column": "code",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account",
+      "column": "name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account",
+      "column": "type",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account",
+      "column": "normal_side",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account",
+      "column": "is_contra",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "account",
+      "column": "parent_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "account",
+      "column": "is_postable",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "account",
+      "column": "statement_line_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account",
+      "column": "version",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "account",
+      "column": "active",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "account",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "app_user",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "app_user",
+      "column": "firebase_uid",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "app_user",
+      "column": "email",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "app_user",
+      "column": "display_name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "app_user",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "audit_log",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "audit_log",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "actor_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "action",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "target_table",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "target_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "old_payload",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "new_payload",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "occurred_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "audit_log",
+      "column": "prev_hash",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "entry_hash",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "audit_log",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "coa_mapping",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "coa_mapping",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "coa_mapping",
+      "column": "source_system",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "coa_mapping",
+      "column": "source_code",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "coa_mapping",
+      "column": "account_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "coa_mapping",
+      "column": "mapping_version",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "coa_mapping",
+      "column": "effective_from",
+      "type": "date",
+      "nullable": false,
+      "default": "CURRENT_DATE"
+    },
+    {
+      "table": "coa_mapping",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "coa_mapping",
+      "column": "quarantine_reason",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "coa_mapping",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "company",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "company",
+      "column": "name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "company",
+      "column": "base_currency",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "company",
+      "column": "fiscal_calendar_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "company",
+      "column": "coa_version",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "company",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "department",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "department",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "department",
+      "column": "code",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "department",
+      "column": "name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "department",
+      "column": "active",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "department",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "entity",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "entity",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity",
+      "column": "code",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity",
+      "column": "name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity",
+      "column": "currency",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity",
+      "column": "parent_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "entity",
+      "column": "active",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "entity",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "fiscal_calendar",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "fiscal_calendar",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_calendar",
+      "column": "kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_calendar",
+      "column": "year_start_month",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_calendar",
+      "column": "week_anchor",
+      "type": "text",
+      "nullable": false,
+      "default": "'sunday-nearest'::text"
+    },
+    {
+      "table": "fiscal_calendar",
+      "column": "w53_rule",
+      "type": "text",
+      "nullable": false,
+      "default": "'nrf4day'::text"
+    },
+    {
+      "table": "fiscal_calendar",
+      "column": "include_adjustment",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "fiscal_calendar",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "fiscal_period",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "fiscal_period",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "fiscal_calendar_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "fiscal_year",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "period_no",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "code",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "label",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "quarter",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "start_date",
+      "type": "date",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "end_date",
+      "type": "date",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "is_53rd_week",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "fiscal_period",
+      "column": "is_adjustment",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "fiscal_period",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "gl_entry",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "gl_entry",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "batch_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "entity_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "entry_date",
+      "type": "date",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "source_ref",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "currency",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "total_debit",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "total_credit",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_entry",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "gl_line",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "gl_line",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_line",
+      "column": "entry_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_line",
+      "column": "account_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_line",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_line",
+      "column": "entity_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_line",
+      "column": "department_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "gl_line",
+      "column": "debit",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "gl_line",
+      "column": "credit",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "gl_line",
+      "column": "source_row_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "gl_line",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "import_batch",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "import_batch",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_batch",
+      "column": "kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_batch",
+      "column": "source_filename",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_batch",
+      "column": "source_hash",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_batch",
+      "column": "row_count",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_batch",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_batch",
+      "column": "replaced_batch_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "import_batch",
+      "column": "imported_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_batch",
+      "column": "imported_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "import_batch",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "import_row_raw",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "import_row_raw",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_row_raw",
+      "column": "batch_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_row_raw",
+      "column": "row_no",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_row_raw",
+      "column": "raw_payload",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_row_raw",
+      "column": "parsed_fields",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "import_row_raw",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "import_row_raw",
+      "column": "quarantine_reason",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "import_row_raw",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "membership",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "membership",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "membership",
+      "column": "user_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "membership",
+      "column": "role",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "membership",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "plan_line",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "plan_line",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_line",
+      "column": "scenario_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_line",
+      "column": "version_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_line",
+      "column": "account_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_line",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_line",
+      "column": "entity_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_line",
+      "column": "department_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "plan_line",
+      "column": "amount",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_line",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "plan_version",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "plan_version",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_version",
+      "column": "scenario_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_version",
+      "column": "version_no",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_version",
+      "column": "label",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "plan_version",
+      "column": "is_current",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "plan_version",
+      "column": "locked_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "plan_version",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "scenario",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "scenario",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "scenario",
+      "column": "kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "scenario",
+      "column": "name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "scenario",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": "'draft'::text"
+    },
+    {
+      "table": "scenario",
+      "column": "base_scenario_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "scenario",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "statement_line",
+      "column": "key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "statement_line",
+      "column": "statement",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "statement_line",
+      "column": "label",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "statement_line",
+      "column": "sort_order",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "statement_line",
+      "column": "sign_rule",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "statement_line",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    }
+  ],
+  "constraints": [
+    {
+      "table": "account",
+      "name": "account_active_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.active"
+    },
+    {
+      "table": "account",
+      "name": "account_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.is_contra"
+    },
+    {
+      "table": "account",
+      "name": "account_code_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.code"
+    },
+    {
+      "table": "account",
+      "name": "account_code_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.code"
+    },
+    {
+      "table": "account",
+      "name": "account_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.company_id"
+    },
+    {
+      "table": "account",
+      "name": "account_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.created_at"
+    },
+    {
+      "table": "account",
+      "name": "account_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.id"
+    },
+    {
+      "table": "account",
+      "name": "account_is_contra_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.is_contra"
+    },
+    {
+      "table": "account",
+      "name": "account_is_postable_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.is_postable"
+    },
+    {
+      "table": "account",
+      "name": "account_name_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.name"
+    },
+    {
+      "table": "account",
+      "name": "account_name_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.name"
+    },
+    {
+      "table": "account",
+      "name": "account_normal_side_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.normal_side"
+    },
+    {
+      "table": "account",
+      "name": "account_normal_side_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.normal_side"
+    },
+    {
+      "table": "account",
+      "name": "account_statement_line_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.statement_line_key"
+    },
+    {
+      "table": "account",
+      "name": "account_type_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.type"
+    },
+    {
+      "table": "account",
+      "name": "account_type_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.type"
+    },
+    {
+      "table": "account",
+      "name": "account_version_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.version"
+    },
+    {
+      "table": "account",
+      "name": "account_version_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "account.version"
+    },
+    {
+      "table": "account",
+      "name": "account_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "account",
+      "name": "account_company_id_parent_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "parent_id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "account",
+      "name": "account_statement_line_key_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "statement_line_key"
+      ],
+      "references": "statement_line.key"
+    },
+    {
+      "table": "account",
+      "name": "account_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "account",
+      "name": "account_company_id_code_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "code"
+      ],
+      "references": "account.company_id"
+    },
+    {
+      "table": "account",
+      "name": "account_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "app_user.created_at"
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_display_name_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "app_user.display_name"
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_email_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "app_user.email"
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_firebase_uid_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "app_user.firebase_uid"
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "app_user.id"
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "app_user.id"
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_firebase_uid_key",
+      "type": "UNIQUE",
+      "columns": [
+        "firebase_uid"
+      ],
+      "references": "app_user.firebase_uid"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_action_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.action"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_actor_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.actor_id"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.company_id"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.created_at"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_entry_hash_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.entry_hash"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_entry_hash_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.entry_hash"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.id"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_occurred_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.occurred_at"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_prev_hash_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.prev_hash"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_prev_hash_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.prev_hash"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_target_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.target_id"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_target_table_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "audit_log.target_table"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_actor_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "actor_id"
+      ],
+      "references": "app_user.id"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "audit_log.id"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.account_id"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.company_id"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.created_at"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_effective_from_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.effective_from"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.id"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_mapping_version_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.mapping_version"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_mapping_version_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.mapping_version"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_source_code_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.source_code"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_source_code_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.source_code"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_source_system_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.source_system"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.status"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "coa_mapping.status"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_company_id_account_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "account_id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "coa_mapping.id"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "coa_mapping.id"
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_company_id_source_system_source_code_mapping_ve_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "source_system",
+        "source_code",
+        "mapping_version"
+      ],
+      "references": "coa_mapping.company_id"
+    },
+    {
+      "table": "company",
+      "name": "company_base_currency_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "company.base_currency"
+    },
+    {
+      "table": "company",
+      "name": "company_base_currency_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "company.base_currency"
+    },
+    {
+      "table": "company",
+      "name": "company_coa_version_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "company.coa_version"
+    },
+    {
+      "table": "company",
+      "name": "company_coa_version_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "company.coa_version"
+    },
+    {
+      "table": "company",
+      "name": "company_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "company.created_at"
+    },
+    {
+      "table": "company",
+      "name": "company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "company.id"
+    },
+    {
+      "table": "company",
+      "name": "company_name_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "company.name"
+    },
+    {
+      "table": "company",
+      "name": "fk_company_fiscal_calendar",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "id",
+        "fiscal_calendar_id"
+      ],
+      "references": "fiscal_calendar.id"
+    },
+    {
+      "table": "company",
+      "name": "company_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "department",
+      "name": "department_active_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "department.active"
+    },
+    {
+      "table": "department",
+      "name": "department_code_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "department.code"
+    },
+    {
+      "table": "department",
+      "name": "department_code_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "department.code"
+    },
+    {
+      "table": "department",
+      "name": "department_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "department.company_id"
+    },
+    {
+      "table": "department",
+      "name": "department_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "department.created_at"
+    },
+    {
+      "table": "department",
+      "name": "department_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "department.id"
+    },
+    {
+      "table": "department",
+      "name": "department_name_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "department.name"
+    },
+    {
+      "table": "department",
+      "name": "department_name_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "department.name"
+    },
+    {
+      "table": "department",
+      "name": "department_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "department",
+      "name": "department_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "department.id"
+    },
+    {
+      "table": "department",
+      "name": "department_company_id_code_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "code"
+      ],
+      "references": "department.company_id"
+    },
+    {
+      "table": "department",
+      "name": "department_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "department.id"
+    },
+    {
+      "table": "entity",
+      "name": "entity_active_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.active"
+    },
+    {
+      "table": "entity",
+      "name": "entity_code_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.code"
+    },
+    {
+      "table": "entity",
+      "name": "entity_code_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.code"
+    },
+    {
+      "table": "entity",
+      "name": "entity_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.company_id"
+    },
+    {
+      "table": "entity",
+      "name": "entity_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.created_at"
+    },
+    {
+      "table": "entity",
+      "name": "entity_currency_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.currency"
+    },
+    {
+      "table": "entity",
+      "name": "entity_currency_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.currency"
+    },
+    {
+      "table": "entity",
+      "name": "entity_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.id"
+    },
+    {
+      "table": "entity",
+      "name": "entity_name_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.name"
+    },
+    {
+      "table": "entity",
+      "name": "entity_name_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity.name"
+    },
+    {
+      "table": "entity",
+      "name": "entity_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "entity",
+      "name": "entity_company_id_parent_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "parent_id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "entity",
+      "name": "entity_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "entity",
+      "name": "entity_company_id_code_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "code"
+      ],
+      "references": "entity.company_id"
+    },
+    {
+      "table": "entity",
+      "name": "entity_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.company_id"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.created_at"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.id"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_include_adjustment_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.include_adjustment"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_kind_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.kind"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_kind_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.kind"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_w53_rule_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.w53_rule"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_w53_rule_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.w53_rule"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_week_anchor_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.week_anchor"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_year_start_month_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.year_start_month"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_year_start_month_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_calendar.year_start_month"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "fiscal_calendar.id"
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "fiscal_calendar.id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.end_date"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_code_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.code"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.company_id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.created_at"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_end_date_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.end_date"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_fiscal_calendar_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.fiscal_calendar_id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_fiscal_year_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.fiscal_year"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_fiscal_year_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.fiscal_year"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_is_53rd_week_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.is_53rd_week"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_is_adjustment_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.is_adjustment"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_label_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.label"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_period_no_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.period_no"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_period_no_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.period_no"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_quarter_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.quarter"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_quarter_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.quarter"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_start_date_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.start_date"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_fiscal_calendar_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "fiscal_calendar_id"
+      ],
+      "references": "fiscal_calendar.id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_fiscal_calendar_id_fiscal_year_cod_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "fiscal_calendar_id",
+        "fiscal_year",
+        "code"
+      ],
+      "references": "fiscal_period.company_id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_fiscal_calendar_id_fiscal_year_per_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "fiscal_calendar_id",
+        "fiscal_year",
+        "period_no"
+      ],
+      "references": "fiscal_period.company_id"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_batch_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.batch_id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.total_credit"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.company_id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.created_at"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_currency_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.currency"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_currency_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.currency"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_entity_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.entity_id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_entry_date_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.entry_date"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.period_id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_total_credit_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.total_credit"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_total_credit_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.total_credit"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_total_debit_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.total_debit"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_total_debit_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_entry.total_debit"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_company_id_batch_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "batch_id"
+      ],
+      "references": "import_batch.id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_company_id_entity_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "entity_id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "gl_entry.id"
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "gl_entry.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_account_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.account_id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.credit"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_check1",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.credit"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.company_id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.created_at"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_credit_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.credit"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_debit_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.debit"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_entity_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.entity_id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_entry_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.entry_id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.period_id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_source_row_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "gl_line.source_row_id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_account_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "account_id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_department_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "department_id"
+      ],
+      "references": "department.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_entity_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "entity_id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_entry_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "entry_id"
+      ],
+      "references": "gl_entry.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_source_row_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "source_row_id"
+      ],
+      "references": "import_row_raw.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "gl_line.id"
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "gl_line.id"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.company_id"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.created_at"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.id"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_imported_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.imported_at"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_imported_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.imported_by"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_kind_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.kind"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_kind_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.kind"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_row_count_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.row_count"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_row_count_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.row_count"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_source_filename_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.source_filename"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_source_hash_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.source_hash"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_source_hash_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.source_hash"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.status"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_batch.status"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_company_id_replaced_batch_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "replaced_batch_id"
+      ],
+      "references": "import_batch.id"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_imported_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "imported_by"
+      ],
+      "references": "app_user.id"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "import_batch.id"
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "import_batch.id"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_batch_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.batch_id"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.quarantine_reason"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.company_id"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.created_at"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.id"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_raw_payload_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.raw_payload"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_row_no_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.row_no"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_row_no_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.row_no"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.status"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "import_row_raw.status"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_company_id_batch_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "batch_id"
+      ],
+      "references": "import_batch.id"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "import_row_raw.id"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_batch_id_row_no_key",
+      "type": "UNIQUE",
+      "columns": [
+        "batch_id",
+        "row_no"
+      ],
+      "references": "import_row_raw.batch_id"
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "import_row_raw.id"
+    },
+    {
+      "table": "membership",
+      "name": "membership_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "membership",
+      "name": "membership_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "membership.created_at"
+    },
+    {
+      "table": "membership",
+      "name": "membership_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "membership.id"
+    },
+    {
+      "table": "membership",
+      "name": "membership_role_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "membership.role"
+    },
+    {
+      "table": "membership",
+      "name": "membership_role_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "membership.role"
+    },
+    {
+      "table": "membership",
+      "name": "membership_user_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "membership.user_id"
+    },
+    {
+      "table": "membership",
+      "name": "membership_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "membership",
+      "name": "membership_user_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "user_id"
+      ],
+      "references": "app_user.id"
+    },
+    {
+      "table": "membership",
+      "name": "membership_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "membership.id"
+    },
+    {
+      "table": "membership",
+      "name": "membership_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "membership.id"
+    },
+    {
+      "table": "membership",
+      "name": "membership_company_id_user_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "user_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_account_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.account_id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_amount_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.amount"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.company_id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.created_at"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_entity_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.entity_id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.period_id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_scenario_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.scenario_id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_version_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_line.version_id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_account_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "account_id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_department_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "department_id"
+      ],
+      "references": "department.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_entity_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "entity_id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_scenario_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "scenario_id"
+      ],
+      "references": "scenario.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_version_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "version_id"
+      ],
+      "references": "plan_version.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "plan_line.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "plan_line.id"
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_scenario_id_version_id_account_id_peri_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "scenario_id",
+        "version_id",
+        "account_id",
+        "period_id",
+        "entity_id",
+        "department_id"
+      ],
+      "references": "plan_line.company_id"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.company_id"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.created_at"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.id"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_is_current_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.is_current"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_label_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.label"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_label_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.label"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_scenario_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.scenario_id"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_version_no_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.version_no"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_version_no_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "plan_version.version_no"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_company_id_scenario_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "scenario_id"
+      ],
+      "references": "scenario.id"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "plan_version.id"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "plan_version.id"
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_company_id_scenario_id_version_no_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "scenario_id",
+        "version_no"
+      ],
+      "references": "plan_version.company_id"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.company_id"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.created_at"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.id"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_kind_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.kind"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_kind_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.kind"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_name_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.name"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_name_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.name"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.status"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "scenario.status"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_company_id_base_scenario_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "base_scenario_id"
+      ],
+      "references": "scenario.id"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "scenario.id"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "scenario.id"
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_company_id_name_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "name"
+      ],
+      "references": "scenario.company_id"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "statement_line.created_at"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "statement_line.key"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_label_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "statement_line.label"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_sign_rule_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "statement_line.sign_rule"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_sort_order_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "statement_line.sort_order"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_statement_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "statement_line.statement"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_statement_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "statement_line.statement"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "key"
+      ],
+      "references": "statement_line.key"
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_statement_sort_order_key",
+      "type": "UNIQUE",
+      "columns": [
+        "statement",
+        "sort_order"
+      ],
+      "references": "statement_line.statement"
+    }
+  ],
+  "indexes": [
+    {
+      "table": "account",
+      "name": "account_company_id_code_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "code"
+      ]
+    },
+    {
+      "table": "account",
+      "name": "account_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "account",
+      "name": "account_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_firebase_uid_key",
+      "unique": true,
+      "columns": [
+        "firebase_uid"
+      ]
+    },
+    {
+      "table": "app_user",
+      "name": "app_user_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "audit_log",
+      "name": "audit_log_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "audit_log",
+      "name": "idx_audit_log_company_occurred",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "occurred_at",
+        "id"
+      ]
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_company_id_source_system_source_code_mapping_ve_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "source_system",
+        "source_code",
+        "mapping_version"
+      ]
+    },
+    {
+      "table": "coa_mapping",
+      "name": "coa_mapping_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "company",
+      "name": "company_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "department",
+      "name": "department_company_id_code_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "code"
+      ]
+    },
+    {
+      "table": "department",
+      "name": "department_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "department",
+      "name": "department_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "entity",
+      "name": "entity_company_id_code_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "code"
+      ]
+    },
+    {
+      "table": "entity",
+      "name": "entity_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "entity",
+      "name": "entity_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "fiscal_calendar",
+      "name": "fiscal_calendar_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_fiscal_calendar_id_fiscal_year_cod_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "fiscal_calendar_id",
+        "fiscal_year",
+        "code"
+      ]
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_fiscal_calendar_id_fiscal_year_per_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "fiscal_calendar_id",
+        "fiscal_year",
+        "period_no"
+      ]
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "fiscal_period",
+      "name": "idx_fiscal_period_company_dates",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "start_date",
+        "end_date"
+      ]
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "gl_entry",
+      "name": "gl_entry_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "gl_line",
+      "name": "gl_line_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "gl_line",
+      "name": "idx_gl_line_company_entity_period",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "entity_id",
+        "period_id"
+      ]
+    },
+    {
+      "table": "gl_line",
+      "name": "idx_gl_line_company_period_account",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "period_id",
+        "account_id"
+      ]
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "import_batch",
+      "name": "import_batch_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "import_batch",
+      "name": "uq_import_batch_active_source",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "kind",
+        "source_hash"
+      ]
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_batch_id_row_no_key",
+      "unique": true,
+      "columns": [
+        "batch_id",
+        "row_no"
+      ]
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "import_row_raw",
+      "name": "import_row_raw_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "membership",
+      "name": "membership_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "membership",
+      "name": "membership_company_id_user_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "user_id"
+      ]
+    },
+    {
+      "table": "membership",
+      "name": "membership_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_company_id_scenario_id_version_id_account_id_peri_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "scenario_id",
+        "version_id",
+        "account_id",
+        "period_id",
+        "entity_id",
+        "department_id"
+      ]
+    },
+    {
+      "table": "plan_line",
+      "name": "plan_line_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_company_id_scenario_id_version_no_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "scenario_id",
+        "version_no"
+      ]
+    },
+    {
+      "table": "plan_version",
+      "name": "plan_version_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_company_id_name_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "name"
+      ]
+    },
+    {
+      "table": "scenario",
+      "name": "scenario_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_pkey",
+      "unique": true,
+      "columns": [
+        "key"
+      ]
+    },
+    {
+      "table": "statement_line",
+      "name": "statement_line_statement_sort_order_key",
+      "unique": true,
+      "columns": [
+        "statement",
+        "sort_order"
+      ]
+    }
+  ],
+  "triggers": [
+    {
+      "table": "audit_log",
+      "name": "trg_audit_log_append_only",
+      "deferrable": false
+    },
+    {
+      "table": "gl_entry",
+      "name": "trg_gl_entry_balance_header",
+      "deferrable": true
+    },
+    {
+      "table": "gl_line",
+      "name": "trg_gl_line_balance_lines",
+      "deferrable": true
+    },
+    {
+      "table": "import_batch",
+      "name": "trg_import_batch_row_accounting",
+      "deferrable": true
+    },
+    {
+      "table": "import_row_raw",
+      "name": "trg_import_row_raw_accounting",
+      "deferrable": true
+    }
   ]
 }

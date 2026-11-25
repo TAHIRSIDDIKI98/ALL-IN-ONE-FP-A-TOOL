@@ -22,6 +22,7 @@ const STEPS = [
   { id: 'work-integrity', cmd: 'node', args: ['scripts/work-integrity.mjs'] },
   { id: 'no-native-deps', cmd: 'node', args: ['scripts/no-native-deps.mjs'] },
   { id: 'schema-scope', cmd: 'node', args: ['scripts/schema-scope.mjs'] },
+  { id: 'schema-parity', cmd: 'npx', args: ['tsx', 'scripts/schema-parity.ts'] },
   { id: 'vitest', cmd: 'npx', args: ['vitest', 'run'] },
   { id: 'build', cmd: 'npx', args: ['vite', 'build'] },
   { id: 'bundle-size', cmd: 'node', args: ['scripts/bundle-size.mjs'] },

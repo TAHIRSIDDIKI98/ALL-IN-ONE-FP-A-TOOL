@@ -51,5 +51,9 @@ export default defineConfig({
     exclude: ['node_modules/**', 'dist/**', 'e2e/**'],
     environment: 'node',
     testTimeout: 30000,
+    // Two PGlite-backed forks on the 2-vCPU sandbox: files run in parallel, each file still owns a
+    // private in-memory database. Keeps the verify suite inside its locked 60s budget (§3.8).
+    pool: 'forks',
+    poolOptions: { forks: { maxForks: 2, minForks: 1 } },
   },
 });

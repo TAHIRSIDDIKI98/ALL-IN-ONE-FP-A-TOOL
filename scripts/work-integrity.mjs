@@ -13,7 +13,7 @@
  *  - S-CUTLINE (INT11): bans out-of-phase directories/files (`consolidation`, `monte-carlo`, `marketplace`, `ai-chat`, etc.) during M0/M1
  *  - S-RATCHET (INT6, INT13): verifies test file count, `it()` count, assertion count, and `/core` source-to-test ratio never decrease against `scripts/integrity-ratchet.json`.
  */
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, relative } from 'node:path';
 import { createRequire } from 'node:module';
@@ -294,26 +294,113 @@ function checkTaskboardAttestationsAndEvidence(rootDir) {
   return violations;
 }
 
+/**
+ * Imported-history exemptions for S-COMMIT (INT8).
+ *
+ * A repository-import/squash commit created before this gate was enforced on the history
+ * cannot be amended without rewriting published history (MASTER_PROMPT §8.9 / §13.4-F9).
+ * Exactly such commits — and no others — may be exempted here, and only when:
+ *   - the file cites the owner decision (`DEC-###`) that approved the exemption,
+ *   - that decision id is actually present in TASKBOARD.md,
+ *   - each entry carries a full 40-hex hash plus a written reason,
+ *   - the exempt commit is a real ancestor of HEAD (stale exemptions are rejected),
+ *   - at most MAX_BASELINE_EXEMPTIONS entries exist, so future work can never be exempted
+ *     in bulk — it must fix forward with compliant commits.
+ */
+const COMMIT_BASELINE_REL = join('scripts', 'commit-baseline.json');
+const MAX_BASELINE_EXEMPTIONS = 1;
+
+function loadCommitBaseline(rootDir, violations) {
+  const baselinePath = join(rootDir, COMMIT_BASELINE_REL);
+  const exempt = new Map();
+  if (!existsSync(baselinePath)) return { decision: null, exempt };
+
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(baselinePath, 'utf8'));
+  } catch {
+    violations.push('S-COMMIT scripts/commit-baseline.json is not valid JSON');
+    return { decision: null, exempt };
+  }
+
+  const decision = typeof parsed.decision === 'string' ? parsed.decision : null;
+  if (decision === null || !/^DEC-\d{3}$/.test(decision)) {
+    violations.push('S-COMMIT scripts/commit-baseline.json must cite its owner decision id (DEC-###)');
+  }
+
+  const entries = Array.isArray(parsed.exempt) ? parsed.exempt : [];
+  if (entries.length > MAX_BASELINE_EXEMPTIONS) {
+    violations.push(
+      `S-COMMIT baseline exempts ${entries.length} commits; at most ${MAX_BASELINE_EXEMPTIONS} imported commit may be exempted — fix forward with compliant commits`,
+    );
+  }
+
+  for (const entry of entries) {
+    const hash = entry && typeof entry.hash === 'string' ? entry.hash : '';
+    if (!/^[0-9a-f]{40}$/.test(hash)) {
+      violations.push('S-COMMIT baseline entry must declare a full 40-character lowercase commit hash');
+      continue;
+    }
+    if (!entry.reason || typeof entry.reason !== 'string' || entry.reason.trim().length < 20) {
+      violations.push(`S-COMMIT baseline entry ${hash.slice(0, 7)} must record why the commit is exempt`);
+      continue;
+    }
+    exempt.set(hash, entry.reason);
+  }
+
+  const taskboardPath = join(rootDir, 'TASKBOARD.md');
+  if (decision !== null && exempt.size > 0) {
+    const taskboard = existsSync(taskboardPath) ? readFileSync(taskboardPath, 'utf8') : '';
+    if (!new RegExp(`\\b${decision}\\b`).test(taskboard)) {
+      violations.push(
+        `S-COMMIT baseline cites ${decision}, but that decision id does not appear in TASKBOARD.md`,
+      );
+    }
+  }
+
+  return { decision, exempt };
+}
+
 function checkGitCommitHygiene(rootDir) {
   const violations = [];
   if (!existsSync(join(rootDir, '.git'))) return violations;
+
+  const { exempt } = loadCommitBaseline(rootDir, violations);
+
   try {
-    const raw = execSync('git log --format="%h|||%s|||%b===END===" -n 25', {
+    const raw = execSync('git log --format="%H|||%s|||%b===END===" -n 25', {
       cwd: rootDir,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
     const records = raw.split('===END===').map((s) => s.trim()).filter(Boolean);
+    const seenHashes = new Set();
     for (const rec of records) {
       const [hash = '', subject = '', body = ''] = rec.split('|||');
+      seenHashes.add(hash);
+      if (exempt.has(hash)) continue;
+      const shortHash = hash.slice(0, 7);
       if (/\b(?:wip|fixup!|squash!)\b/i.test(subject)) {
-        violations.push(`S-COMMIT ${hash}: banned WIP/fixup commit subject "${subject}"`);
+        violations.push(`S-COMMIT ${shortHash}: banned WIP/fixup commit subject "${subject}"`);
       }
       if (!/^(?:feat|fix|test|docs|chore)\([a-z0-9-]+\):\s+\S+/.test(subject)) {
-        violations.push(`S-COMMIT ${hash}: commit subject must follow conventional format: "${subject}"`);
+        violations.push(`S-COMMIT ${shortHash}: commit subject must follow conventional format: "${subject}"`);
       }
       if (!/\bWI-\d{4}[A-Z]?\b/.test(body)) {
-        violations.push(`S-COMMIT ${hash}: commit body must cite its single WI-#### work item`);
+        violations.push(`S-COMMIT ${shortHash}: commit body must cite its single WI-#### work item`);
+      }
+    }
+
+    for (const hash of exempt.keys()) {
+      if (seenHashes.has(hash)) continue;
+      const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', hash, 'HEAD'], {
+        cwd: rootDir,
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
+      if (ancestry.status !== 0) {
+        violations.push(
+          `S-COMMIT baseline entry ${hash.slice(0, 7)} is not an ancestor of HEAD — remove the stale exemption`,
+        );
       }
     }
   } catch {

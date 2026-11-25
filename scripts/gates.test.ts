@@ -202,6 +202,108 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     expect(cleanRepo.status).toBe(0);
   });
 
+  it('S-COMMIT requires conventional subjects + WI citation, and honours exactly one reason-recorded imported-history baseline', () => {
+    const ws = makeTempWorkspace();
+    writeFileSync(join(ws, 'TASKBOARD.md'), '## §Decisions\n| DEC-005 | 2026-11-25 | imported baseline | x | x | Y |\n');
+
+    const git = (args: string[]) => {
+      const res = spawnSync('git', args, { cwd: ws, encoding: 'utf8' });
+      expect(res.status).toBe(0);
+    };
+    git(['init', '-q']);
+    git(['-c', 'user.email=gate@test.local', '-c', 'user.name=Gate Test', 'commit', '--allow-empty', '-m', 'chore: integrate Vite middleware into custom server']);
+    const badHash = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ws, encoding: 'utf8' }).stdout.trim();
+
+    // 1. A non-conventional commit with no WI citation is red.
+    const red = runGate('scripts/work-integrity.mjs', ws);
+    expect(red.status).toBe(1);
+    expect(red.stderr).toContain('commit subject must follow conventional format');
+    expect(red.stderr).toContain('commit body must cite its single WI-#### work item');
+
+    // 2. The single reason-recorded baseline entry (citing a real DEC) turns it green.
+    mkdirSync(join(ws, 'scripts'), { recursive: true });
+    const baselinePath = join(ws, 'scripts', 'commit-baseline.json');
+    writeFileSync(
+      baselinePath,
+      JSON.stringify({
+        decision: 'DEC-005',
+        exempt: [{ hash: badHash, reason: 'Repository import commit predating S-COMMIT enforcement.' }],
+      }),
+    );
+    const green = runGate('scripts/work-integrity.mjs', ws);
+    expect(green.status).toBe(0);
+
+    // 3. Baseline citing a decision absent from TASKBOARD.md is red.
+    writeFileSync(
+      baselinePath,
+      JSON.stringify({
+        decision: 'DEC-777',
+        exempt: [{ hash: badHash, reason: 'Repository import commit predating S-COMMIT enforcement.' }],
+      }),
+    );
+    const unknownDecision = runGate('scripts/work-integrity.mjs', ws);
+    expect(unknownDecision.status).toBe(1);
+    expect(unknownDecision.stderr).toContain('does not appear in TASKBOARD.md');
+
+    // 4. A stale (non-ancestor) exemption is red.
+    writeFileSync(
+      baselinePath,
+      JSON.stringify({
+        decision: 'DEC-005',
+        exempt: [
+          {
+            hash: 'f'.repeat(40),
+            reason: 'Repository import commit predating S-COMMIT enforcement.',
+          },
+        ],
+      }),
+    );
+    const stale = runGate('scripts/work-integrity.mjs', ws);
+    expect(stale.status).toBe(1);
+    expect(stale.stderr).toContain('is not an ancestor of HEAD');
+
+    // 5. Bulk exemptions are rejected: future work must fix forward.
+    mkdirSync(join(ws, 'src'), { recursive: true });
+    writeFileSync(join(ws, 'src', 'a.ts'), 'export const a = 1;\n');
+    const compliant = (subject: string) =>
+      spawnSync(
+        'git',
+        ['-c', 'user.email=gate@test.local', '-c', 'user.name=Gate Test', 'commit', '--allow-empty', '-m', subject, '-m', 'WI-0001 evidence'],
+        { cwd: ws, encoding: 'utf8' },
+      );
+    expect(
+      spawnSync('git', ['add', '.'], { cwd: ws, encoding: 'utf8' }).status,
+    ).toBe(0);
+    expect(compliant('fix(integrity): widen the commit hygiene gate').status).toBe(0);
+    const secondHash = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ws, encoding: 'utf8' }).stdout.trim();
+
+    writeFileSync(
+      baselinePath,
+      JSON.stringify({
+        decision: 'DEC-005',
+        exempt: [
+          { hash: badHash, reason: 'Repository import commit predating S-COMMIT enforcement.' },
+          { hash: secondHash, reason: 'Repository import commit predating S-COMMIT enforcement.' },
+        ],
+      }),
+    );
+    const bulk = runGate('scripts/work-integrity.mjs', ws);
+    expect(bulk.status).toBe(1);
+    expect(bulk.stderr).toContain('at most 1 imported commit may be exempted');
+
+    // 6. In a repository whose entire history is compliant, no baseline is needed and the gate is green.
+    const cleanWs = makeTempWorkspace();
+    writeFileSync(join(cleanWs, 'TASKBOARD.md'), '## §Decisions\n| DEC-005 | 2026-11-25 | imported baseline | x | x | Y |\n');
+    const cleanGit = (args: string[]) => {
+      const res = spawnSync('git', args, { cwd: cleanWs, encoding: 'utf8' });
+      expect(res.status).toBe(0);
+    };
+    cleanGit(['init', '-q']);
+    cleanGit(['-c', 'user.email=gate@test.local', '-c', 'user.name=Gate Test', 'commit', '--allow-empty', '-m', 'feat(spine): add persistence', '-m', 'WI-0012 evidence']);
+    const cleanHistory = runGate('scripts/work-integrity.mjs', cleanWs);
+    expect(cleanHistory.status).toBe(0);
+  });
+
   it('INT1-INT13 work-integrity fails on TODO placeholder, dead button, empty catch, console.log, assertionless test, cut-line breach, or missing attestation', () => {
     const ws = makeTempWorkspace();
     mkdirSync(join(ws, 'src'), { recursive: true });

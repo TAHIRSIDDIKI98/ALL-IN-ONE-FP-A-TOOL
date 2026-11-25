@@ -444,6 +444,11 @@ describe('Full Accounting Articulation (A1–A5) & Negative Invariant Detection'
     expect(bundle.balanceSheet.isBalanced).toBe(true);
     expect(bundle.cashFlow.endingCash.eq(bundle.balanceSheet.cashBalance)).toBe(true);
     expect(bundle.articulation.valid).toBe(true);
+    expect(bundle.retainedEarnings.opening.toFixed(2)).toBe('200.00');
+    expect(bundle.retainedEarnings.netIncome.toFixed(2)).toBe('250.00');
+    expect(bundle.retainedEarnings.distributions.toFixed(2)).toBe('40.00');
+    expect(bundle.retainedEarnings.closingTotal.toFixed(2)).toBe('410.00');
+    expect(bundle.retainedEarnings.rollForwardValid).toBe(true);
     for (const c of bundle.articulation.checks) {
       expect(c.passed, `Invariant ${c.id} failed: ${c.detail}`).toBe(true);
     }
