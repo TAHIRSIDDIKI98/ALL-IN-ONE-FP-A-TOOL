@@ -6,18 +6,36 @@ import {
   type ChartAccountPayload,
   type ChartImportPayload,
   type ChartOfAccountsPayload,
+  type CoaMappingEditPayload,
+  type CoaMappingEntryPayload,
+  type CoaMappingQuarantineReason,
+  type CoaMappingReportPayload,
 } from '../api/client.js';
 import { EmptyState, ErrorState, LoadingState, PartialBanner } from '../components/StateFrame.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
-type ChartAction = 'load' | 'import';
+type MapperAction = 'load' | 'import' | 'loadMapping' | 'commitMapping';
+type DraftStatus = 'mapped' | 'quarantined' | 'unmapped';
+type QuarantineReason = CoaMappingQuarantineReason;
 
-interface ChartFailure {
+interface MapperFailure {
   readonly code: string;
   readonly message: string;
-  readonly action: ChartAction;
+  readonly action: MapperAction;
 }
+
+interface MappingDraft {
+  readonly status: DraftStatus;
+  readonly accountCode: string | null;
+  readonly reason: QuarantineReason | null;
+}
+
+const REASONS: readonly QuarantineReason[] = [
+  'MANUAL_QUARANTINE',
+  'NO_TARGET_ACCOUNT',
+  'AMBIGUOUS_TARGET',
+];
 
 const CHART_TEMPLATE = [
   'code,name,type,normal_side,statement_line_key,parent_code,is_postable',
@@ -30,7 +48,7 @@ const CHART_TEMPLATE = [
   '6000,Payroll expense,expense,debit,pl.opex.payroll,,true',
 ].join('\n');
 
-function toFailure(error: unknown, action: ChartAction): ChartFailure {
+function toFailure(error: unknown, action: MapperAction): MapperFailure {
   if (error instanceof ApiClientError) {
     const issues = error.details['issues'];
     const issueText = Array.isArray(issues)
@@ -45,34 +63,291 @@ function toFailure(error: unknown, action: ChartAction): ChartFailure {
   };
 }
 
+function createDrafts(entries: readonly CoaMappingEntryPayload[]): Readonly<Record<string, MappingDraft>> {
+  const drafts: Record<string, MappingDraft> = {};
+  for (const entry of entries) {
+    drafts[entry.sourceCode] =
+      entry.status === 'mapped'
+        ? { status: 'mapped', accountCode: entry.accountCode, reason: null }
+        : entry.status === 'quarantined'
+          ? { status: 'quarantined', accountCode: null, reason: entry.quarantineReason ?? 'MANUAL_QUARANTINE' }
+          : { status: 'unmapped', accountCode: null, reason: null };
+  }
+  return drafts;
+}
+
+
+/** Presentational mapping editor, exported so its five-state contract is directly testable. */
+export function CoaMappingEditor(props: {
+  readonly report: CoaMappingReportPayload | null;
+  readonly accounts: readonly ChartAccountPayload[];
+  readonly drafts: Readonly<Record<string, MappingDraft>>;
+  readonly notice: string | null;
+  readonly commitResult: { readonly written: number; readonly unchanged: number } | null;
+  readonly onChange: (sourceCode: string, next: MappingDraft) => void;
+  readonly onAcceptAuto: () => void;
+  readonly onQuarantineUnmapped: () => void;
+  readonly onSave: () => void;
+  readonly onReload: () => void;
+  readonly onNavigate: (path: SpineRoutePath) => void;
+}): ReactElement {
+  const { report, accounts, drafts, notice, commitResult } = props;
+  const entries = report?.mappings ?? [];
+  const onChange = props.onChange;
+  const onAcceptAuto = props.onAcceptAuto;
+  const onQuarantineUnmapped = props.onQuarantineUnmapped;
+  const onSave = props.onSave;
+  const onReload = props.onReload;
+  const onNavigate = props.onNavigate;
+  return (
+  <div className="space-y-3">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">Source → account mapping</h2>
+        <p className="text-sm text-slate-600">
+          {report === null
+            ? 'The mapping report could not be read.'
+            : `${entries.length} source code(s) discovered · ${report.mappedCount} mapped · ${report.quarantinedCount} quarantined · ${report.unmappedCount} unmapped`}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onAcceptAuto}
+          className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Accept all auto (exact code matches)
+        </button>
+        <button
+          type="button"
+          onClick={onQuarantineUnmapped}
+          className="rounded border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-50"
+        >
+          Quarantine unmapped
+        </button>
+      </div>
+    </div>
+
+    {notice !== null && (
+      <p role="status" className="rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+        {notice}
+      </p>
+    )}
+
+    {commitResult !== null && (
+      <p role="status" className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-950">
+        Mapping versions written: {commitResult.written}; unchanged: {commitResult.unchanged}. Every
+        real edit is chained into the company audit log.
+      </p>
+    )}
+
+    {report === null ? (
+      <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+        <p>The mapping report could not be read. No mapping was changed or invented.</p>
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => onNavigate('/import')}
+            className="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Go to Import Wizard
+          </button>
+        </div>
+      </div>
+    ) : entries.length === 0 ? (
+      <div className="rounded border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        <p>
+          No source codes have been imported yet, so there is nothing to map. Import a ledger
+          file first; its source codes are retained with exact row counts and reasons.
+        </p>
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => onNavigate('/import')}
+            className="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Go to Import Wizard
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <caption className="sr-only">Discovered source codes and their versioned mappings</caption>
+          <thead className="bg-slate-50 text-left font-medium text-slate-700">
+            <tr>
+              <th scope="col" className="px-3 py-2">Source code</th>
+              <th scope="col" className="px-3 py-2 text-right">Rows</th>
+              <th scope="col" className="px-3 py-2">Sample values</th>
+              <th scope="col" className="px-3 py-2">Current state</th>
+              <th scope="col" className="px-3 py-2">Target / reason</th>
+              <th scope="col" className="px-3 py-2">Version</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {entries.map((entry) => {
+              const draft = drafts[entry.sourceCode] ?? {
+                status: 'unmapped' as const,
+                accountCode: null,
+                reason: null,
+              };
+              return (
+                <tr key={entry.sourceCode}>
+                  <td className="px-3 py-2 font-mono">
+                    {entry.sourceCode}
+                    {entry.targetConflict ? (
+                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900">
+                        shared target
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono">{entry.rowCount}</td>
+                  <td className="px-3 py-2 text-xs text-slate-600">
+                    {entry.sampleValues.length > 0 ? entry.sampleValues.join('; ') : 'none in retained rows'}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={
+                        draft.status === 'quarantined'
+                          ? 'rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-900'
+                          : draft.status === 'mapped'
+                            ? 'rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-900'
+                            : 'rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-700'
+                      }
+                    >
+                      {draft.status === 'unmapped' ? entry.status : draft.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-2">
+                      <label className="sr-only" htmlFor={`target-${entry.sourceCode}`}>
+                        Target account for {entry.sourceCode}
+                      </label>
+                      <select
+                        id={`target-${entry.sourceCode}`}
+                        value={draft.accountCode ?? ''}
+                        onChange={(event) =>
+                          onChange(entry.sourceCode, {
+                            status: event.target.value === '' ? 'unmapped' : 'mapped',
+                            accountCode: event.target.value === '' ? null : event.target.value,
+                            reason: null,
+                          })
+                        }
+                        className="rounded border border-slate-300 px-2 py-1 text-xs"
+                      >
+                        <option value="">Not mapped</option>
+                        {accounts.map((account) => (
+                          <option key={account.code} value={account.code}>
+                            {account.code} — {account.name}
+                          </option>
+                        ))}
+                      </select>
+                      {draft.status !== 'mapped' ? (
+                        <select
+                          aria-label={`Quarantine reason for ${entry.sourceCode}`}
+                          value={draft.reason ?? 'MANUAL_QUARANTINE'}
+                          onChange={(event) =>
+                            onChange(entry.sourceCode, {
+                              status: 'quarantined',
+                              accountCode: null,
+                              reason: event.target.value as QuarantineReason,
+                            })
+                          }
+                          className="rounded border border-slate-300 px-2 py-1 text-xs"
+                        >
+                          {REASONS.map((reason) => (
+                            <option key={reason} value={reason}>
+                              {reason}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {entry.mappingVersion === 0
+                      ? 'none'
+                      : `${entry.mappingVersion} (${entry.effectiveFrom})`}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onSave}
+        className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+      >
+        Save mapping versions
+      </button>
+      <button
+        type="button"
+        onClick={onReload}
+        className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Reload mappings
+      </button>
+    </div>
+  </div>
+  );
+}
+
 /**
- * Chart-of-Accounts screen (MASTER_PROMPT §9.3.4; Spine Gates G1/G10).
+ * Chart-of-Accounts + source mapping screen (MASTER_PROMPT §9.3.4; Spine Gates G1/G10).
  *
- * This is the TARGET chart every import maps onto: a source code can only post when an account row
- * exists for it, and everything else is quarantined with a named reason by the import commit. The
- * chart CSV is validated in full by the server's pure parser and imported atomically, so a file with
- * one bad row writes nothing.
+ * The chart is the target side; `coa_mapping` is the versioned SOURCE side. Source codes come from
+ * retained import rows, never from invented demo values. Every control writes a real versioned
+ * mapping, an explicit typed quarantine, or navigates to the import wizard.
  */
 export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProps): ReactElement {
   const { company, authToken } = useWorkspaceStore();
   const companyId = company?.id ?? null;
 
   const [chart, setChart] = useState<ChartOfAccountsPayload | null>(null);
+  const [mapping, setMapping] = useState<CoaMappingReportPayload | null>(null);
+  const [drafts, setDrafts] = useState<Readonly<Record<string, MappingDraft>>>({});
   const [csvDraft, setCsvDraft] = useState('');
   const [imported, setImported] = useState<ChartImportPayload | null>(null);
-  const [busy, setBusy] = useState<ChartAction | null>(null);
-  const [failure, setFailure] = useState<ChartFailure | null>(null);
+  const [commitResult, setCommitResult] = useState<{ written: number; unchanged: number } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<MapperAction | null>(null);
+  const [failure, setFailure] = useState<MapperFailure | null>(null);
 
-  const loadChart = useCallback(async (): Promise<void> => {
+  const loadMapper = useCallback(async (): Promise<void> => {
     if (companyId === null || authToken === null) return;
     setBusy('load');
     setFailure(null);
     try {
-      const result = await createApiClient({ getToken: () => authToken }).getChart(companyId);
-      setChart(result);
+      const client = createApiClient({ getToken: () => authToken });
+      const [chartReport, mappingReport] = await Promise.all([
+        client.getChart(companyId),
+        client.getCoaMappings(companyId),
+      ]);
+      setChart(chartReport);
+      setMapping(mappingReport);
+      setDrafts(createDrafts(mappingReport.mappings));
     } catch (error) {
-      setChart(null);
       setFailure(toFailure(error, 'load'));
+    } finally {
+      setBusy(null);
+    }
+  }, [authToken, companyId]);
+
+  const loadMapping = useCallback(async (): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    setBusy('loadMapping');
+    setFailure(null);
+    try {
+      const report = await createApiClient({ getToken: () => authToken }).getCoaMappings(companyId);
+      setMapping(report);
+      setDrafts(createDrafts(report.mappings));
+    } catch (error) {
+      setFailure(toFailure(error, 'loadMapping'));
     } finally {
       setBusy(null);
     }
@@ -80,8 +355,8 @@ export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProp
 
   useEffect(() => {
     if (companyId === null || authToken === null) return;
-    void loadChart();
-  }, [authToken, companyId, loadChart]);
+    void loadMapper();
+  }, [authToken, companyId, loadMapper]);
 
   const runImport = useCallback(async (): Promise<void> => {
     if (companyId === null || authToken === null) return;
@@ -101,30 +376,116 @@ export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProp
       });
       setChart({ companyId: result.companyId, accounts: result.accounts });
       setImported(result);
+      await loadMapping();
     } catch (error) {
       setFailure(toFailure(error, 'import'));
     } finally {
       setBusy(null);
     }
-  }, [authToken, companyId, csvDraft]);
+  }, [authToken, companyId, csvDraft, loadMapping]);
+
+  const changeDraft = (sourceCode: string, next: MappingDraft): void => {
+    setDrafts((current) => ({ ...current, [sourceCode]: next }));
+    setNotice(null);
+  };
+
+  const acceptAutoMappings = (): void => {
+    if (mapping === null) return;
+    const accounts: readonly ChartAccountPayload[] = chart?.accounts ?? [];
+    let matched = 0;
+    const next: Record<string, MappingDraft> = { ...drafts };
+    for (const entry of mapping.mappings) {
+      const current = drafts[entry.sourceCode];
+      if (current?.status !== 'unmapped') continue;
+      const exact = accounts.find((account) => account.code.toUpperCase() === entry.sourceCode.trim().toUpperCase());
+      if (exact === undefined) continue;
+      next[entry.sourceCode] = { status: 'mapped', accountCode: exact.code, reason: null };
+      matched += 1;
+    }
+    setDrafts(next);
+    setNotice(
+      matched === 0
+        ? 'No unmapped source code has an exact chart-code match; choose a target or an explicit reason.'
+        : `${matched} source code(s) matched a chart code exactly. Review the targets and save to version them.`,
+    );
+  };
+
+  const quarantineUnmapped = (): void => {
+    if (mapping === null) return;
+    let marked = 0;
+    const next: Record<string, MappingDraft> = { ...drafts };
+    for (const entry of mapping.mappings) {
+      if (drafts[entry.sourceCode]?.status !== 'unmapped') continue;
+      next[entry.sourceCode] = { status: 'quarantined', accountCode: null, reason: 'MANUAL_QUARANTINE' };
+      marked += 1;
+    }
+    setDrafts(next);
+    setNotice(
+      marked === 0
+        ? 'There are no unmapped source codes to quarantine.'
+        : `${marked} source code(s) are marked for explicit quarantine; save to version them.`,
+    );
+  };
+
+  const saveMappings = useCallback(async (): Promise<void> => {
+    if (companyId === null || authToken === null || mapping === null) return;
+    const entries: CoaMappingEditPayload[] = mapping.mappings.flatMap((entry) => {
+      const draft = drafts[entry.sourceCode];
+      if (draft === undefined || draft.status === 'unmapped') return [];
+      return [
+        {
+          sourceCode: entry.sourceCode,
+          status: draft.status,
+          accountCode: draft.status === 'mapped' ? draft.accountCode : null,
+          quarantineReason: draft.status === 'quarantined' ? draft.reason : null,
+        },
+      ];
+    });
+    if (entries.length === 0) {
+      setFailure({
+        code: 'VALIDATION_FAILED',
+        message: 'Choose a target account or an explicit quarantine reason for at least one source code.',
+        action: 'commitMapping',
+      });
+      return;
+    }
+    setBusy('commitMapping');
+    setFailure(null);
+    try {
+      const result = await createApiClient({ getToken: () => authToken }).commitCoaMappings(companyId, {
+        entries,
+      });
+      setMapping(result.report);
+      setDrafts(createDrafts(result.report.mappings));
+      setCommitResult({ written: result.written, unchanged: result.unchanged });
+      setNotice(null);
+    } catch (error) {
+      setFailure(toFailure(error, 'commitMapping'));
+    } finally {
+      setBusy(null);
+    }
+  }, [authToken, companyId, drafts, mapping]);
 
   const retryFailedAction = (): void => {
     if (failure?.action === 'import') void runImport();
-    else void loadChart();
+    else if (failure?.action === 'commitMapping') void saveMappings();
+    else if (failure?.action === 'loadMapping') void loadMapping();
+    else void loadMapper();
   };
 
   const navigate = (path: SpineRoutePath): void => onNavigate(path);
 
+  const busyLabel =
+    busy === 'import'
+      ? 'Validating and importing the chart of accounts in one transaction...'
+      : busy === 'commitMapping'
+        ? 'Writing mapping versions and their audit entry in one transaction...'
+        : busy === 'loadMapping'
+          ? 'Loading the discovered source codes and mapping versions...'
+          : 'Loading the chart and versioned mappings...';
+
   if (forcedState === 'loading' || busy !== null) {
-    return (
-      <LoadingState
-        label={
-          busy === 'import'
-            ? 'Validating and importing the chart of accounts in one transaction...'
-            : 'Loading the chart of accounts...'
-        }
-      />
-    );
+    return <LoadingState label={busyLabel} />;
   }
 
   if (forcedState === 'error' || failure !== null) {
@@ -207,15 +568,21 @@ export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProp
   }
 
   const accounts: readonly ChartAccountPayload[] = chart.accounts;
+  const entries = mapping?.mappings ?? [];
+  const showPartial =
+    forcedState === 'partial' ||
+    (mapping !== undefined &&
+      mapping !== null &&
+      (mapping.unmappedCount > 0 || mapping.conflictCount > 0));
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-6 space-y-4">
+    <section className="rounded-lg border border-slate-200 bg-white p-6 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Chart of Accounts Mapper</h1>
           <p className="mt-1 text-sm text-slate-600">
-            {accounts.length} account(s) · only these codes can receive postings. Unmapped source
-            codes are quarantined with a reason by the import commit, never guessed.
+            {accounts.length} account(s) · only these codes can receive postings. Source codes are
+            discovered from real import rows and mapped to this chart with versioned, audited edits.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -228,10 +595,10 @@ export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProp
           </button>
           <button
             type="button"
-            onClick={() => void loadChart()}
+            onClick={() => void loadMapper()}
             className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            Reload Chart
+            Reload Mapper
           </button>
         </div>
       </div>
@@ -249,8 +616,14 @@ export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProp
         </div>
       )}
 
-      {accounts.some((account) => !account.isPostable) && (
-        <PartialBanner detail="Some accounts are marked non-postable (header/roll-up rows). Postings to them would be rejected by the chart, not silently accepted." />
+      {showPartial && (
+        <PartialBanner
+          detail={
+            mapping === null || mapping === undefined
+              ? 'The mapping report is not available yet. No mapping was changed.'
+              : `${mapping.unmappedCount} source code(s) have no mapping; ${mapping.conflictCount} share a target account. Unmapped rows stay quarantined until you save an explicit mapping or reason.`
+          }
+        />
       )}
 
       <div className="overflow-x-auto rounded border border-slate-200">
@@ -297,6 +670,19 @@ export default function CoaMapperPage({ onNavigate, forcedState }: SpinePageProp
         </table>
       </div>
 
+      <CoaMappingEditor
+        report={mapping}
+        accounts={accounts}
+        drafts={drafts}
+        notice={notice}
+        commitResult={commitResult}
+        onChange={changeDraft}
+        onAcceptAuto={acceptAutoMappings}
+        onQuarantineUnmapped={quarantineUnmapped}
+        onSave={() => void saveMappings()}
+        onReload={() => void loadMapping()}
+        onNavigate={navigate}
+      />
       <div className="space-y-2">
         <label htmlFor="chart-csv-more" className="block text-sm font-medium text-slate-700">
           Add or rename accounts (CSV import)

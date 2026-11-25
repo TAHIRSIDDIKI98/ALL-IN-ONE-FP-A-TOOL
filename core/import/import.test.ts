@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resolveSourceAccountCode } from '../mapping/index.js';
 import { serialize } from '../money/index.js';
 import { evaluateMessyGlCsv, parseCsvRecords, parseStrictDate } from './index.js';
 
@@ -36,6 +37,38 @@ describe('Core Import & Messy CSV Parser (§5.2, §7.6, C6)', () => {
     expect(parseStrictDate('03/04/2026').kind).toBe('quarantine');
     expect(parseStrictDate('2026-13-01').kind).toBe('quarantine');
     expect(parseStrictDate('').kind).toBe('quarantine');
+  });
+
+  it('uses the shared versioned mapping resolver before the exact chart-code fallback', () => {
+    const csvText = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-MAP,2026-01-15,BANK-EXT,Client receipt,600.00,',
+      'JE-MAP,2026-01-15,2000,Offset,,600.00',
+      'JE-HOLD,2026-01-16,HOLD-EXT,Manual hold,100.00,',
+      'JE-HOLD,2026-01-16,2000,Hold offset,,100.00',
+    ].join('\n');
+    const chartCodes = new Set(['2000']);
+    const mappings = [
+      { sourceCode: 'BANK-EXT', accountCode: '2000', mappingVersion: 1, effectiveFrom: '2026-01-01', status: 'mapped' as const, quarantineReason: null },
+      { sourceCode: 'HOLD-EXT', accountCode: null, mappingVersion: 1, effectiveFrom: '2026-01-01', status: 'quarantined' as const, quarantineReason: 'MANUAL_QUARANTINE' as const },
+    ];
+    const result = evaluateMessyGlCsv({
+      csvText,
+      knownAccountCodes: chartCodes,
+      resolveSourceCode: (sourceCode) =>
+        resolveSourceAccountCode({ sourceCode, mappings, chartCodes, asOfDate: '2026-02-01' }),
+    });
+
+    // The pure parser resolves source codes; the DB classifier adds the journal-balance gate.
+    expect(result.imported.map((row) => [row.accountCode, serialize(row.debit, 2), serialize(row.credit, 2)]))
+      .toEqual([
+        ['2000', '600.00', '0.00'],
+        ['2000', '0.00', '600.00'],
+        ['2000', '0.00', '100.00'],
+      ]);
+    expect(result.quarantined.map((row) => row.reason)).toEqual([
+      'QUARANTINED_BY_MAPPING:MANUAL_QUARANTINE',
+    ]);
   });
 
   it('satisfies exact imported + quarantined == rows_in on committed messy-export fixtures', () => {

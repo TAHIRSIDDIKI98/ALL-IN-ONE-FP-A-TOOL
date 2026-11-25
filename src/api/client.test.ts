@@ -691,6 +691,97 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(calls[0]?.headers['authorization']).toBe('Bearer token-123');
   });
 
+  it('reads and commits versioned source mappings through tenant-scoped relative URLs', async () => {
+    const report = {
+      companyId: COMPANY['companyId'],
+      sourceSystem: 'csv',
+      effectiveFrom: '2026-11-25',
+      mappings: [
+        {
+          sourceSystem: 'csv',
+          sourceCode: 'BANK-EXT',
+          accountCode: '1000',
+          accountName: 'Operating bank',
+          mappingVersion: 2,
+          effectiveFrom: '2026-11-25',
+          status: 'mapped',
+          quarantineReason: null,
+          targetConflict: false,
+          rowCount: 3,
+          sampleValues: ['receipt'],
+        },
+      ],
+      availableAccounts: [{ code: '1000', name: 'Operating bank' }],
+      mappedCount: 1,
+      quarantinedCount: 0,
+      unmappedCount: 0,
+      conflictCount: 0,
+    };
+    const { fetchImpl, calls } = fakeFetch((request) => ({
+      status: request.method === 'POST' ? 201 : 200,
+      body: request.method === 'POST' ? { ...report, written: 1, unchanged: 0 } : report,
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const loaded = await client.getCoaMappings(String(COMPANY['companyId']), { asOfDate: '2026-11-25' });
+    expect(loaded.mappings[0]?.mappingVersion).toBe(2);
+    expect(calls[0]?.url).toBe(
+      `/api/companies/${String(COMPANY['companyId'])}/coa-mapping?asOfDate=2026-11-25`,
+    );
+    expect(calls[0]?.headers['authorization']).toBe('Bearer token-123');
+
+    const committed = await client.commitCoaMappings(String(COMPANY['companyId']), {
+      entries: [
+        {
+          sourceCode: 'BANK-EXT',
+          status: 'mapped',
+          accountCode: '1000',
+          quarantineReason: null,
+        },
+      ],
+    });
+    expect(committed.written).toBe(1);
+    expect(calls[1]?.url).toBe(
+      `/api/companies/${String(COMPANY['companyId'])}/coa-mapping/commit`,
+    );
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({
+      entries: [
+        {
+          sourceCode: 'BANK-EXT',
+          status: 'mapped',
+          accountCode: '1000',
+          quarantineReason: null,
+        },
+      ],
+    });
+  });
+
+  it('surfaces a rejected mapping batch with the server typed code', async () => {
+    const { fetchImpl } = fakeFetch(() => ({
+      status: 422,
+      body: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          userMessage: 'The mapping batch has 1 rejected row(s); nothing was written.',
+          httpStatus: 422,
+          details: { issues: ['row 1: UNKNOWN_ACCOUNT:9999'] },
+        },
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    await expect(
+      client.commitCoaMappings(String(COMPANY['companyId']), {
+        entries: [
+          { sourceCode: 'BANK-EXT', status: 'mapped', accountCode: '9999', quarantineReason: null },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { issues: ['row 1: UNKNOWN_ACCOUNT:9999'] },
+    });
+  });
+
   it('maps a foreign-tenant export rejection onto the server typed code', async () => {
     const { fetchImpl } = fakeFetch(() => ({
       status: 403,

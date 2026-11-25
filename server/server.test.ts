@@ -14,6 +14,7 @@ import { ApiClientError, createApiClient } from '../src/api/client.js';
 import { seedChartOfAccounts } from './db/repositories/import.js';
 import { MESSY_CSV } from './db/testing/corpus-fixtures.js';
 import { verifyCompanyAuditLog } from './audit/index.js';
+import { CoaMappingReportSchema } from '../shared/coaMapping.js';
 
 const SECRET = 'server-test-sandbox-secret-long-enough';
 
@@ -285,6 +286,216 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     const invalidBody = (await invalid.json()) as { error: { code: string; details: { issues: string[] } } };
     expect(invalidBody.error.code).toBe('VALIDATION_FAILED');
     expect(invalidBody.error.details.issues.join(' ')).toContain('baseCurrency');
+  });
+
+  it('versions source→account mappings, reuses one resolver for preview and commit, and audits every write', async () => {
+    const created = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({
+        companyName: 'HTTP Mapping Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'ENT-MAP',
+        entityName: 'Mapping HQ',
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { companyId } = (await created.json()) as { companyId: string };
+
+    await db.transaction((tx) =>
+      seedChartOfAccounts(tx, {
+        companyId,
+        accounts: [
+          { code: '1000', name: 'Operating bank', type: 'asset', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'bs.asset.cash', active: true },
+          { code: '2000', name: 'Accounts payable', type: 'liability', normalSide: 'credit', parentCode: null, isPostable: true, statementLineKey: 'bs.liability.ap', active: true },
+          { code: '4000', name: 'Service revenue', type: 'revenue', normalSide: 'credit', parentCode: null, isPostable: true, statementLineKey: 'pl.revenue.service', active: true },
+        ],
+      }),
+    );
+
+    const journal = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-MAP-1,2026-01-15,BANK-EXT,Client receipt,600.00,',
+      'JE-MAP-1,2026-01-15,2000,Client receipt offset,,600.00',
+    ].join('\n');
+    const path = `/api/companies/${companyId}`;
+
+    const before = await fetch(`${baseUrl}${path}/import/preview`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ csvText: journal }),
+    });
+    expect(before.status).toBe(200);
+    const beforeReport = (await before.json()) as {
+      importedCount: number;
+      quarantinedCount: number;
+      quarantined: Array<{ reason: string }>;
+    };
+    expect(beforeReport.importedCount).toBe(0);
+    expect(beforeReport.quarantinedCount).toBe(2);
+    expect(beforeReport.quarantined.map((row) => row.reason)).toContain('UNMAPPED_ACCOUNT:BANK-EXT');
+
+    const firstCommit = await fetch(`${baseUrl}${path}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ kind: 'actuals', sourceFilename: 'map-before.csv', csvText: journal }),
+    });
+    expect(firstCommit.status).toBe(201);
+    expect(((await firstCommit.json()) as { importedCount: number }).importedCount).toBe(0);
+
+    const anonymous = await fetch(`${baseUrl}${path}/coa-mapping`);
+    expect(anonymous.status).toBe(401);
+    expect(((await anonymous.json()) as { error: { code: string } }).error.code).toBe('SESSION_REQUIRED');
+    const foreign = await fetch(`${baseUrl}${path}/coa-mapping`, { headers: bearer(INTRUDER) });
+    expect(foreign.status).toBe(403);
+    expect(((await foreign.json()) as { error: { code: string } }).error.code).toBe('TENANT_FORBIDDEN');
+
+    const reportResponse = await fetch(`${baseUrl}${path}/coa-mapping`, { headers: bearer(OWNER) });
+    expect(reportResponse.status).toBe(200);
+    const initialReport = CoaMappingReportSchema.parse(await reportResponse.json());
+    expect(initialReport.mappings.map((entry) => entry.sourceCode).sort()).toEqual(['2000', 'BANK-EXT']);
+    expect(initialReport.mappings.find((entry) => entry.sourceCode === 'BANK-EXT')).toMatchObject({
+      status: 'unmapped',
+      mappingVersion: 0,
+      rowCount: 1,
+    });
+
+    const badTarget = await fetch(`${baseUrl}${path}/coa-mapping/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({
+        entries: [{ sourceCode: 'BANK-EXT', status: 'mapped', accountCode: '9999', quarantineReason: null }],
+      }),
+    });
+    expect(badTarget.status).toBe(422);
+    expect(((await badTarget.json()) as { error: { details: { issues: string[] } } }).error.details.issues)
+      .toContain('row 1: UNKNOWN_ACCOUNT:9999');
+
+    const badStatus = await fetch(`${baseUrl}${path}/coa-mapping/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({
+        entries: [{ sourceCode: 'BANK-EXT', status: 'quarantined', accountCode: '1000', quarantineReason: 'MANUAL_QUARANTINE' }],
+      }),
+    });
+    expect(badStatus.status).toBe(422);
+    expect(((await badStatus.json()) as { error: { code: string } }).error.code).toBe('VALIDATION_FAILED');
+
+    const commitMapping = async (entries: readonly Record<string, unknown>[]) => {
+      const res = await fetch(`${baseUrl}${path}/coa-mapping/commit`, {
+        method: 'POST',
+        headers: bearer(OWNER),
+        body: JSON.stringify({ entries }),
+      });
+      expect(res.status).toBe(201);
+      return (await res.json()) as {
+        written: number;
+        unchanged: number;
+        effectiveFrom: string;
+        report: typeof initialReport;
+      };
+    };
+
+    const firstMapping = await commitMapping([
+      { sourceCode: 'BANK-EXT', status: 'mapped', accountCode: '1000', quarantineReason: null },
+    ]);
+    expect([firstMapping.written, firstMapping.unchanged]).toEqual([1, 0]);
+    expect(firstMapping.report.mappings.find((entry) => entry.sourceCode === 'BANK-EXT')).toMatchObject({
+      status: 'mapped',
+      accountCode: '1000',
+      mappingVersion: 1,
+      effectiveFrom: firstMapping.effectiveFrom,
+    });
+
+    const replay = await commitMapping([
+      { sourceCode: 'BANK-EXT', status: 'mapped', accountCode: '1000', quarantineReason: null },
+    ]);
+    expect([replay.written, replay.unchanged]).toEqual([0, 1]);
+    expect(replay.report.mappings.find((entry) => entry.sourceCode === 'BANK-EXT')?.mappingVersion).toBe(1);
+
+    // A future-dated row cannot change the effective mapping for today's preview or commit.
+    await db.query(
+      `INSERT INTO coa_mapping (
+         company_id, source_system, source_code, account_id, mapping_version, effective_from, status
+       )
+       SELECT $1, 'csv', 'BANK-EXT', a.id, 9, '2027-01-01', 'mapped'
+         FROM account a WHERE a.company_id = $1 AND a.code = '1000'`,
+      [companyId],
+    );
+    const asOf = await fetch(`${baseUrl}${path}/coa-mapping?asOfDate=${firstMapping.effectiveFrom}`, {
+      headers: bearer(OWNER),
+    });
+    const asOfReport = CoaMappingReportSchema.parse(await asOf.json());
+    expect(asOfReport.mappings.find((entry) => entry.sourceCode === 'BANK-EXT')?.mappingVersion).toBe(1);
+
+    const after = await fetch(`${baseUrl}${path}/import/preview`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ csvText: journal, asOfDate: firstMapping.effectiveFrom }),
+    });
+    const afterReport = (await after.json()) as {
+      importedCount: number;
+      quarantinedCount: number;
+      totalDebits: string;
+    };
+    expect(afterReport.importedCount).toBe(2);
+    expect(afterReport.quarantinedCount).toBe(0);
+    expect(afterReport.totalDebits).toBe('600.00');
+
+    const afterCommit = await fetch(`${baseUrl}${path}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ kind: 'actuals', sourceFilename: 'map-after.csv', csvText: journal }),
+    });
+    expect(afterCommit.status).toBe(201);
+    expect(await afterCommit.json()).toMatchObject({
+      importedCount: afterReport.importedCount,
+      quarantinedCount: afterReport.quarantinedCount,
+      totalDebits: afterReport.totalDebits,
+    });
+
+    const quarantineJournal = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-MAP-2,2026-02-15,ODD-SRC,Manual hold,300.00,',
+      'JE-MAP-2,2026-02-15,2000,Manual hold offset,,300.00',
+    ].join('\n');
+    const discover = await fetch(`${baseUrl}${path}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ kind: 'actuals', sourceFilename: 'map-quarantine.csv', csvText: quarantineJournal }),
+    });
+    expect(discover.status).toBe(201);
+    const quarantinedMapping = await commitMapping([
+      { sourceCode: 'ODD-SRC', status: 'quarantined', accountCode: null, quarantineReason: 'MANUAL_QUARANTINE' },
+    ]);
+    expect(quarantinedMapping.written).toBe(1);
+    expect(quarantinedMapping.report.mappings.find((entry) => entry.sourceCode === 'ODD-SRC')).toMatchObject({
+      status: 'quarantined',
+      quarantineReason: 'MANUAL_QUARANTINE',
+      accountCode: null,
+      mappingVersion: 1,
+    });
+
+    const held = await fetch(`${baseUrl}${path}/import/commit`, {
+      method: 'POST',
+      headers: bearer(OWNER),
+      body: JSON.stringify({ kind: 'actuals', sourceFilename: 'map-held.csv', csvText: quarantineJournal }),
+    });
+    expect(held.status).toBe(201);
+    expect(((await held.json()) as { quarantined: Array<{ reason: string }> }).quarantined.map((row) => row.reason))
+      .toContain('QUARANTINED_BY_MAPPING:MANUAL_QUARANTINE');
+
+    const auditRows = await db.query<{ action: string }>(
+      `SELECT action FROM audit_log WHERE company_id = $1 AND action = 'coa_mapping.commit'`,
+      [companyId],
+    );
+    expect(auditRows.rows).toHaveLength(3);
+    const chain = await verifyCompanyAuditLog(db, companyId);
+    expect(chain.valid).toBe(true);
+    // company.create + 4 import commits + 3 mapping commits (including the no-op replay).
+    expect(chain.checkedCount).toBe(8);
   });
 
   it('surfaces a failed readiness probe as a typed 500 once the database handle is closed', async () => {

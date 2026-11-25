@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { SPINE_ROUTE_DEFS } from '../shared/spine.js';
 import { App } from './App.js';
 import BoardPackPage, { BoardPackPreview } from './pages/BoardPackPage.js';
-import type { BoardPackReportPayload } from './api/client.js';
-import CoaMapperPage from './pages/CoaMapperPage.js';
+import type { BoardPackReportPayload, ChartAccountPayload } from './api/client.js';
+import CoaMapperPage, { CoaMappingEditor } from './pages/CoaMapperPage.js';
 import ImportWizardPage from './pages/ImportWizardPage.js';
 import ModelGridPage from './pages/ModelGridPage.js';
 import SetupWizardPage from './pages/SetupWizardPage.js';
@@ -81,6 +81,108 @@ describe('7-Screen Spine Inventory, Landmarks & Five-State Honesty (U1–U3, §9
       expect(errorHtml).toContain('role="alert"');
       expect(errorHtml).toContain('Retry failed action');
     }
+  });
+
+  it('renders versioned mapping sources, targets and typed quarantine controls from server rows (WI-0028)', () => {
+    const noop = (): void => {};
+    const report = {
+      companyId: '11111111-1111-4111-8111-111111111111',
+      sourceSystem: 'csv' as const,
+      effectiveFrom: '2026-11-25',
+      mappings: [
+        {
+          sourceSystem: 'csv' as const,
+          sourceCode: 'BANK-EXT',
+          accountCode: '1000',
+          accountName: 'Operating bank',
+          mappingVersion: 2,
+          effectiveFrom: '2026-11-25',
+          status: 'mapped' as const,
+          quarantineReason: null,
+          targetConflict: false,
+          rowCount: 3,
+          sampleValues: ['Client receipt'],
+        },
+        {
+          sourceSystem: 'csv' as const,
+          sourceCode: 'HOLD-EXT',
+          accountCode: null,
+          accountName: null,
+          mappingVersion: 1,
+          effectiveFrom: '2026-11-25',
+          status: 'quarantined' as const,
+          quarantineReason: 'MANUAL_QUARANTINE' as const,
+          targetConflict: false,
+          rowCount: 2,
+          sampleValues: ['Manual hold'],
+        },
+      ],
+      availableAccounts: [{ code: '1000', name: 'Operating bank' }],
+      mappedCount: 1,
+      quarantinedCount: 1,
+      unmappedCount: 0,
+      conflictCount: 0,
+    };
+    const account: ChartAccountPayload = {
+      code: '1000',
+      name: 'Operating bank',
+      type: 'asset',
+      normalSide: 'debit',
+      isContra: false,
+      isPostable: true,
+      statementLineKey: 'bs.asset.cash',
+      parentCode: null,
+      active: true,
+      version: 1,
+    };
+    const html = renderToStaticMarkup(
+      createElement(CoaMappingEditor, {
+        report,
+        accounts: [account],
+        drafts: {
+          'BANK-EXT': { status: 'mapped', accountCode: '1000', reason: null },
+          'HOLD-EXT': { status: 'quarantined', accountCode: null, reason: 'MANUAL_QUARANTINE' },
+        },
+        notice: null,
+        commitResult: null,
+        onChange: noop,
+        onAcceptAuto: noop,
+        onQuarantineUnmapped: noop,
+        onSave: noop,
+        onReload: noop,
+        onNavigate: noop,
+      }),
+    );
+
+    expect(html).toContain('Source → account mapping');
+    expect(html).toContain('BANK-EXT');
+    expect(html).toContain('Client receipt');
+    expect(html).toContain('2 (2026-11-25)');
+    expect(html).toContain('MANUAL_QUARANTINE');
+    expect(html).toContain('value="1000"');
+    expect(html).toContain('Accept all auto (exact code matches)');
+    expect(html).toContain('Quarantine unmapped');
+    expect(html).toContain('Save mapping versions');
+    expect(html).toContain('Reload mappings');
+    expect(html).not.toContain('Go to Import Wizard');
+
+    const emptyHtml = renderToStaticMarkup(
+      createElement(CoaMappingEditor, {
+        report: null,
+        accounts: [],
+        drafts: {},
+        notice: null,
+        commitResult: null,
+        onChange: noop,
+        onAcceptAuto: noop,
+        onQuarantineUnmapped: noop,
+        onSave: noop,
+        onReload: noop,
+        onNavigate: noop,
+      }),
+    );
+    expect(emptyHtml).toContain('The mapping report could not be read.');
+    expect(emptyHtml).toContain('Go to Import Wizard');
   });
 
   it('renders the populated board pack from server-issued rows only (U2/U5)', () => {

@@ -102,6 +102,14 @@ export interface ApiClient {
   previewImport(companyId: string, request: ImportPreviewRequest): Promise<ImportPreviewPayload>;
   getChart(companyId: string): Promise<ChartOfAccountsPayload>;
   importChart(companyId: string, request: { readonly csvText: string }): Promise<ChartImportPayload>;
+  getCoaMappings(
+    companyId: string,
+    query?: { readonly asOfDate?: string },
+  ): Promise<CoaMappingReportPayload>;
+  commitCoaMappings(
+    companyId: string,
+    request: CoaMappingCommitRequestPayload,
+  ): Promise<CoaMappingCommitPayload>;
   getBudget(
     companyId: string,
     query: { readonly fiscalYear: number },
@@ -255,6 +263,21 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         'POST',
         `/api/companies/${encodeURIComponent(companyId)}/chart/import`,
         { csvText: chartRequest.csvText },
+      ),
+    getCoaMappings: (companyId, query) => {
+      const params = new URLSearchParams();
+      if (query?.asOfDate !== undefined) params.set('asOfDate', query.asOfDate);
+      const suffix = params.size > 0 ? `?${params.toString()}` : '';
+      return request<CoaMappingReportPayload>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/coa-mapping${suffix}`,
+      );
+    },
+    commitCoaMappings: (companyId, mappingRequest) =>
+      request<CoaMappingCommitPayload>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/coa-mapping/commit`,
+        { entries: mappingRequest.entries },
       ),
     getBudget: (companyId, query) => {
       const params = new URLSearchParams();
@@ -566,6 +589,57 @@ export interface ChartImportPayload {
   readonly inserted: number;
   readonly updated: number;
   readonly accounts: readonly ChartAccountPayload[];
+}
+
+/** Versioned CoA mapping contracts (SPEC §3.6f) — codes stay strings, targets stay real chart rows. */
+export type CoaMappingQuarantineReason =
+  | 'MANUAL_QUARANTINE'
+  | 'NO_TARGET_ACCOUNT'
+  | 'AMBIGUOUS_TARGET';
+
+export interface CoaMappingEntryPayload {
+  readonly sourceSystem: 'csv';
+  readonly sourceCode: string;
+  readonly accountCode: string | null;
+  readonly accountName: string | null;
+  readonly mappingVersion: number;
+  readonly effectiveFrom: string;
+  readonly status: 'mapped' | 'quarantined' | 'unmapped';
+  readonly quarantineReason: CoaMappingQuarantineReason | null;
+  readonly targetConflict: boolean;
+  readonly rowCount: number;
+  readonly sampleValues: readonly string[];
+}
+
+export interface CoaMappingReportPayload {
+  readonly companyId: string;
+  readonly sourceSystem: 'csv';
+  readonly effectiveFrom: string;
+  readonly mappings: readonly CoaMappingEntryPayload[];
+  readonly availableAccounts: readonly { readonly code: string; readonly name: string }[];
+  readonly mappedCount: number;
+  readonly quarantinedCount: number;
+  readonly unmappedCount: number;
+  readonly conflictCount: number;
+}
+
+export interface CoaMappingEditPayload {
+  readonly sourceCode: string;
+  readonly status: 'mapped' | 'quarantined';
+  readonly accountCode: string | null;
+  readonly quarantineReason: CoaMappingQuarantineReason | null;
+}
+
+export interface CoaMappingCommitRequestPayload {
+  readonly entries: readonly CoaMappingEditPayload[];
+}
+
+export interface CoaMappingCommitPayload {
+  readonly companyId: string;
+  readonly effectiveFrom: string;
+  readonly written: number;
+  readonly unchanged: number;
+  readonly report: CoaMappingReportPayload;
 }
 
 /** Budget (plan) contracts (shared/budget.ts) — plan rows never reach the GL. */

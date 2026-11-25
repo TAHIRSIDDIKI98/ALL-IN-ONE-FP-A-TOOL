@@ -2,6 +2,7 @@ import { sha256Hex } from '../../../core/audit/sha256.js';
 import { resolvePeriodForDate, type GeneratedPeriod } from '../../../core/calendar/index.js';
 import { evaluateMessyGlCsv, parseCsvRecords, type ImportedGlRow } from '../../../core/import/index.js';
 import { STORAGE_SCALE, compare, scaleForCurrency, serialize, sum } from '../../../core/money/index.js';
+import { resolveSourceAccountCode } from '../../../core/mapping/index.js';
 import { expectedNormalSideForType, normalizeCode } from '../../../core/statements/index.js';
 import { AppError } from '../../../shared/errors.js';
 import type {
@@ -12,6 +13,7 @@ import type {
 } from '../../../shared/import.js';
 import { appendAuditLog } from '../../audit/index.js';
 import type { SqlExecutor } from '../migrate.js';
+import { listCoaMappings } from './coaMapping.js';
 
 /**
  * Chart-of-accounts seeding and the atomic, idempotent import commit
@@ -230,6 +232,8 @@ export interface ImportClassification {
 export interface ImportClassificationParams {
   readonly companyId: string;
   readonly csvText: string;
+  /** Versioned mapping date; a commit uses its own occurredAt date, preview defaults to today. */
+  readonly asOfDate?: string;
 }
 
 export async function classifyImport(
@@ -303,10 +307,21 @@ export async function classifyImport(
   }));
   const periods: GeneratedPeriod[] = periodEntries.map((entry) => entry.period);
 
+  const asOfDate = params.asOfDate ?? new Date().toISOString().slice(0, 10);
+  const mappingRows = await listCoaMappings(db, params.companyId, asOfDate);
+  const chartCodes = new Set(accountIdByCode.keys());
   const parsed = evaluateMessyGlCsv({
     csvText: params.csvText,
-    knownAccountCodes: new Set(accountIdByCode.keys()),
+    knownAccountCodes: chartCodes,
     locale: 'unknown',
+    // One resolver for preview and commit (K3); the classifier never guesses a source code.
+    resolveSourceCode: (sourceCode) =>
+      resolveSourceAccountCode({
+        sourceCode,
+        mappings: mappingRows,
+        chartCodes,
+        asOfDate,
+      }),
   });
 
   const rawCellsByRow = new Map<number, readonly string[]>();
@@ -399,6 +414,7 @@ export async function commitImport(
   const classification = await classifyImport(tx, {
     companyId: params.companyId,
     csvText: params.csvText,
+    asOfDate: params.occurredAt.slice(0, 10),
   });
   const {
     rowsIn,

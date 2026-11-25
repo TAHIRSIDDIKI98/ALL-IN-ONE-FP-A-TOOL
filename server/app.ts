@@ -45,9 +45,15 @@ import {
 } from '../shared/reports.js';
 import { commitImport, previewImport } from './db/repositories/import.js';
 import { importChart, listChartAccounts } from './db/repositories/chart.js';
+import { commitCoaMappings, getCoaMappingReport } from './db/repositories/coaMapping.js';
 import { getBudget, importBudget } from './db/repositories/budget.js';
 import { getBvaReport } from './db/repositories/bva.js';
 import { BvaReportSchema } from '../shared/bva.js';
+import {
+  CoaMappingCommitRequestSchema,
+  CoaMappingCommitResultSchema,
+  CoaMappingReportSchema,
+} from '../shared/coaMapping.js';
 import { BoardPackExportFormatSchema, BoardPackReportSchema } from '../shared/boardPack.js';
 import { buildBoardPackReport, renderBoardPack } from './export/boardPack.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
@@ -99,6 +105,18 @@ function readPeriodQuery(rawValue: unknown): string | null {
     throw new AppError('VALIDATION_FAILED', {
       userMessage: 'The period query must be a single period code such as P01.',
       details: { issues: ['period: expected a non-empty period code'] },
+    });
+  }
+  return parsed.data;
+}
+
+function readAsOfDateQuery(rawValue: unknown): string {
+  if (rawValue === undefined) return new Date().toISOString().slice(0, 10);
+  const parsed = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).safeParse(rawValue);
+  if (!parsed.success) {
+    throw new AppError('VALIDATION_FAILED', {
+      userMessage: 'asOfDate must be an ISO date such as 2026-11-25.',
+      details: { issues: ['asOfDate: expected YYYY-MM-DD'] },
     });
   }
   return parsed.data;
@@ -193,7 +211,11 @@ export function createSpineApp(context: SpineContext) {
             details: { bytes, maxBytes: MAX_IMPORT_BYTES },
           });
         }
-        const report = await previewImport(db, { companyId, csvText: body.csvText });
+        const report = await previewImport(db, {
+          companyId,
+          csvText: body.csvText,
+          ...(body.asOfDate === undefined ? {} : { asOfDate: body.asOfDate }),
+        });
         res.status(200).json(ImportPreviewReportSchema.parse(report));
       } catch (error) {
         next(error);
@@ -410,6 +432,53 @@ export function createSpineApp(context: SpineContext) {
           }),
         );
         res.status(201).json(ChartImportResultSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Versioned source→account mapping report (§9.3.4, SPEC §3.6f). Source codes come only from
+   * retained import rows; the target list is the live chart. Read-only, tenant scoped.
+   */
+  app.get(
+    '/api/companies/:companyId/coa-mapping',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const asOfDate = readAsOfDateQuery(req.query['asOfDate']);
+        const report = await getCoaMappingReport(db, companyId, asOfDate);
+        res.status(200).json(CoaMappingReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Versioned mapping commit. Every real edit writes a NEW row and its audit payload in ONE
+   * transaction; an identical re-submit writes zero new versions (G1/G10, idempotency).
+   */
+  app.post(
+    '/api/companies/:companyId/coa-mapping/commit',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(CoaMappingCommitRequestSchema, req.body);
+        const asOfDate = new Date().toISOString().slice(0, 10);
+        const result = await db.transaction((tx) =>
+          commitCoaMappings(tx, {
+            companyId,
+            actorId: userId,
+            entries: body.entries,
+            effectiveFrom: asOfDate,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(CoaMappingCommitResultSchema.parse(result));
       } catch (error) {
         next(error);
       }
