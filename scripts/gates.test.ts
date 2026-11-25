@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
+import { runWorkIntegrityCheck } from './work-integrity.mjs';
 
 const tempDirs: string[] = [];
 
@@ -307,17 +308,17 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
       enforcedFrom: 'f'.repeat(40),
       note: BOUNDARY_REASON,
     });
-    const stale = runGate('scripts/work-integrity.mjs', clean.ws);
-    expect(stale.status).toBe(1);
-    expect(stale.stderr).toContain('is not an ancestor of HEAD');
+    const stale = runWorkIntegrityCheck(clean.ws);
+    expect(stale.violations.length).toBeGreaterThan(0);
+    expect(stale.violations.join('\n')).toContain('is not an ancestor of HEAD');
 
     // 5. A malformed boundary hash, a missing rationale, or an undecided boundary are all red.
     writeBaseline(clean.ws, { decision: 'DEC-007', enforcedFrom: 'abc', note: BOUNDARY_REASON });
-    expect(runGate('scripts/work-integrity.mjs', clean.ws).stderr).toContain(
+    expect(runWorkIntegrityCheck(clean.ws).violations.join('\n')).toContain(
       'must declare a full 40-character lowercase enforcedFrom commit hash',
     );
     writeBaseline(clean.ws, { decision: 'DEC-007', enforcedFrom: clean.hashes[0], note: 'short' });
-    expect(runGate('scripts/work-integrity.mjs', clean.ws).stderr).toContain(
+    expect(runWorkIntegrityCheck(clean.ws).violations.join('\n')).toContain(
       'must record why the enforcement boundary starts there',
     );
 
@@ -330,9 +331,9 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
       enforcedFrom: undecided.hashes[0],
       note: BOUNDARY_REASON,
     });
-    const unknownDecision = runGate('scripts/work-integrity.mjs', undecided.ws);
-    expect(unknownDecision.status).toBe(1);
-    expect(unknownDecision.stderr).toContain('does not appear in TASKBOARD.md');
+    const unknownDecision = runWorkIntegrityCheck(undecided.ws);
+    expect(unknownDecision.violations.length).toBeGreaterThan(0);
+    expect(unknownDecision.violations.join('\n')).toContain('does not appear in TASKBOARD.md');
 
     // 7. A GitHub pull-request merge commit is platform-generated and out of scope; a hand-made
     //    merge commit is authored and must still comply.
@@ -383,16 +384,16 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
       );
       return ws;
     };
-    expect(runGate('scripts/work-integrity.mjs', mergeRepo('Merge pull request #7 from owner/topic')).status).toBe(0);
+    expect(runWorkIntegrityCheck(mergeRepo('Merge pull request #7 from owner/topic')).violations).toEqual([]);
     // GitHub's PR check run checks out a synthetic `Merge <sha> into <sha>` commit; it is
     // platform-generated in exactly the same way as the `Merge pull request #N` commit.
     expect(
-      runGate('scripts/work-integrity.mjs', mergeRepo(`Merge ${'a'.repeat(40)} into ${'b'.repeat(40)}`)).status,
-    ).toBe(0);
+      runWorkIntegrityCheck(mergeRepo(`Merge ${'a'.repeat(40)} into ${'b'.repeat(40)}`)).violations,
+    ).toEqual([]);
 
-    const authoredMerge = runGate('scripts/work-integrity.mjs', mergeRepo('Merge branch topic'));
-    expect(authoredMerge.status).toBe(1);
-    expect(authoredMerge.stderr).toContain('commit subject must follow conventional format');
+    const authoredMerge = runWorkIntegrityCheck(mergeRepo('Merge branch topic'));
+    expect(authoredMerge.violations.length).toBeGreaterThan(0);
+    expect(authoredMerge.violations.join('\n')).toContain('commit subject must follow conventional format');
 
     // 8. In a repository whose entire history is compliant, no baseline is needed and the gate is green.
     const cleanWs = makeTempWorkspace();

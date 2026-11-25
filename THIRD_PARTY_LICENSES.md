@@ -1,7 +1,7 @@
 # Third-Party Dependency Licenses
 
 > Generated deterministically from `package-lock.json` (`MASTER_PROMPT §12.16 LIC2`).
-> Packages: **570** · Manifest Digest: `1dbf87173eccb7aa`
+> Packages: **570** · Manifest Digest: `7c88aedc98d8f43a`
 
 | Package | Version | License |
 |---|---|---|
@@ -123,12 +123,12 @@
 | `@types/babel__generator` | `7.27.0` | `MIT` |
 | `@types/babel__template` | `7.4.4` | `MIT` |
 | `@types/babel__traverse` | `7.28.0` | `MIT` |
-| `@types/body-parser` | `1.19.6` | `MIT` |
+| `@types/body-parser` | `2.2.0` | `MIT` |
 | `@types/caseless` | `0.12.5` | `MIT` |
 | `@types/chai` | `5.2.3` | `MIT` |
 | `@types/connect` | `3.4.38` | `MIT` |
 | `@types/deep-eql` | `4.0.2` | `MIT` |
-| `@types/estree` | `1.0.10` | `MIT` |
+| `@types/estree` | `1.0.11` | `MIT` |
 | `@types/express` | `5.0.6` | `MIT` |
 | `@types/express-serve-static-core` | `5.1.3` | `MIT` |
 | `@types/http-errors` | `2.0.5` | `MIT` |
@@ -239,7 +239,7 @@
 | `duplexify` | `4.1.3` | `MIT` |
 | `ecdsa-sig-formatter` | `1.0.11` | `Apache-2.0` |
 | `ee-first` | `1.1.1` | `MIT` |
-| `electron-to-chromium` | `1.5.493` | `ISC` |
+| `electron-to-chromium` | `1.5.494` | `ISC` |
 | `emoji-regex` | `8.0.0` | `MIT` |
 | `encodeurl` | `2.0.3` | `MIT` |
 | `end-of-stream` | `1.4.5` | `MIT` |

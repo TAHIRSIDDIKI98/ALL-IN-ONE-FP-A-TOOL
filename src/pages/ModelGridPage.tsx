@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { SpineRoutePath } from '../../shared/spine.js';
 import type {
+  DriverPlanCommitResponse,
+  DriverPlanPreviewResponse,
   RollingForecastResponse,
   ScenarioComparisonResponse,
   ScenarioSummary,
@@ -9,6 +11,7 @@ import {
   ApiClientError,
   createApiClient,
   type AccountDrilldownPayload,
+  type ChartAccountPayload,
   type TrialBalancePayload,
   type TrialBalanceRowPayload,
 } from '../api/client.js';
@@ -19,11 +22,20 @@ import {
   PartialBanner,
 } from '../components/StateFrame.js';
 import {
+  DriverAuthoringPanel,
+  type DriverAuthoringFailure,
   RollingForecastTable,
   ScenarioComparisonTable,
   ScenarioInventory,
 } from '../components/PlanningWorkspace.js';
-import { periodCodes, resolvePlanningDefaults, type PlanningDefaults } from '../state/planningView.js';
+import {
+  buildDriverDefinitions,
+  createInitialDriverPlanDraft,
+  periodCodes,
+  resolvePlanningDefaults,
+  type DriverPlanDraft,
+  type PlanningDefaults,
+} from '../state/planningView.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
@@ -381,13 +393,28 @@ function toPlanningFailure(error: unknown, action: PlanningAction): PlanningFail
   };
 }
 
+function toDriverFailure(error: unknown, action: 'preview' | 'commit'): DriverAuthoringFailure {
+  if (error instanceof ApiClientError) {
+    const rawIssues = error.details['issues'];
+    const issues = Array.isArray(rawIssues)
+      ? rawIssues.map((item) => String(item))
+      : [];
+    return { code: error.code, message: error.message, issues, action };
+  }
+  return {
+    code: 'INTERNAL_ERROR',
+    message: error instanceof Error ? error.message : 'Driver plan request failed.',
+    issues: [],
+    action,
+  };
+}
+
 /**
  * Planning view of the Model Grid (MASTER_PROMPT §2.5 M2, §9.3.5 sheet tabs, §11.4).
  *
- * Three server reads, each with its own state and its own retry: the scenario inventory (with the
- * current plan version of each scenario), the rolling forecast for the scenario and cutoff the user
- * selects, and the comparison of two selected scenarios. Every list is built in the server's order
- * and every amount stays the server's string.
+ * Independent server reads (scenarios, rolling forecast, scenario comparison, and chart of
+ * accounts) plus driver authoring (preview -> named scenario commit) — every figure is a server
+ * decimal string and every retry re-runs only the failed action.
  */
 export function PlanningView(props: {
   readonly companyId: string | null;
@@ -405,6 +432,22 @@ export function PlanningView(props: {
   const [scenarioState, setScenarioState] = useState<'loading' | 'idle' | 'error'>('loading');
   const [scenarioFailure, setScenarioFailure] = useState<PlanningFailure | null>(null);
   const [scenarioReload, setScenarioReload] = useState(0);
+
+  const [accounts, setAccounts] = useState<readonly ChartAccountPayload[]>([]);
+  const [chartState, setChartState] = useState<'loading' | 'idle' | 'error'>('loading');
+  const [chartFailure, setChartFailure] = useState<{
+    readonly code: string;
+    readonly message: string;
+  } | null>(null);
+  const [chartReload, setChartReload] = useState(0);
+
+  const [driverDraft, setDriverDraft] = useState<DriverPlanDraft>(() =>
+    createInitialDriverPlanDraft(''),
+  );
+  const [previewResult, setPreviewResult] = useState<DriverPlanPreviewResponse | null>(null);
+  const [commitResult, setCommitResult] = useState<DriverPlanCommitResponse | null>(null);
+  const [actionBusy, setActionBusy] = useState<'preview' | 'commit' | null>(null);
+  const [actionFailure, setActionFailure] = useState<DriverAuthoringFailure | null>(null);
 
   const [selection, setSelection] = useState<PlanningDefaults>({
     selectedScenario: null,
@@ -424,6 +467,40 @@ export function PlanningView(props: {
   const [comparisonState, setComparisonState] = useState<'loading' | 'idle' | 'error'>('loading');
   const [comparisonFailure, setComparisonFailure] = useState<PlanningFailure | null>(null);
   const [comparisonReload, setComparisonReload] = useState(0);
+
+  useEffect(() => {
+    if (companyId === null || authToken === null) return;
+    let cancelled = false;
+    setChartState('loading');
+    setChartFailure(null);
+    createApiClient({ getToken: () => authToken })
+      .getChart(companyId)
+      .then((result) => {
+        if (cancelled) return;
+        setAccounts(result.accounts);
+        setChartState('idle');
+        const firstPostable =
+          result.accounts.find((account) => account.active && account.isPostable)?.code ?? '';
+        if (firstPostable.length > 0) {
+          setDriverDraft((previous) => ({
+            ...previous,
+            drivers: previous.drivers.map((row) =>
+              row.accountCode.length === 0 ? { ...row, accountCode: firstPostable } : row,
+            ),
+          }));
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setAccounts([]);
+        setChartState('error');
+        const failure = toPlanningFailure(error, 'scenarios');
+        setChartFailure({ code: failure.code, message: failure.message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, authToken, chartReload]);
 
   useEffect(() => {
     if (companyId === null || authToken === null) return;
@@ -562,13 +639,115 @@ export function PlanningView(props: {
     );
   }
 
+  const runPreviewDriverPlan = async (): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    const built = buildDriverDefinitions(driverDraft, periods, { requireScenarioName: false });
+    if (!built.ok) {
+      setActionFailure({
+        code: 'VALIDATION_FAILED',
+        message: 'Driver plan validation failed; check the highlighted issues below.',
+        issues: built.issues,
+        action: 'preview',
+      });
+      return;
+    }
+    setActionBusy('preview');
+    setActionFailure(null);
+    setCommitResult(null);
+    try {
+      const result = await createApiClient({ getToken: () => authToken }).previewDriverPlan(
+        companyId,
+        {
+          fiscalYear: props.fiscalYear,
+          periods: [...periods],
+          drivers: [...built.drivers],
+        },
+      );
+      setPreviewResult(result);
+    } catch (error: unknown) {
+      setActionFailure(toDriverFailure(error, 'preview'));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const runCommitDriverPlan = async (): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    const built = buildDriverDefinitions(driverDraft, periods, { requireScenarioName: true });
+    if (!built.ok) {
+      setActionFailure({
+        code: 'VALIDATION_FAILED',
+        message: 'Driver plan validation failed; nothing was written.',
+        issues: built.issues,
+        action: 'commit',
+      });
+      return;
+    }
+    setActionBusy('commit');
+    setActionFailure(null);
+    try {
+      const result = await createApiClient({ getToken: () => authToken }).commitDriverPlan(
+        companyId,
+        {
+          fiscalYear: props.fiscalYear,
+          scenarioName: built.scenarioName,
+          scenarioKind: built.scenarioKind,
+          periods: [...periods],
+          drivers: [...built.drivers],
+        },
+      );
+      setCommitResult(result);
+      setSelection((previous) => ({ ...previous, selectedScenario: result.scenarioName }));
+      setScenarioReload((key) => key + 1);
+      setForecastReload((key) => key + 1);
+      setComparisonReload((key) => key + 1);
+    } catch (error: unknown) {
+      setActionFailure(toDriverFailure(error, 'commit'));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const retryDriverAction = (): void => {
+    if (actionFailure?.action === 'commit') {
+      void runCommitDriverPlan();
+      return;
+    }
+    void runPreviewDriverPlan();
+  };
+
+  const authoringPanel = (
+    <DriverAuthoringPanel
+      fiscalYear={props.fiscalYear}
+      periods={periods}
+      currency={props.currency}
+      accounts={accounts}
+      chartState={chartState}
+      chartFailure={chartFailure}
+      onRetryChart={() => setChartReload((key) => key + 1)}
+      onOpenCoaMapper={() => onNavigate('/coa-mapper')}
+      draft={driverDraft}
+      onChangeDraft={setDriverDraft}
+      previewResult={previewResult}
+      commitResult={commitResult}
+      actionBusy={actionBusy}
+      actionFailure={actionFailure}
+      onPreview={() => void runPreviewDriverPlan()}
+      onCommit={() => void runCommitDriverPlan()}
+      onRetryAction={retryDriverAction}
+    />
+  );
+
   if (scenarios === null || scenarios.length === 0) {
     return (
-      <InlineEmptyState
-        disclosure="This company has no planning scenario yet. Import a budget or commit a driver plan; until then there is no plan to forecast or compare, and nothing here is invented."
-        ctaLabel="Import a Budget in Import Wizard"
-        onAction={() => onNavigate('/import')}
-      />
+      <div className="space-y-6">
+        <InlineEmptyState
+          disclosure="This company has no planning scenario yet. Import a budget or commit a driver plan below; until then there is no plan to forecast or compare, and nothing here is invented."
+          ctaLabel="Import a Budget in Import Wizard"
+          onAction={() => onNavigate('/import')}
+        />
+        {authoringPanel}
+      </div>
     );
   }
 
@@ -582,6 +761,8 @@ export function PlanningView(props: {
 
   return (
     <div className="space-y-6">
+      {authoringPanel}
+
       <ScenarioInventory
         scenarios={scenarios}
         selectedScenario={selectedScenario}

@@ -1,14 +1,30 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { RollingForecastResponse, ScenarioComparisonResponse, ScenarioSummary } from '../shared/planning.js';
+import type {
+  DriverPlanCommitResponse,
+  DriverPlanPreviewResponse,
+  RollingForecastResponse,
+  ScenarioComparisonResponse,
+  ScenarioSummary,
+} from '../shared/planning.js';
+import type { ChartAccountPayload } from './api/client.js';
 import {
+  DriverAuthoringPanel,
+  DriverPlanPreviewTable,
   RollingForecastTable,
   ScenarioComparisonTable,
   ScenarioInventory,
 } from './components/PlanningWorkspace.js';
 import ModelGridPage from './pages/ModelGridPage.js';
-import { periodCodes, resolvePlanningDefaults } from './state/planningView.js';
+import {
+  buildDriverDefinitions,
+  createEmptyDriverRow,
+  createInitialDriverPlanDraft,
+  periodCodes,
+  resolvePlanningDefaults,
+  type DriverPlanDraft,
+} from './state/planningView.js';
 
 const COMPANY_ID = '11111111-1111-4111-8111-111111111111';
 const noop = (): void => {};
@@ -309,5 +325,336 @@ describe('M2 planning views inside the Model Grid (WI-0032)', () => {
     expect(planningError).toContain('role="alert"');
     expect(planningError).toContain('Retry failed action');
     expect(planningError).toContain('PLANNING_UNAVAILABLE');
+  });
+});
+
+const sampleChartAccounts: readonly ChartAccountPayload[] = [
+  {
+    code: '4000',
+    name: 'Subscription Revenue',
+    type: 'revenue',
+    normalSide: 'credit',
+    isContra: false,
+    isPostable: true,
+    statementLineKey: 'pl.revenue.service',
+    parentCode: null,
+    active: true,
+    version: 1,
+  },
+  {
+    code: '5000',
+    name: 'Direct Hosting',
+    type: 'expense',
+    normalSide: 'debit',
+    isContra: false,
+    isPostable: true,
+    statementLineKey: 'pl.cogs.direct',
+    parentCode: null,
+    active: true,
+    version: 1,
+  },
+  {
+    code: '4999',
+    name: 'Summary Header',
+    type: 'revenue',
+    normalSide: 'credit',
+    isContra: false,
+    isPostable: false,
+    statementLineKey: 'pl.revenue.service',
+    parentCode: null,
+    active: true,
+    version: 1,
+  },
+  {
+    code: '9000',
+    name: 'Retired Account',
+    type: 'expense',
+    normalSide: 'debit',
+    isContra: false,
+    isPostable: true,
+    statementLineKey: 'pl.opex.ga',
+    parentCode: null,
+    active: false,
+    version: 1,
+  },
+];
+
+const samplePreview: DriverPlanPreviewResponse = {
+  fiscalYear: 2026,
+  currencyScale: 2,
+  periods: ['P01', 'P02', 'P03'],
+  lines: [
+    {
+      accountCode: '4000',
+      periodCode: 'P01',
+      amount: '1000.00',
+      source: 'driver',
+      driverKey: 'rev_growth',
+      assumptionLabel: 'Core revenue assumption',
+    },
+    {
+      accountCode: '4000',
+      periodCode: 'P02',
+      amount: '1250.00',
+      source: 'override',
+      driverKey: 'rev_growth',
+      assumptionLabel: 'Core revenue assumption',
+    },
+    {
+      accountCode: '5000',
+      periodCode: 'P01',
+      amount: '300.00',
+      source: 'driver',
+      driverKey: 'cogs_ratio',
+      assumptionLabel: 'Hosting ratio assumption',
+    },
+  ],
+  totalsByAccount: { '4000': '2250.00', '5000': '300.00' },
+  totalsByPeriod: { P01: '1300.00', P02: '1250.00', P03: '0.00' },
+  grandTotal: '2550.00',
+};
+
+const sampleCommit: DriverPlanCommitResponse = {
+  scenarioId: '44444444-4444-4444-8444-444444444444',
+  scenarioName: 'Q2 Rolling Forecast',
+  scenarioKind: 'forecast',
+  planVersionId: '55555555-5555-4555-8555-555555555555',
+  versionNo: 2,
+  lineCount: 36,
+  grandTotal: '14400.00',
+  totalsByAccount: { '4000': '14400.00' },
+};
+
+describe('M2 driver-plan authoring inside the Model Grid (WI-0033)', () => {
+  it('builds typed wire definitions for all four driver kinds and enforces preview vs commit rules', () => {
+    const draft: DriverPlanDraft = {
+      scenarioName: '  ',
+      scenarioKind: 'forecast',
+      drivers: [
+        {
+          ...createEmptyDriverRow('d1', '4000'),
+          kind: 'fixed',
+          driverKey: 'sub_base',
+          assumptionLabel: 'Flat monthly baseline',
+          amount: '1000.00',
+          overrides: [{ id: 'ov1', periodCode: 'P02', amount: '1250.00' }],
+        },
+        {
+          ...createEmptyDriverRow('d2', '4100'),
+          kind: 'growth_rate',
+          driverKey: 'exp_rev',
+          assumptionLabel: 'Expansion growth',
+          baseAmount: '500.00',
+          ratePerPeriod: '0.10',
+        },
+        {
+          ...createEmptyDriverRow('d3', '5000'),
+          kind: 'percent_of_account',
+          driverKey: 'cogs_share',
+          assumptionLabel: 'Direct share of 4000',
+          sourceAccountCode: '4000',
+          ratio: '0.30',
+        },
+        {
+          ...createEmptyDriverRow('d4', '4200'),
+          kind: 'price_times_volume',
+          driverKey: 'seats_pv',
+          assumptionLabel: 'Seats x unit price',
+          unitPrice: '50.00',
+          volume: '10',
+          unitPriceByPeriod: { P02: '60.00' },
+          volumeByPeriod: { P03: '15' },
+        },
+      ],
+    };
+
+    const previewBuilt = buildDriverDefinitions(draft, ['P01', 'P02', 'P03'], {
+      requireScenarioName: false,
+    });
+    expect(previewBuilt.ok).toBe(true);
+    if (previewBuilt.ok) {
+      expect(previewBuilt.drivers).toHaveLength(4);
+      expect(previewBuilt.drivers[0]).toEqual({
+        kind: 'fixed',
+        driverKey: 'sub_base',
+        accountCode: '4000',
+        assumptionLabel: 'Flat monthly baseline',
+        amount: '1000.00',
+        periodOverrides: { P02: '1250.00' },
+      });
+      expect(previewBuilt.drivers[3]).toEqual({
+        kind: 'price_times_volume',
+        driverKey: 'seats_pv',
+        accountCode: '4200',
+        assumptionLabel: 'Seats x unit price',
+        unitPriceByPeriod: { P01: '50.00', P02: '60.00', P03: '50.00' },
+        volumeByPeriod: { P01: '10', P02: '10', P03: '15' },
+      });
+    }
+
+    const commitMissingName = buildDriverDefinitions(draft, ['P01', 'P02', 'P03'], {
+      requireScenarioName: true,
+    });
+    expect(commitMissingName.ok).toBe(false);
+    if (!commitMissingName.ok) {
+      expect(commitMissingName.issues[0]).toContain('SCENARIO_NAME_REQUIRED');
+    }
+  });
+
+  it('rejects non-canonical decimals, duplicate period overrides, and empty driver lists without calling the API', () => {
+    const badDraft: DriverPlanDraft = {
+      scenarioName: 'Bad Plan',
+      scenarioKind: 'budget',
+      drivers: [
+        {
+          ...createEmptyDriverRow('d1', '4000'),
+          kind: 'fixed',
+          driverKey: 'rev',
+          assumptionLabel: 'Bad decimals',
+          amount: '1,000.00',
+          overrides: [
+            { id: 'ov1', periodCode: 'P01', amount: '500.00' },
+            { id: 'ov2', periodCode: 'P01', amount: '600.00' },
+          ],
+        },
+      ],
+    };
+
+    const badResult = buildDriverDefinitions(badDraft, ['P01', 'P02'], { requireScenarioName: true });
+    expect(badResult.ok).toBe(false);
+    if (!badResult.ok) {
+      expect(badResult.issues.some((msg) => msg.includes('duplicate override for period P01'))).toBe(true);
+      expect(badResult.issues.some((msg) => msg.includes('canonical decimal string'))).toBe(true);
+    }
+
+    const emptyDrivers = buildDriverDefinitions(
+      { scenarioName: 'Empty', scenarioKind: 'forecast', drivers: [] },
+      ['P01'],
+      { requireScenarioName: true },
+    );
+    expect(emptyDrivers.ok).toBe(false);
+    if (!emptyDrivers.ok) {
+      expect(emptyDrivers.issues[0]).toContain('NO_DRIVERS');
+    }
+  });
+
+  it('renders DriverPlanPreviewTable strictly from server strings with totals and source tags', () => {
+    const html = renderToStaticMarkup(
+      createElement(DriverPlanPreviewTable, { report: samplePreview, currency: 'USD' }),
+    );
+
+    expect(html).toContain('Driver plan preview');
+    expect(html).toContain('grand total 2550.00 USD');
+    expect(html).toContain('2250.00');
+    expect(html).toContain('1250.00');
+    expect(html).toContain('override');
+    expect(html).toContain('rev_growth');
+    expect(html).toContain('Core revenue assumption');
+  });
+
+  it('renders real chart options, empty-chart CoA banner, busy/error/commit states, and all 4 driver kinds cleanly', () => {
+    const multiKindDraft: DriverPlanDraft = {
+      scenarioName: 'Q2 Rolling Forecast',
+      scenarioKind: 'forecast',
+      drivers: [
+        { ...createEmptyDriverRow('d1', '4000'), kind: 'fixed', driverKey: 'k1' },
+        { ...createEmptyDriverRow('d2', '4000'), kind: 'growth_rate', driverKey: 'k2' },
+        { ...createEmptyDriverRow('d3', '5000'), kind: 'percent_of_account', driverKey: 'k3' },
+        { ...createEmptyDriverRow('d4', '4000'), kind: 'price_times_volume', driverKey: 'k4' },
+      ],
+    };
+
+    const populatedHtml = renderToStaticMarkup(
+      createElement(DriverAuthoringPanel, {
+        fiscalYear: 2026,
+        periods: ['P01', 'P02', 'P03'],
+        currency: 'USD',
+        accounts: sampleChartAccounts,
+        chartState: 'idle',
+        chartFailure: null,
+        onRetryChart: noop,
+        onOpenCoaMapper: noop,
+        draft: multiKindDraft,
+        onChangeDraft: noop,
+        previewResult: samplePreview,
+        commitResult: sampleCommit,
+        actionBusy: null,
+        actionFailure: null,
+        onPreview: noop,
+        onCommit: noop,
+        onRetryAction: noop,
+      }),
+    );
+
+    expect(populatedHtml).toContain('4000 — Subscription Revenue');
+    expect(populatedHtml).toContain('5000 — Direct Hosting');
+    expect(populatedHtml).not.toContain('4999 — Summary Header');
+    expect(populatedHtml).not.toContain('9000 — Retired Account');
+    expect(populatedHtml).toContain('Growth rate per period (decimal ratio)');
+    expect(populatedHtml).toContain('Ratio of source account (decimal)');
+    expect(populatedHtml).toContain('Default unit price (USD)');
+    expect(populatedHtml).toContain('Committed scenario &quot;Q2 Rolling Forecast&quot; (forecast) as plan version v2');
+    expect(populatedHtml).toContain('grand total 14400.00 USD');
+    expect(populatedHtml).not.toContain('—%');
+    expect(populatedHtml).not.toContain('(0%)');
+    expect(populatedHtml).not.toContain('<h1');
+
+    const emptyChartHtml = renderToStaticMarkup(
+      createElement(DriverAuthoringPanel, {
+        fiscalYear: 2026,
+        periods: ['P01', 'P02'],
+        currency: 'USD',
+        accounts: [],
+        chartState: 'idle',
+        chartFailure: null,
+        onRetryChart: noop,
+        onOpenCoaMapper: noop,
+        draft: createInitialDriverPlanDraft(''),
+        onChangeDraft: noop,
+        previewResult: null,
+        commitResult: null,
+        actionBusy: null,
+        actionFailure: {
+          code: 'VALIDATION_FAILED',
+          message: 'Driver plan validation failed; nothing was written.',
+          issues: ['CYCLE_DETECTED:4000->5000'],
+          action: 'commit',
+        },
+        onPreview: noop,
+        onCommit: noop,
+        onRetryAction: noop,
+      }),
+    );
+
+    expect(emptyChartHtml).toContain('Open CoA Mapper');
+    expect(emptyChartHtml).toContain('role="alert"');
+    expect(emptyChartHtml).toContain('VALIDATION_FAILED');
+    expect(emptyChartHtml).toContain('CYCLE_DETECTED:4000-&gt;5000');
+    expect(emptyChartHtml).toContain('Retry failed action');
+
+    const busyHtml = renderToStaticMarkup(
+      createElement(DriverAuthoringPanel, {
+        fiscalYear: 2026,
+        periods: ['P01', 'P02'],
+        currency: 'USD',
+        accounts: sampleChartAccounts,
+        chartState: 'loading',
+        chartFailure: null,
+        onRetryChart: noop,
+        onOpenCoaMapper: noop,
+        draft: createInitialDriverPlanDraft('4000'),
+        onChangeDraft: noop,
+        previewResult: null,
+        commitResult: null,
+        actionBusy: 'commit',
+        actionFailure: null,
+        onPreview: noop,
+        onCommit: noop,
+        onRetryAction: noop,
+      }),
+    );
+
+    expect(busyHtml).toContain('Loading chart of accounts for driver target selection');
+    expect(busyHtml).toContain('Validating accounts and committing versioned plan lines');
   });
 });

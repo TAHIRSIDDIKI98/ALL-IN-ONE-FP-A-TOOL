@@ -1640,7 +1640,42 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(cmp.totalTarget).toBe('5850.00');
     expect(cmp.totalDelta).toBe('1547.00');
 
-    // 6. Negative cases: unmapped account rejected atomically, foreign tenant 403, unauthenticated 401
+    // 6. Re-commit Base Forecast -> bumps versionNo to 2 cleanly, and mismatched scenarioKind returns SCENARIO_KIND_CONFLICT
+    const reCommitBase = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'Base Forecast',
+        scenarioKind: 'forecast',
+        periods: ['P01', 'P02', 'P03'],
+        drivers: baseDrivers,
+      }),
+    });
+    expect(reCommitBase.status).toBe(201);
+    const reCommitted = (await reCommitBase.json()) as { versionNo: number; grandTotal: string };
+    expect(reCommitted.versionNo).toBe(2);
+    expect(reCommitted.grandTotal).toBe('4303.00');
+
+    const conflictKindRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'Base Forecast',
+        scenarioKind: 'budget',
+        periods: ['P01', 'P02', 'P03'],
+        drivers: baseDrivers,
+      }),
+    });
+    expect(conflictKindRes.status).toBe(422);
+    const conflictBody = (await conflictKindRes.json()) as {
+      error: { code: string; details: { issues: string[] } };
+    };
+    expect(conflictBody.error.code).toBe('VALIDATION_FAILED');
+    expect(conflictBody.error.details.issues).toEqual(['SCENARIO_KIND_CONFLICT:Base Forecast']);
+
+    // 7. Negative cases: unmapped account rejected atomically, foreign tenant 403, unauthenticated 401
     const badAccountRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
       method: 'POST',
       headers: { ...bearer(owner), 'content-type': 'application/json' },

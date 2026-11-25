@@ -78,10 +78,14 @@ describe('WI-0014 schema parity & drift gate (D1, §3.4)', () => {
       'ALTER TABLE account ADD COLUMN unapproved_flag boolean NOT NULL DEFAULT false;\n',
     );
 
-    const result = spawnSync('npx', ['tsx', join(process.cwd(), 'scripts', 'schema-parity.ts'), '--root', root], {
-      encoding: 'utf8',
-      env: { ...process.env, NEON_PARITY_DATABASE_URL: '' },
-    });
+    const result = spawnSync(
+      join(process.cwd(), 'node_modules', '.bin', 'tsx'),
+      [join(process.cwd(), 'scripts', 'schema-parity.ts'), '--root', root],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, NEON_PARITY_DATABASE_URL: '' },
+      },
+    );
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('SCHEMA PARITY GATE FAILED');

@@ -1,15 +1,15 @@
 import { PGlite } from '@electric-sql/pglite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import schemaSnapshot from '../../db/schema.snapshot.json' with { type: 'json' };
 import { appendAuditLog, verifyCompanyAuditLog } from '../audit/index.js';
 import { applyMigrations, type SqlExecutor } from './migrate.js';
 
-const openDbs: PGlite[] = [];
+let pg: PGlite;
+let db: SqlExecutor;
 
-async function makeMigratedDb(): Promise<{ pg: PGlite; db: SqlExecutor }> {
-  const pg = new PGlite();
-  openDbs.push(pg);
-  const db: SqlExecutor = {
+beforeAll(async () => {
+  pg = new PGlite();
+  db = {
     async exec(sql: string) {
       await pg.exec(sql);
     },
@@ -19,8 +19,18 @@ async function makeMigratedDb(): Promise<{ pg: PGlite; db: SqlExecutor }> {
     },
   };
   await applyMigrations(db);
-  return { pg, db };
-}
+  await db.query(
+    `INSERT INTO statement_line (key, statement, label, sort_order, sign_rule)
+     VALUES
+       ('bs.asset.cash', 'bs', 'Cash & Equivalents', 10, 'debit_minus_credit'),
+       ('pl.revenue.product', 'pl', 'Product Revenue', 10, 'credit_minus_debit')
+     ON CONFLICT (key) DO NOTHING`,
+  );
+}, 60_000);
+
+afterAll(async () => {
+  await pg.close();
+});
 
 interface SeedFixtures {
   userId: string;
@@ -42,26 +52,22 @@ interface SeedFixtures {
   rowRawA2: string;
 }
 
-async function seedBaseTenants(db: SqlExecutor): Promise<SeedFixtures> {
-  const uRes = await db.query<{ id: string }>(
+async function seedBaseTenants(dbExec: SqlExecutor, tag: string): Promise<SeedFixtures> {
+  const uRes = await dbExec.query<{ id: string }>(
     `INSERT INTO app_user (firebase_uid, email, display_name)
-     VALUES ('uid-1', 'owner@example.com', 'Owner')
+     VALUES ($1, $2, 'Owner')
      RETURNING id`,
+    [`uid-${tag}`, `owner-${tag}@example.com`],
   );
   const userId = uRes.rows[0]!.id;
 
-  await db.query(
-    `INSERT INTO statement_line (key, statement, label, sort_order, sign_rule)
-     VALUES
-       ('bs.asset.cash', 'bs', 'Cash & Equivalents', 10, 'debit_minus_credit'),
-       ('pl.revenue.product', 'pl', 'Product Revenue', 10, 'credit_minus_debit')`,
+  const compARes = await dbExec.query<{ id: string }>(
+    `INSERT INTO company (name, base_currency) VALUES ($1, 'USD') RETURNING id`,
+    [`Tenant A ${tag}`],
   );
-
-  const compARes = await db.query<{ id: string }>(
-    `INSERT INTO company (name, base_currency) VALUES ('Tenant A', 'USD') RETURNING id`,
-  );
-  const compBRes = await db.query<{ id: string }>(
-    `INSERT INTO company (name, base_currency) VALUES ('Tenant B', 'USD') RETURNING id`,
+  const compBRes = await dbExec.query<{ id: string }>(
+    `INSERT INTO company (name, base_currency) VALUES ($1, 'USD') RETURNING id`,
+    [`Tenant B ${tag}`],
   );
   const companyA = compARes.rows[0]!.id;
   const companyB = compBRes.rows[0]!.id;
@@ -176,17 +182,8 @@ async function seedBaseTenants(db: SqlExecutor): Promise<SeedFixtures> {
   };
 }
 
-afterEach(async () => {
-  while (openDbs.length > 0) {
-    const pg = openDbs.pop();
-    if (pg) await pg.close();
-  }
-});
-
 describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => {
   it('D1 & D9: applies migration idempotently and creates the exact 18 approved M1 tables with NUMERIC money columns', async () => {
-    const { db } = await makeMigratedDb();
-
     const tablesRes = await db.query<{ tablename: string }>(
       `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`,
     );
@@ -201,8 +198,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
   });
 
   it('D2: composite tenant FKs reject cross-company references and preserve leading zeros on account codes', async () => {
-    const { db } = await makeMigratedDb();
-    const s = await seedBaseTenants(db);
+    const s = await seedBaseTenants(db, 'd2');
 
     // Leading zeros preserved: "001000" and "1000" are distinct accounts in the same company
     await db.query(
@@ -240,8 +236,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
   });
 
   it('D3 & D4: enforces balanced gl_entry at COMMIT via deferred trigger and valid single-sided gl_line constraints', async () => {
-    const { pg, db } = await makeMigratedDb();
-    const s = await seedBaseTenants(db);
+    const s = await seedBaseTenants(db, 'd3');
 
     // Positive: balanced journal entry commits cleanly
     await pg.exec('BEGIN');
@@ -311,8 +306,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
   });
 
   it('D5 & D6: enforces atomic import idempotency/row-accounting and plan_line duplicate prevention (NULLS NOT DISTINCT)', async () => {
-    const { pg, db } = await makeMigratedDb();
-    const s = await seedBaseTenants(db);
+    const s = await seedBaseTenants(db, 'd5');
 
     const sourceHash = 'a'.repeat(64);
     // Negative D5: duplicate active import_batch for same (company_id, kind, source_hash) rejected
@@ -381,8 +375,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
   });
 
   it('D7: writes hash-chained audit_log rows and blocks UPDATE/DELETE mutations via trigger', async () => {
-    const { db } = await makeMigratedDb();
-    const s = await seedBaseTenants(db);
+    const s = await seedBaseTenants(db, 'd7');
 
     const first = await appendAuditLog(db, {
       companyId: s.companyA,
