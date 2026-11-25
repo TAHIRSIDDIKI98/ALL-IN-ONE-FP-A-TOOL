@@ -9,6 +9,7 @@ import { applyMigrations } from './db/migrate.js';
 import { ApiClientError, createApiClient } from '../src/api/client.js';
 import { seedChartOfAccounts } from './db/repositories/import.js';
 import { MESSY_CSV } from './db/testing/corpus-fixtures.js';
+import { verifyCompanyAuditLog } from './audit/index.js';
 
 const SECRET = 'server-test-sandbox-secret-long-enough';
 
@@ -628,6 +629,99 @@ describe('M1 Express spine API (/server/app.ts)', () => {
 
     const afterSignIn = await authed.getSessionWorkspace();
     expect(afterSignIn.companies.map((company) => company.name)).toEqual(['Client Flow Co']);
+  }, 120_000);
+
+  it('imports a chart of accounts atomically, then posts an import against it', async () => {
+    const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
+      email: 'client-chart@onefpa.test',
+      displayName: 'Client Chart',
+    });
+    const client = createApiClient({ getToken: () => minted.token, baseUrl });
+    const workspace = await client.createCompany({
+      companyName: 'Chart Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-CHART',
+      entityName: 'Chart Co HQ',
+    });
+
+    // A brand-new company has NO chart, so every import row would quarantine as unmapped.
+    const before = await client.getChart(workspace.companyId);
+    expect(before.accounts).toEqual([]);
+
+    const chartCsv = [
+      'code,name,type,normal_side,statement_line_key,parent_code,is_postable',
+      '1000,Cash,asset,debit,bs.asset.cash,,true',
+      '001200,Operating bank account,asset,debit,bs.asset.cash,1000,true',
+      '4000,Service revenue,revenue,credit,pl.revenue.service,,true',
+    ].join('\n');
+    const importedChart = await client.importChart(workspace.companyId, { csvText: chartCsv });
+    expect(importedChart.rowCount).toBe(3);
+    expect(importedChart.inserted).toBe(3);
+    expect(importedChart.updated).toBe(0);
+    expect(importedChart.accounts.map((account) => account.code)).toEqual(['001200', '1000', '4000']);
+    expect(importedChart.accounts[0]?.parentCode).toBe('1000');
+
+    // Re-importing the SAME chart updates in place and duplicates nothing.
+    const reimported = await client.importChart(workspace.companyId, { csvText: chartCsv });
+    expect(reimported.inserted).toBe(0);
+    expect(reimported.updated).toBe(3);
+    expect(reimported.accounts).toHaveLength(3);
+    expect(reimported.accounts.find((account) => account.code === '1000')?.version).toBe(2);
+
+    // A chart with one invalid row is rejected WHOLE: nothing is written.
+    const rejected = await client
+      .importChart(workspace.companyId, {
+        csvText: [
+          'code,name,type,normal_side,statement_line_key',
+          '5000,Cost of goods sold,expense,debit,pl.cogs.direct',
+          '6000,Broken,bank,debit,pl.opex.other',
+        ].join('\n'),
+      })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect(rejected).toBeInstanceOf(ApiClientError);
+    expect((rejected as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((rejected as ApiClientError).details['issues']).toEqual(['row 3: INVALID_TYPE:bank']);
+    const afterReject = await client.getChart(workspace.companyId);
+    expect(afterReject.accounts).toHaveLength(3);
+
+    // Now the import can post: the same CSV that would have quarantined everything posts.
+    const journal = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-CH1,2026-04-10,001200,Cash received,750.25,0.00',
+      'JE-CH1,2026-04-10,4000,Service revenue,0.00,750.25',
+    ].join('\n');
+    const preview = await client.previewImport(workspace.companyId, { csvText: journal });
+    expect(preview.importedCount).toBe(2);
+    expect(preview.quarantinedCount).toBe(0);
+    const committed = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'chart_co.csv',
+      csvText: journal,
+    });
+    expect(committed.importedCount).toBe(2);
+    expect(committed.totalDebits).toBe('750.25');
+
+    const grid = await client.getTrialBalance(workspace.companyId, { period: 'P04' });
+    expect(grid.totalDebit).toBe('750.25');
+    expect(grid.totalCredit).toBe('750.25');
+    const revenueRow = grid.rows.find((row) => row.code === '4000');
+    expect(revenueRow?.naturalActivity).toBe('750.25');
+
+    // Every write is chained (§3.4, G10): company.create + chart.import ×2 + import.commit.
+    const chain = await verifyCompanyAuditLog(db, workspace.companyId);
+    expect(chain.valid).toBe(true);
+    expect(chain.checkedCount).toBe(4);
+
+    // Cross-tenant: another identity cannot read or write this company's chart.
+    await expect(
+      createApiClient({
+        getToken: () => issueSandboxToken({ identity: INTRUDER, secret: SECRET, ttlMs: 60_000 }),
+        baseUrl,
+      }).getChart(workspace.companyId),
+    ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN' });
   }, 120_000);
 
   it('drives the import wizard and model grid contracts through the browser client against the real API', async () => {

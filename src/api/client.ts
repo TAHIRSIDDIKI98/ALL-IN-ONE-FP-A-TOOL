@@ -100,6 +100,8 @@ export interface ApiClient {
     query: { readonly period: string; readonly fiscalYear?: number | null },
   ): Promise<FinancialStatementsPayload>;
   previewImport(companyId: string, request: ImportPreviewRequest): Promise<ImportPreviewPayload>;
+  getChart(companyId: string): Promise<ChartOfAccountsPayload>;
+  importChart(companyId: string, request: { readonly csvText: string }): Promise<ChartImportPayload>;
   commitImport(companyId: string, request: ImportCommitRequest): Promise<ImportCommitPayload>;
   getTrialBalance(
     companyId: string,
@@ -208,6 +210,17 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         'POST',
         `/api/companies/${encodeURIComponent(companyId)}/import/preview`,
         { csvText: previewRequest.csvText },
+      ),
+    getChart: (companyId) =>
+      request<ChartOfAccountsPayload>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/accounts`,
+      ),
+    importChart: (companyId, chartRequest) =>
+      request<ChartImportPayload>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/chart/import`,
+        { csvText: chartRequest.csvText },
       ),
     commitImport: (companyId, commitRequest) =>
       request<ImportCommitPayload>(
@@ -399,4 +412,31 @@ export interface AccountDrilldownPayload {
   readonly totalDebit: string;
   readonly totalCredit: string;
   readonly naturalActivity: string;
+}
+
+/** Chart-of-accounts contracts (shared/chart.ts) — the target side of every import mapping. */
+export interface ChartAccountPayload {
+  readonly code: string;
+  readonly name: string;
+  readonly type: string;
+  readonly normalSide: string;
+  readonly isContra: boolean;
+  readonly isPostable: boolean;
+  readonly statementLineKey: string;
+  readonly parentCode: string | null;
+  readonly active: boolean;
+  readonly version: number;
+}
+
+export interface ChartOfAccountsPayload {
+  readonly companyId: string;
+  readonly accounts: readonly ChartAccountPayload[];
+}
+
+export interface ChartImportPayload {
+  readonly companyId: string;
+  readonly rowCount: number;
+  readonly inserted: number;
+  readonly updated: number;
+  readonly accounts: readonly ChartAccountPayload[];
 }

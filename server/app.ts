@@ -11,6 +11,11 @@ import {
   type SandboxTokenResponse,
 } from '../shared/spine.js';
 import {
+  ChartImportRequestSchema,
+  ChartImportResultSchema,
+  ChartOfAccountsReportSchema,
+} from '../shared/chart.js';
+import {
   CompanySetupRequestSchema,
   SessionWorkspaceResponseSchema,
   type SessionWorkspaceResponse,
@@ -34,6 +39,7 @@ import {
   TrialBalanceReportSchema,
 } from '../shared/reports.js';
 import { commitImport, previewImport } from './db/repositories/import.js';
+import { importChart, listChartAccounts } from './db/repositories/chart.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
@@ -359,6 +365,46 @@ export function createSpineApp(context: SpineContext) {
       next(error);
     }
   });
+
+  app.get(
+    '/api/companies/:companyId/accounts',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const accounts = await listChartAccounts(db, companyId);
+        res.status(200).json(ChartOfAccountsReportSchema.parse({ companyId, accounts }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Chart-of-accounts import. All-or-nothing: the pure /core parser validates every row first, and
+   * the accounts + their audit row commit in ONE transaction (G1/G10).
+   */
+  app.post(
+    '/api/companies/:companyId/chart/import',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(ChartImportRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          importChart(tx, {
+            companyId,
+            actorId: userId,
+            csvText: body.csvText,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(ChartImportResultSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.get(
     '/api/companies/:companyId/trial-balance',

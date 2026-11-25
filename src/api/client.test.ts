@@ -414,4 +414,82 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect((caught as ApiClientError).code).toBe('PERIOD_NOT_FOUND');
     expect((caught as ApiClientError).httpStatus).toBe(422);
   });
+
+  it('reads the chart of accounts and imports a chart CSV through the company-scoped routes', async () => {
+    const account = {
+      code: '001200',
+      name: 'Operating bank account',
+      type: 'asset',
+      normalSide: 'debit',
+      isContra: false,
+      isPostable: true,
+      statementLineKey: 'bs.asset.cash',
+      parentCode: null,
+      active: true,
+      version: 1,
+    };
+    let call = 0;
+    const { fetchImpl, calls } = fakeFetch(() => {
+      call += 1;
+      return call === 1
+        ? { status: 200, body: { companyId: '11111111-1111-4111-8111-111111111111', accounts: [account] } }
+        : {
+            status: 201,
+            body: {
+              companyId: '11111111-1111-4111-8111-111111111111',
+              rowCount: 1,
+              inserted: 1,
+              updated: 0,
+              accounts: [account],
+            },
+          };
+    });
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const chart = await client.getChart('11111111-1111-4111-8111-111111111111');
+    const imported = await client.importChart('11111111-1111-4111-8111-111111111111', {
+      csvText: 'code,name,type,normal_side,statement_line_key\n001200,Bank,asset,debit,bs.asset.cash\n',
+    });
+
+    expect(calls[0]?.url).toBe('/api/companies/11111111-1111-4111-8111-111111111111/accounts');
+    expect(calls[1]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/chart/import',
+    );
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({
+      csvText: 'code,name,type,normal_side,statement_line_key\n001200,Bank,asset,debit,bs.asset.cash\n',
+    });
+    // Leading zeros survive the wire in both directions.
+    expect(chart.accounts[0]?.code).toBe('001200');
+    expect(imported.inserted).toBe(1);
+    expect(imported.rowCount).toBe(1);
+    expect(imported.accounts[0]?.statementLineKey).toBe('bs.asset.cash');
+  });
+
+  it('surfaces a rejected chart file with its row-level issues so the screen can show them verbatim', async () => {
+    const { fetchImpl } = fakeFetch(() => ({
+      status: 422,
+      body: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          userMessage: 'The chart file has 2 rejected row(s); nothing was written.',
+          httpStatus: 422,
+          details: { issues: ['row 3: INVALID_TYPE:bank', 'row 4: DUPLICATE_CODE:1000'] },
+        },
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    let caught: unknown = null;
+    try {
+      await client.importChart('11111111-1111-4111-8111-111111111111', { csvText: 'code\n1000' });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ApiClientError);
+    expect((caught as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((caught as ApiClientError).details['issues']).toEqual([
+      'row 3: INVALID_TYPE:bank',
+      'row 4: DUPLICATE_CODE:1000',
+    ]);
+  });
 });

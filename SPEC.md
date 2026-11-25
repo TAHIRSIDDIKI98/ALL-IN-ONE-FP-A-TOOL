@@ -95,6 +95,15 @@ Enforced by `/scripts/schema-scope`: any table outside this set fails the build.
   - `plan != 0` -> `div(variance_amount, abs_via_negate_if_negative(plan), scale, HALF_UP)`
 - Favorability: derived from account type (`revenue`/`asset`: `actual > plan` favorable; `expense`/`liability`: `actual < plan` favorable).
 
+### 3.6b Chart of Accounts (`/core/chart`, `account`, `coa_mapping`)
+- The chart is the **target** side of every import mapping: a source account code can post only when an `account` row exists for that code; everything else is quarantined `UNMAPPED_ACCOUNT:<code>`.
+- Chart CSV columns (header aliases accepted, case-insensitive): `code`, `name`, `type` (`asset|liability|equity|revenue|expense`), `normal_side` (`debit|credit`), `statement_line_key` (catalog keys only), optional `parent_code`, optional `is_postable` (`true/false/yes/no/1/0`, default `true`).
+- Codes are normalized (trim + collapse internal whitespace) and leading zeros are preserved: `"001200" != "1200"`.
+- Validation is **all-or-nothing** (`/core/chart/parseChartCsv`): every rejected row is reported as `row <n>: <REASON>` and nothing is written. Reason codes: `EMPTY_FILE`, `MISSING_COLUMN:<name>`, `BLANK_ROW`, `EMPTY_CODE`, `EMPTY_NAME`, `DUPLICATE_CODE:<code>`, `INVALID_TYPE:<v>`, `INVALID_NORMAL_SIDE:<v>`, `UNKNOWN_STATEMENT_LINE:<v>`, `EMPTY_PARENT_CODE`, `SELF_PARENT:<code>`, `INVALID_IS_POSTABLE:<v>`.
+- Import is idempotent on `(company_id, code)`: re-importing a chart updates rows (bumping `account.version`) and never duplicates; a re-type of an existing code, or a parent that does not exist, is rejected by `seedChartOfAccounts`.
+- A type/normal-side mismatch is **not** an error: it is recorded as `is_contra = true` (e.g. accumulated depreciation: `asset` / `credit`).
+- The chart import writes its accounts and its `audit_log` row in ONE transaction (G10).
+
 ### 3.6 Fiscal Calendars (`/core/calendar`)
 - Deterministically generates periods for `12month`, `445`, `454`, `544`, `52_53` (NRF with explicit W53 rule), and `13x4`. Proven against Q2 NRF 2024–2028 oracle fixtures (including the 53-week year).
 
