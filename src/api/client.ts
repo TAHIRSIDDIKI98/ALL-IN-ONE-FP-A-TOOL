@@ -106,6 +106,10 @@ export interface ApiClient {
     companyId: string,
     query: { readonly fiscalYear: number },
   ): Promise<BudgetReportPayload>;
+  getBva(
+    companyId: string,
+    query: { readonly period: string; readonly fiscalYear?: number | null },
+  ): Promise<BvaReportPayload>;
   importBudget(
     companyId: string,
     request: {
@@ -240,6 +244,17 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       return request<BudgetReportPayload>(
         'GET',
         `/api/companies/${encodeURIComponent(companyId)}/budget?${params.toString()}`,
+      );
+    },
+    getBva: (companyId, query) => {
+      const params = new URLSearchParams();
+      params.set('period', query.period);
+      if (query.fiscalYear !== undefined && query.fiscalYear !== null) {
+        params.set('year', String(query.fiscalYear));
+      }
+      return request<BvaReportPayload>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/bva?${params.toString()}`,
       );
     },
     importBudget: (companyId, budgetRequest) =>
@@ -506,4 +521,47 @@ export interface BudgetReportPayload {
 
 export interface BudgetImportPayload extends BudgetReportPayload {
   readonly rowCount: number;
+}
+
+/** Budget-vs-Actual contracts (shared/bva.ts) — plan null means "not planned", never zero. */
+export interface BvaRowPayload {
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly accountType: string;
+  readonly actual: string | null;
+  readonly plan: string | null;
+  readonly varianceAmount: string | null;
+  readonly variancePctKind: 'computed' | 'zero' | 'nm' | 'null';
+  readonly variancePctFormatted: string | null;
+  readonly favorability: 'favorable' | 'unfavorable' | 'neutral' | 'na';
+}
+
+export interface BvaReportPayload {
+  readonly companyId: string;
+  readonly fiscalYear: number;
+  readonly throughPeriodCode: string;
+  readonly scenarioId: string | null;
+  readonly scenarioName: string | null;
+  readonly planVersionId: string | null;
+  readonly versionNo: number | null;
+  readonly hasPlan: boolean;
+  readonly rows: readonly BvaRowPayload[];
+  readonly totals: {
+    readonly actual: string;
+    readonly plan: string;
+    readonly unplannedActual: string;
+    readonly varianceAmount: string;
+    readonly plannedRows: number;
+    readonly unplannedRows: number;
+    readonly favorable: number;
+    readonly unfavorable: number;
+    readonly neutral: number;
+    readonly na: number;
+  };
+  readonly byType: readonly {
+    readonly accountType: string;
+    readonly actual: string;
+    readonly plan: string;
+    readonly varianceAmount: string;
+  }[];
 }

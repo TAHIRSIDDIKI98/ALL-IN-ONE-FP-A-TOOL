@@ -1,6 +1,11 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import type { SpineRoutePath } from '../../shared/spine.js';
-import { ApiClientError, createApiClient, type FinancialStatementsPayload } from '../api/client.js';
+import {
+  ApiClientError,
+  createApiClient,
+  type BvaReportPayload,
+  type FinancialStatementsPayload,
+} from '../api/client.js';
 import { EmptyState, ErrorState, LoadingState, PartialBanner } from '../components/StateFrame.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
@@ -67,6 +72,9 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [loadError, setLoadError] = useState<{ code: string; message: string } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [bva, setBva] = useState<BvaReportPayload | null>(null);
+  const [bvaState, setBvaState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [bvaError, setBvaError] = useState<{ code: string; message: string } | null>(null);
 
   const companyId = company?.id ?? null;
 
@@ -100,6 +108,36 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
       cancelled = true;
     };
   }, [companyId, authToken, period, reloadKey]);
+
+  useEffect(() => {
+    if (activeTab !== 'bva' || companyId === null || authToken === null) return;
+    let cancelled = false;
+    setBvaState('loading');
+    setBvaError(null);
+    createApiClient({ getToken: () => authToken })
+      .getBva(companyId, { period })
+      .then((result) => {
+        if (cancelled) return;
+        setBva(result);
+        setBvaState('idle');
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setBva(null);
+        setBvaState('error');
+        setBvaError(
+          error instanceof ApiClientError
+            ? { code: error.code, message: error.message }
+            : {
+                code: 'INTERNAL_ERROR',
+                message: error instanceof Error ? error.message : 'Unable to load Budget vs Actual.',
+              },
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, companyId, authToken, period, reloadKey]);
 
   const selectTab = (tab: StatementTab): void => {
     setActiveTab(tab);
@@ -224,13 +262,125 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
       )}
 
       {activeTab === 'bva' ? (
-        <EmptyState
-          title="Budget vs Actual"
-          disclosure="No budget plan version has been imported for this company yet, so there is nothing honest to compare against actuals."
-          ctaLabel="Open Import Wizard"
-          ctaPath="/import"
-          onNavigate={navigate}
-        />
+        bvaState === 'loading' ? (
+          <div role="status" aria-live="polite" className="text-sm font-medium text-slate-700">
+            Loading the current plan version and joining it to the ledger…
+          </div>
+        ) : bvaState === 'error' ? (
+          <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+            <p>
+              <span className="font-mono font-semibold">[{bvaError?.code ?? 'INTERNAL_ERROR'}]</span>{' '}
+              {bvaError?.message ?? 'Unable to load Budget vs Actual.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="mt-2 rounded bg-red-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800"
+            >
+              Retry Budget vs Actual
+            </button>
+          </div>
+        ) : bva === null || !bva.hasPlan ? (
+          <EmptyState
+            title="Budget vs Actual"
+            disclosure="No budget plan version has been imported for this company yet, so there is nothing honest to compare against actuals."
+            ctaLabel="Open Import Wizard"
+            ctaPath="/import"
+            onNavigate={navigate}
+          />
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-600">
+              <span className="font-mono">{bva.scenarioName ?? 'Budget'}</span> v{bva.versionNo ?? '—'} ·
+              year-to-date through {bva.throughPeriodCode} of FY{bva.fiscalYear} · variance = actual − plan,
+              favorable/unfavorable derived from the account type.
+            </p>
+            {bva.totals.unplannedRows > 0 && (
+              <PartialBanner
+                detail={`${bva.totals.unplannedRows} account(s) with ${bva.totals.unplannedActual} of actual activity have no plan line, so no variance is shown for them.`}
+              />
+            )}
+            <div className="overflow-x-auto rounded border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <caption className="sr-only">
+                  Budget versus actual by account, through {bva.throughPeriodCode}
+                </caption>
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+                  <tr>
+                    <th scope="col" className="px-4 py-2">Account</th>
+                    <th scope="col" className="px-4 py-2 text-right">Actual</th>
+                    <th scope="col" className="px-4 py-2 text-right">Plan</th>
+                    <th scope="col" className="px-4 py-2 text-right">Variance</th>
+                    <th scope="col" className="px-4 py-2 text-right">Var %</th>
+                    <th scope="col" className="px-4 py-2">Favorability</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {bva.rows.map((row) => (
+                    <tr key={row.accountCode}>
+                      <th scope="row" className="px-4 py-2 text-left font-normal">
+                        <span className="font-mono">{row.accountCode}</span>{' '}
+                        <span className="text-slate-600">{row.accountName}</span>
+                      </th>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums">
+                        {row.actual ?? '—'}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums">
+                        {row.plan ?? <span className="text-slate-500">not planned</span>}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums">
+                        {row.varianceAmount ?? '—'}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums">
+                        {row.variancePctFormatted ?? '—'}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
+                            row.favorability === 'favorable'
+                              ? 'bg-emerald-100 text-emerald-900'
+                              : row.favorability === 'unfavorable'
+                                ? 'bg-red-100 text-red-900'
+                                : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {row.favorability}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50 text-sm font-semibold text-slate-900">
+                  <tr>
+                    <th scope="row" className="px-4 py-2 text-left">
+                      Totals ({bva.totals.plannedRows} planned / {bva.totals.unplannedRows} unplanned)
+                    </th>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">{bva.totals.actual}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">{bva.totals.plan}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums">
+                      {bva.totals.varianceAmount}
+                    </td>
+                    <td className="px-4 py-2" />
+                    <td className="px-4 py-2 font-normal text-xs text-slate-600">
+                      {bva.totals.favorable} favorable · {bva.totals.unfavorable} unfavorable ·{' '}
+                      {bva.totals.neutral} neutral · {bva.totals.na} not planned
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-5">
+              {bva.byType.map((total) => (
+                <div key={total.accountType}>
+                  <dt className="uppercase tracking-wide text-slate-500">{total.accountType}</dt>
+                  <dd className="font-mono text-slate-900">
+                    actual {total.actual} · plan {total.plan}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )
       ) : (
         <div className="overflow-x-auto rounded border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200 text-sm">

@@ -811,6 +811,13 @@ describe('M1 Express spine API (/server/app.ts)', () => {
       }),
     );
 
+    // No budget yet: an honest empty report, never an invented all-zero plan, and a BvA that says
+    // plainly there is no plan instead of comparing against a fabricated zero.
+    const bvaBeforeAnyData = await client.getBva(workspace.companyId, { period: 'P04' });
+    expect(bvaBeforeAnyData.hasPlan).toBe(false);
+    expect(bvaBeforeAnyData.scenarioId).toBeNull();
+    expect(bvaBeforeAnyData.rows).toEqual([]);
+
     // No budget yet: an honest empty report, never an invented all-zero plan.
     const empty = await client.getBudget(workspace.companyId, { fiscalYear: 2026 });
     expect(empty.scenarioId).toBeNull();
@@ -919,6 +926,67 @@ describe('M1 Express spine API (/server/app.ts)', () => {
         .filter((row) => row.naturalActivity !== '0.00')
         .map((row) => `${row.code}=${row.naturalActivity}`),
     ).toEqual(['1000=750.25', '4000=750.25']);
+
+    // BvA: plan year-to-date through P04 (all nine lines) against the actuals that exist.
+    const bva = await client.getBva(workspace.companyId, { period: 'P04' });
+    expect(bva.hasPlan).toBe(true);
+    expect(bva.versionNo).toBe(2);
+    expect(bva.throughPeriodCode).toBe('P04');
+
+    const revenueRow = bva.rows.find((row) => row.accountCode === '4000');
+    expect(revenueRow).toMatchObject({
+      accountType: 'revenue',
+      actual: '750.25',
+      plan: '38000.00',
+      varianceAmount: '-37249.75',
+      favorability: 'unfavorable',
+    });
+    const salariesRow = bva.rows.find((row) => row.accountCode === '5000');
+    expect(salariesRow).toMatchObject({
+      actual: '0.00',
+      plan: '12800.00',
+      varianceAmount: '-12800.00',
+      favorability: 'favorable',
+    });
+    // An account with actuals but no plan line is NOT compared against an invented zero plan.
+    const cashRow = bva.rows.find((row) => row.accountCode === '1000');
+    expect(cashRow).toMatchObject({
+      actual: '750.25',
+      plan: null,
+      varianceAmount: null,
+      variancePctKind: 'null',
+      favorability: 'na',
+    });
+    expect(bva.totals).toMatchObject({
+      actual: '1500.50',
+      plan: '56300.00',
+      unplannedActual: '750.25',
+      varianceAmount: '-55549.75',
+      plannedRows: 3,
+      unplannedRows: 1,
+      favorable: 2,
+      unfavorable: 1,
+      neutral: 0,
+      na: 1,
+    });
+
+    // The earlier period only compares the plan months that have elapsed.
+    const bvaP02 = await client.getBva(workspace.companyId, { period: 'P02' });
+    expect(bvaP02.rows.find((row) => row.accountCode === '4000')).toMatchObject({
+      actual: '0.00',
+      plan: '25000.00',
+      varianceAmount: '-25000.00',
+    });
+
+    // G5 tie-out: the BvA actual totals ARE the statement figures for every account type.
+    const statements = await client.getStatements(workspace.companyId, { period: 'P04' });
+    const revenueTotal = bva.byType.find((total) => total.accountType === 'revenue');
+    const expenseTotal = bva.byType.find((total) => total.accountType === 'expense');
+    expect(revenueTotal?.actual).toBe(statements.pnl.revenue);
+    expect(revenueTotal?.plan).toBe('38000.00');
+    expect(expenseTotal?.actual).toBe('0.00');
+    expect(expenseTotal?.plan).toBe('18300.00');
+    expect(statements.pnl.netIncome).toBe('750.25');
 
     // company.create + 2 × budget.import + import.commit; the two rejected budgets wrote nothing.
     const chain = await verifyCompanyAuditLog(db, workspace.companyId);

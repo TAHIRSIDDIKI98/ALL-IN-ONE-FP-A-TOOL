@@ -509,6 +509,71 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(imported.rowCount).toBe(1);
   });
 
+  it('reads Budget-vs-Actual for a period without inventing a plan for unplanned accounts', async () => {
+    const report = {
+      companyId: '11111111-1111-4111-8111-111111111111',
+      fiscalYear: 2026,
+      throughPeriodCode: 'P04',
+      scenarioId: '22222222-2222-4222-8222-222222222222',
+      scenarioName: 'Budget FY2026',
+      planVersionId: '33333333-3333-4333-8333-333333333333',
+      versionNo: 2,
+      hasPlan: true,
+      rows: [
+        {
+          accountCode: '4000',
+          accountName: 'Service revenue',
+          accountType: 'revenue',
+          actual: '750.25',
+          plan: '38000.00',
+          varianceAmount: '-37249.75',
+          variancePctKind: 'computed',
+          variancePctFormatted: '-98.03%',
+          favorability: 'unfavorable',
+        },
+        {
+          accountCode: '1000',
+          accountName: 'Cash',
+          accountType: 'asset',
+          actual: '750.25',
+          plan: null,
+          varianceAmount: null,
+          variancePctKind: 'null',
+          variancePctFormatted: null,
+          favorability: 'na',
+        },
+      ],
+      totals: {
+        actual: '1500.50',
+        plan: '38000.00',
+        unplannedActual: '750.25',
+        varianceAmount: '-37249.75',
+        plannedRows: 1,
+        unplannedRows: 1,
+        favorable: 0,
+        unfavorable: 1,
+        neutral: 0,
+        na: 1,
+      },
+      byType: [{ accountType: 'revenue', actual: '750.25', plan: '38000.00', varianceAmount: '-37249.75' }],
+    };
+    const { fetchImpl, calls } = fakeFetch(() => ({ status: 200, body: report }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const bva = await client.getBva('11111111-1111-4111-8111-111111111111', {
+      period: 'P04',
+      fiscalYear: 2026,
+    });
+
+    expect(calls[0]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/bva?period=P04&year=2026',
+    );
+    expect(bva.rows[0]?.varianceAmount).toBe('-37249.75');
+    expect(bva.rows[1]?.plan).toBeNull();
+    expect(bva.rows[1]?.favorability).toBe('na');
+    expect(bva.totals.unplannedActual).toBe('750.25');
+  });
+
   it('surfaces a rejected chart file with its row-level issues so the screen can show them verbatim', async () => {
     const { fetchImpl } = fakeFetch(() => ({
       status: 422,

@@ -113,6 +113,13 @@ Enforced by `/scripts/schema-scope`: any table outside this set fails the build.
 - Each import creates a NEW `plan_version` (`version_no = max + 1`, label `FY<year> Budget v<n>`) and flips `is_current` on the previous version in the SAME transaction, so history is kept and no plan line is ever duplicated. The `audit_log` row (`budget.import`) commits in that transaction too (G10).
 - Reads: `GET /api/companies/:id/budget?year=<fy>` returns `{scenarioId|null, scenarioName|null, planVersionId|null, versionNo|null, lineCount, totalAmount, lines[], accounts[]}`. A company with no budget reports nulls, `0` lines and `0.00` — an honest empty state, never an invented all-zero plan.
 
+### 3.6d Budget-vs-Actual (`/core/variance`, `GET /bva`)
+- Reads join the CURRENT plan version (truncated to the periods at or before `?period=`) with the trial-balance actuals through the same period, then call `buildBudgetVariance` in `/core/variance`. The screen never computes a variance the engine did not.
+- `varianceAmount = actual - plan`. `variancePct` and favorability follow §3.5 exactly (`0.00%` for 0 vs 0, `n/m` for x vs 0, account-type favorability).
+- Zero-base rules: a row is emitted only when the account has a plan line **or** non-zero actual activity; an account with neither is omitted rather than shown as `0 vs 0`. An account with actuals but no plan line keeps `plan: null`, `varianceAmount: null`, `variancePctKind: 'null'`, `favorability: 'na'` — "not planned", never a fabricated zero plan. A planned account with no GL activity is compared against the true `0.00` the trial balance reports for it (data, not a fabrication).
+- Totals sum only what exists: `plan` covers planned rows, `varianceAmount` covers rows with both sides, and `unplannedActual` is reported separately so `actual = plannedActual + unplannedActual` is always visible.
+- `byType[]` reports actual/plan/variance per account type; its `actual` values ARE the statement figures (G5 tie-out: revenue `byType.actual == pnl.revenue`).
+
 ### 3.6 Fiscal Calendars (`/core/calendar`)
 - Deterministically generates periods for `12month`, `445`, `454`, `544`, `52_53` (NRF with explicit W53 rule), and `13x4`. Proven against Q2 NRF 2024–2028 oracle fixtures (including the 53-week year).
 

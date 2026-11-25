@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { verifyPvmInvariant } from '../invariants.js';
 import { money } from '../money/index.js';
-import { computePvmDecomposition, computeVariance, deriveFavorability } from './index.js';
+import {
+  buildBudgetVariance,
+  computePvmDecomposition,
+  computeVariance,
+  deriveFavorability,
+  type BudgetVarianceAccountInput,
+} from './index.js';
 
 const BASIS = {
   scenarioId: 'actual_vs_budget',
@@ -154,5 +160,99 @@ describe('Price-Volume-Mix (PVM) Decomposition (§5.7)', () => {
     const broken = verifyPvmInvariant(money('100.00'), money('50.00'), money('40.00'), money('5.00'));
     expect(broken.passed).toBe(false);
     expect(broken.delta).toBe('5');
+  });
+
+  it('builds Budget-vs-Actual rows with account-type favorability and the locked zero-base rules', () => {
+    const accounts: BudgetVarianceAccountInput[] = [
+      // revenue over plan -> favorable
+      { accountCode: '4000', accountName: 'Service revenue', accountType: 'revenue', actual: '1200.00', plan: '1000.00' },
+      // expense over plan -> unfavorable
+      { accountCode: '5000', accountName: 'Salaries', accountType: 'expense', actual: '300.00', plan: '250.00' },
+      // plan exists, no activity yet -> compared against the true 0.00
+      { accountCode: '6000', accountName: 'Software', accountType: 'expense', actual: null, plan: '50.00' },
+      // no plan line -> "not planned", never an invented zero plan
+      { accountCode: '6100', accountName: 'Contractors', accountType: 'expense', actual: '75.00', plan: null },
+      // neither plan nor activity -> omitted entirely (not shown as 0 vs 0)
+      { accountCode: '7000', accountName: 'Idle account', accountType: 'expense', actual: '0.00', plan: null },
+    ];
+
+    const result = buildBudgetVariance({ accounts, basis: BASIS });
+
+    expect(result.rows.map((row) => row.accountCode)).toEqual(['4000', '5000', '6000', '6100']);
+    expect(result.rows[0]).toMatchObject({
+      actual: '1200.00',
+      plan: '1000.00',
+      varianceAmount: '200.00',
+      variancePctFormatted: '20.00%',
+      favorability: 'favorable',
+    });
+    expect(result.rows[1]).toMatchObject({
+      varianceAmount: '50.00',
+      variancePctFormatted: '20.00%',
+      favorability: 'unfavorable',
+    });
+    expect(result.rows[2]).toMatchObject({
+      actual: '0.00',
+      plan: '50.00',
+      varianceAmount: '-50.00',
+      variancePctFormatted: '-100.00%',
+      favorability: 'favorable',
+    });
+    expect(result.rows[3]).toMatchObject({
+      actual: '75.00',
+      plan: null,
+      varianceAmount: null,
+      variancePctKind: 'null',
+      variancePctFormatted: null,
+      favorability: 'na',
+    });
+
+    // Totals only sum what exists, and the unplanned actual is reported separately.
+    expect(result.totals).toEqual({
+      actual: '1575.00',
+      plan: '1300.00',
+      unplannedActual: '75.00',
+      varianceAmount: '200.00',
+      plannedRows: 3,
+      unplannedRows: 1,
+      favorable: 2,
+      unfavorable: 1,
+      neutral: 0,
+      na: 1,
+    });
+    expect(result.byType).toEqual([
+      { accountType: 'revenue', actual: '1200.00', plan: '1000.00', varianceAmount: '200.00' },
+      { accountType: 'expense', actual: '375.00', plan: '300.00', varianceAmount: '0.00' },
+    ]);
+
+    // Row sums tie to the totals exactly.
+    const sumActual = result.rows.reduce((total, row) => total + Number(row.actual ?? '0'), 0);
+    expect(sumActual.toFixed(2)).toBe(result.totals.actual);
+    expect(result.totals.plan).toBe('1300.00');
+  });
+
+  it('keeps a zero-plan account out of n/m falsehoods and reports 0.00% for zero vs zero', () => {
+    const result = buildBudgetVariance({
+      accounts: [
+        { accountCode: '4000', accountName: 'Revenue', accountType: 'revenue', actual: '0.00', plan: '0.00' },
+        { accountCode: '5000', accountName: 'Salaries', accountType: 'expense', actual: '100.00', plan: '0.00' },
+      ],
+      basis: BASIS,
+    });
+
+    expect(result.rows[0]).toMatchObject({
+      plan: '0.00',
+      varianceAmount: '0.00',
+      variancePctFormatted: '0.00%',
+      favorability: 'neutral',
+    });
+    expect(result.rows[1]).toMatchObject({
+      plan: '0.00',
+      varianceAmount: '100.00',
+      variancePctKind: 'nm',
+      variancePctFormatted: 'n/m',
+      favorability: 'unfavorable',
+    });
+    expect(result.totals.actual).toBe('100.00');
   });
 });

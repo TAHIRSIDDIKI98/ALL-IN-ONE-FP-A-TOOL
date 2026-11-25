@@ -46,6 +46,8 @@ import {
 import { commitImport, previewImport } from './db/repositories/import.js';
 import { importChart, listChartAccounts } from './db/repositories/chart.js';
 import { getBudget, importBudget } from './db/repositories/budget.js';
+import { getBvaReport } from './db/repositories/bva.js';
+import { BvaReportSchema } from '../shared/bva.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
@@ -478,6 +480,37 @@ export function createSpineApp(context: SpineContext) {
           ...(period === null ? {} : { throughPeriodCode: period }),
         });
         res.status(200).json(TrialBalanceReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Budget-vs-Actual for the year to date through ?period=. Plan comes from the current plan
+   * version, actual from the trial-balance read model, and the join is done in /core/variance so
+   * the screen can never compute a variance the engine did not (§3.5, G5).
+   */
+  app.get(
+    '/api/companies/:companyId/bva',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const period = readPeriodQuery(req.query['period']);
+        if (period === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The BvA endpoint requires ?period= (year-to-date through that period).',
+            details: { issues: ['period: required'] },
+          });
+        }
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        const report = await getBvaReport(db, {
+          companyId,
+          throughPeriodCode: period,
+          fiscalYear,
+        });
+        res.status(200).json(BvaReportSchema.parse(report));
       } catch (error) {
         next(error);
       }
