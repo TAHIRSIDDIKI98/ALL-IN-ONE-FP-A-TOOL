@@ -801,4 +801,152 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN', httpStatus: 403 });
   });
 
+  it('calls M2 planning endpoints with relative URLs and preserves string-only money (WI-0031)', async () => {
+    const companyId = '11111111-1111-4111-8111-111111111111';
+    let step = 0;
+    const { fetchImpl, calls } = fakeFetch(() => {
+      step += 1;
+      if (step === 1) {
+        return {
+          status: 200,
+          body: {
+            companyId,
+            scenarios: [
+              {
+                scenarioId: '22222222-2222-4222-8222-222222222222',
+                name: 'Base Forecast',
+                kind: 'forecast',
+                currentVersionNo: 1,
+                currentVersionLabel: 'Base Forecast v1',
+              },
+            ],
+          },
+        };
+      }
+      if (step === 2) {
+        return {
+          status: 200,
+          body: {
+            fiscalYear: 2026,
+            currencyScale: 2,
+            periods: ['P01'],
+            lines: [],
+            totalsByAccount: { '4000': '1000.00' },
+            totalsByPeriod: { P01: '1000.00' },
+            grandTotal: '1000.00',
+          },
+        };
+      }
+      if (step === 3) {
+        return {
+          status: 201,
+          body: {
+            scenarioId: '22222222-2222-4222-8222-222222222222',
+            scenarioName: 'Base Forecast',
+            scenarioKind: 'forecast',
+            planVersionId: '33333333-3333-4333-8333-333333333333',
+            versionNo: 1,
+            lineCount: 1,
+            grandTotal: '1000.00',
+            totalsByAccount: { '4000': '1000.00' },
+          },
+        };
+      }
+      if (step === 4) {
+        return {
+          status: 200,
+          body: {
+            companyId,
+            fiscalYear: 2026,
+            scenarioName: 'Base Forecast',
+            planVersionNo: 1,
+            cutoffPeriod: 'P01',
+            periods: ['P01', 'P02'],
+            actualPeriods: ['P01'],
+            forecastPeriods: ['P02'],
+            rows: [],
+            totalActual: '1200.00',
+            totalForecast: '1100.00',
+            totalFullHorizon: '2300.00',
+            totalMissingCells: 0,
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          companyId,
+          fiscalYear: 2026,
+          baseScenarioName: 'Base Forecast',
+          targetScenarioName: 'Upside Forecast',
+          rows: [],
+          totalBase: '4303.00',
+          totalTarget: '5850.00',
+          totalDelta: '1547.00',
+        },
+      };
+    });
+
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const scenarios = await client.listPlanningScenarios(companyId);
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/planning/scenarios`);
+    expect(scenarios.scenarios[0]?.name).toBe('Base Forecast');
+
+    const preview = await client.previewDriverPlan(companyId, {
+      fiscalYear: 2026,
+      periods: ['P01'],
+      drivers: [
+        {
+          kind: 'fixed',
+          driverKey: 'd1',
+          accountCode: '4000',
+          assumptionLabel: 'Flat',
+          amount: '1000.00',
+        },
+      ],
+    });
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/planning/drivers/preview`);
+    expect(typeof preview.grandTotal).toBe('string');
+    expect(preview.grandTotal).toBe('1000.00');
+
+    const committed = await client.commitDriverPlan(companyId, {
+      fiscalYear: 2026,
+      scenarioName: 'Base Forecast',
+      scenarioKind: 'forecast',
+      periods: ['P01'],
+      drivers: [
+        {
+          kind: 'fixed',
+          driverKey: 'd1',
+          accountCode: '4000',
+          assumptionLabel: 'Flat',
+          amount: '1000.00',
+        },
+      ],
+    });
+    expect(calls[2]?.url).toBe(`/api/companies/${companyId}/planning/drivers/commit`);
+    expect(committed.versionNo).toBe(1);
+
+    const rf = await client.getRollingForecast(companyId, {
+      year: 2026,
+      scenario: 'Base Forecast',
+      cutoffPeriod: 'P01',
+    });
+    expect(calls[3]?.url).toBe(
+      `/api/companies/${companyId}/planning/rolling-forecast?year=2026&scenario=Base+Forecast&cutoffPeriod=P01`,
+    );
+    expect(rf.totalFullHorizon).toBe('2300.00');
+
+    const cmp = await client.compareScenarios(companyId, {
+      year: 2026,
+      base: 'Base Forecast',
+      target: 'Upside Forecast',
+    });
+    expect(calls[4]?.url).toBe(
+      `/api/companies/${companyId}/planning/compare?year=2026&base=Base+Forecast&target=Upside+Forecast`,
+    );
+    expect(cmp.totalDelta).toBe('1547.00');
+  });
+
 });

@@ -8,6 +8,15 @@
  * - Every non-2xx response becomes an `ApiClientError` carrying the server's typed envelope, so a
  *   screen can render the real error code instead of inventing one.
  */
+import type {
+  DriverPlanCommitRequest,
+  DriverPlanCommitResponse,
+  DriverPlanPreviewRequest,
+  DriverPlanPreviewResponse,
+  RollingForecastResponse,
+  ScenarioComparisonResponse,
+  ScenarioListResponse,
+} from '../../shared/planning.js';
 
 export interface ApiErrorEnvelope {
   readonly code: string;
@@ -148,6 +157,31 @@ export interface ApiClient {
     accountCode: string,
     query?: { readonly period?: string | null },
   ): Promise<AccountDrilldownPayload>;
+  listPlanningScenarios(companyId: string): Promise<ScenarioListResponse>;
+  previewDriverPlan(
+    companyId: string,
+    request: DriverPlanPreviewRequest,
+  ): Promise<DriverPlanPreviewResponse>;
+  commitDriverPlan(
+    companyId: string,
+    request: DriverPlanCommitRequest,
+  ): Promise<DriverPlanCommitResponse>;
+  getRollingForecast(
+    companyId: string,
+    query: {
+      readonly year: number;
+      readonly scenario: string;
+      readonly cutoffPeriod?: string | null;
+    },
+  ): Promise<RollingForecastResponse>;
+  compareScenarios(
+    companyId: string,
+    query: {
+      readonly year: number;
+      readonly base: string;
+      readonly target: string;
+    },
+  ): Promise<ScenarioComparisonResponse>;
 }
 
 function boardPackQuery(period: string, fiscalYear?: number | null): string {
@@ -364,6 +398,47 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         `/api/companies/${encodeURIComponent(companyId)}/accounts/${encodeURIComponent(accountCode)}/drill${
           suffix.length > 0 ? `?${suffix}` : ''
         }`,
+      );
+    },
+    listPlanningScenarios: (companyId) =>
+      request<ScenarioListResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/planning/scenarios`,
+      ),
+    previewDriverPlan: (companyId, body) =>
+      request<DriverPlanPreviewResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/planning/drivers/preview`,
+        body,
+      ),
+    commitDriverPlan: (companyId, body) =>
+      request<DriverPlanCommitResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/planning/drivers/commit`,
+        body,
+      ),
+    getRollingForecast: (companyId, query) => {
+      const params = new URLSearchParams({
+        year: String(query.year),
+        scenario: query.scenario,
+      });
+      if (query.cutoffPeriod !== undefined && query.cutoffPeriod !== null) {
+        params.set('cutoffPeriod', query.cutoffPeriod);
+      }
+      return request<RollingForecastResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/planning/rolling-forecast?${params.toString()}`,
+      );
+    },
+    compareScenarios: (companyId, query) => {
+      const params = new URLSearchParams({
+        year: String(query.year),
+        base: query.base,
+        target: query.target,
+      });
+      return request<ScenarioComparisonResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/planning/compare?${params.toString()}`,
       );
     },
   };
