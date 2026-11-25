@@ -55,6 +55,7 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
       [
         '[PASS] typecheck (100ms)',
         '[FAIL] work-integrity (200ms)',
+        ' FAIL  src/example.test.tsx > renders the page',
         'WORK-INTEGRITY GATE FAILED (1 violation(s)):',
         '  ✗ S-COMMIT abc1234: commit body must cite its single WI-#### work item',
         'VERIFY RED: 15/16 gates passed',
@@ -68,6 +69,7 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     expect(digest.stdout).toContain('::error title=Sandbox verify::[FAIL] work-integrity (200ms)');
     expect(digest.stdout).toContain('commit body must cite its single WI-#### work item');
     expect(digest.stdout.indexOf('[FAIL] work-integrity')).toBeLessThan(digest.stdout.indexOf('[PASS] typecheck'));
+    expect(digest.stdout).toContain('renders the page');
   });
 
   it('P01 money-ast fails on raw float arithmetic, Math.abs, Number(), and .toFixed() on money', () => {

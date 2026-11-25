@@ -38,8 +38,8 @@ const nonEmpty = lines.filter((line) => line.trim().length > 0);
 // Ordered by how much a reader needs the line: the assertion detail first, the test titles last
 // (titles are already visible in the job summary, so they must never crowd out the real message).
 const TIERS = [
-  /^(?:\[FAIL\]|VERIFY RED|WORK-INTEGRITY GATE FAILED|✗|Expected|Received|Error:|Locator:|Call log:|waiting for|Timeout \d+ms|\(retry #\d+\))/i,
-  /(?:Expected (?:string|value)|Received (?:string|value)|ERR_MODULE|Cannot find module|Process from config|exited early|webServer|S-COMMIT .*(?:must|failed))/i,
+  /^(?:\[FAIL\]|FAIL\b|VERIFY RED|WORK-INTEGRITY GATE FAILED|✗|AssertionError|Expected|Received|Error:|Locator:|Call log:|waiting for|Timeout \d+ms|\(retry #\d+\))/i,
+  /(?:Expected (?:string|value)|Received (?:string|value)|ERR_MODULE|Cannot find module|Process from config|exited early|webServer|S-COMMIT .*(?:must|failed)|Test Files|\bTests\s+\d+ failed|AssertionError|expected .* to (?:be|contain)|unhandled error)/i,
   /(?:at .*\.spec\.ts:\d+:\d+|›.*\d+:\d+)/,
   /(?:✘|✓|\[PASS\]|\bfailed\b|\bnot able to start\b)/i,
 ];
