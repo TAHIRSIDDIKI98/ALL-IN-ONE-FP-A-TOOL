@@ -22,6 +22,7 @@ const escapeCommand = (value) =>
     .replace(/\n/g, ' ');
 
 const path = process.argv[2] ?? 'playwright-output.log';
+const title = process.argv[3] ?? 'Playwright E2E';
 let raw = '';
 try {
   raw = readFileSync(path, 'utf8');
@@ -37,10 +38,10 @@ const nonEmpty = lines.filter((line) => line.trim().length > 0);
 // Ordered by how much a reader needs the line: the assertion detail first, the test titles last
 // (titles are already visible in the job summary, so they must never crowd out the real message).
 const TIERS = [
-  /^(?:Expected|Received|Error:|Locator:|Call log:|waiting for|Timeout \d+ms|\(retry #\d+\))/i,
-  /(?:Expected (?:string|value)|Received (?:string|value)|ERR_MODULE|Cannot find module|Process from config|exited early|webServer)/i,
+  /^(?:\[FAIL\]|FAIL\b|VERIFY RED|WORK-INTEGRITY GATE FAILED|✗|AssertionError|Expected|Received|Error:|Locator:|Call log:|waiting for|Timeout \d+ms|\(retry #\d+\))/i,
+  /(?:Expected (?:string|value)|Received (?:string|value)|ERR_MODULE|Cannot find module|Process from config|exited early|webServer|S-COMMIT .*(?:must|failed)|Test Files|\bTests\s+\d+ failed|AssertionError|expected .* to (?:be|contain)|unhandled error)/i,
   /(?:at .*\.spec\.ts:\d+:\d+|›.*\d+:\d+)/,
-  /(?:✘|✓|\bfailed\b|\bnot able to start\b)/i,
+  /(?:✘|✓|\[PASS\]|\bfailed\b|\bnot able to start\b)/i,
 ];
 
 const picked = [];
@@ -62,12 +63,12 @@ if (picked.length === 0) {
   for (const line of nonEmpty.slice(-MAX_ANNOTATIONS)) push(line);
 }
 
-console.log('::group::Playwright failure digest');
+console.log(`::group::${title} failure digest`);
 for (const line of picked) {
   console.log(line);
 }
 console.log('::endgroup::');
 
 for (const line of picked) {
-  console.log(`::error title=Playwright E2E::${escapeCommand(line.slice(0, MAX_MESSAGE))}`);
+  console.log(`::error title=${title}::${escapeCommand(line.slice(0, MAX_MESSAGE))}`);
 }

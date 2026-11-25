@@ -17,6 +17,8 @@ Milestone M1 is **not** complete; these are the verified increments so far (evid
 - Import Wizard + Model Grid served from the API, with ONE import classifier shared by a read-only company-scoped preview and the commit (`WI-0022`).
 - Chart of accounts: pure CSV parser/validator (`/core/chart`), atomic audited chart import and chart read model over HTTP, and a working CoA screen — an import can now post instead of quarantining every row as unmapped (`WI-0023`).
 - Budgets as plan data, not actuals: pure budget CSV parser (`/core/budget`), audited atomic import into `scenario` -> `plan_version` -> `plan_line` with version history, budget read model over HTTP, and a Budget panel in the Import Wizard that states plainly that no planned amount was posted to the GL (`WI-0025`).
+- Board pack: one canonical row set drives the live preview and both XLSX/PDF exports, with an automated byte-level tie-out of engine == UI == XLSX == PDF (`WI-0027`, G7/U5/A6).
+- Versioned CoA mapping: source codes discovered from retained import rows resolve through one `/core/mapping` kernel shared by preview and commit; every real edit writes a new audited version, with an inline two-pane mapper and typed quarantines (`WI-0028`, G1/G10).
 - Budget-vs-Actual: `/core/variance` now builds account-level BvA rows (plan null ≠ zero plan, account-type favorability, separate `unplannedActual`), `GET /api/companies/:companyId/bva?period=` joins the current plan version to the trial balance, and the Statements BvA tab renders it with a G5 tie-out to the statement figures (`WI-0026`).
 - Budget commits are refused by the GL write path instead of being posted as actuals (`WI-0024`).
 

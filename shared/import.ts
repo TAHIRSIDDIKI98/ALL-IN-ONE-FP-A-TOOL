@@ -63,6 +63,11 @@ export type ImportCommitResult = z.infer<typeof ImportCommitResultSchema>;
 export const CompanyImportPreviewRequestSchema = z.object({
   /** Same transport ceiling as the commit request; the 5 MB business limit is enforced by the route. */
   csvText: z.string().min(1).max(6_000_000),
+  /**
+   * Optional as-of date for versioned CoA mapping resolution (SPEC §3.6f). Omitted means today,
+   * which is also the date a commit uses, so the two classifiers stay comparable.
+   */
+  asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export const ImportPreviewRowSchema = z.object({

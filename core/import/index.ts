@@ -4,6 +4,7 @@
 
 import Decimal from 'decimal.js';
 import { add, money, negate, parse, serialize, sum, type ParseLocale } from '../money/index.js';
+import type { MappingResolution } from '../mapping/index.js';
 import { normalizeCode } from '../statements/index.js';
 
 export interface ParsedCsvGrid {
@@ -176,6 +177,12 @@ export function evaluateMessyGlCsv(params: {
   readonly csvText: string;
   readonly knownAccountCodes: ReadonlySet<string>;
   readonly locale?: ParseLocale;
+  /**
+   * Optional versioned source→account resolver (SPEC §3.6f). When the server supplies it, the
+   * preview and commit share exactly the same resolution; without it the pure parser keeps the
+   * original exact-chart-code behaviour used by standalone core tests.
+   */
+  readonly resolveSourceCode?: (sourceCode: string) => MappingResolution;
 }): MessyImportResult {
   const grid = parseCsvRecords(params.csvText);
   const locale = params.locale ?? 'unknown';
@@ -250,11 +257,17 @@ export function evaluateMessyGlCsv(params: {
       continue;
     }
     const normInputCode = normalizeCode(rawCode);
-    const canonicalCode = canonicalByUpper.get(normInputCode.toUpperCase());
-    if (!canonicalCode) {
-      quarantined.push({ rowNo: row.rowNo, reason: `UNMAPPED_ACCOUNT:${normInputCode}` });
+    const resolution: MappingResolution = params.resolveSourceCode?.(normInputCode) ?? (() => {
+      const exact = canonicalByUpper.get(normInputCode.toUpperCase());
+      return exact === undefined
+        ? ({ kind: 'quarantine', reason: `UNMAPPED_ACCOUNT:${normInputCode}` } as const)
+        : ({ kind: 'mapped', accountCode: exact } as const);
+    })();
+    if (resolution.kind === 'quarantine') {
+      quarantined.push({ rowNo: row.rowNo, reason: resolution.reason });
       continue;
     }
+    const canonicalCode = resolution.accountCode;
 
     let debit = money('0');
     let credit = money('0');

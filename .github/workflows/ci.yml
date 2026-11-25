@@ -17,6 +17,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # S-COMMIT (INT8) must see the DEC-007 ancestry boundary; a depth-1 clone fails closed.
+          fetch-depth: 0
 
       - name: Setup Node.js 22 LTS
         uses: actions/setup-node@v4
@@ -30,7 +33,15 @@ jobs:
       - name: Run sandbox verification suite (zero secrets/network)
         env:
           CI: 'true'
-        run: npm run verify | tee verify-output.log
+        run: |
+          set -o pipefail
+          npm run verify | tee "$RUNNER_TEMP/verify-output.log"
+
+      # The raw log host is not reachable from every environment, so promote the failing gate's
+      # own lines to check-run annotations just as the E2E step does (§8.9/PR5).
+      - name: Publish sandbox gate failure annotations
+        if: failure()
+        run: node scripts/publish-e2e-failure.mjs "$RUNNER_TEMP/verify-output.log" 'Sandbox verify'
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -40,7 +51,7 @@ jobs:
           CI: 'true'
         run: |
           set -o pipefail
-          npx playwright test --config=e2e/playwright.config.ts 2>&1 | tee playwright-output.log
+          npx playwright test --config=e2e/playwright.config.ts 2>&1 | tee "$RUNNER_TEMP/playwright-output.log"
 
       # Artifact download is not reachable from every environment, so on failure the harness
       # promotes its own error lines to check-run annotations, which the REST API can always read.
@@ -48,7 +59,7 @@ jobs:
         if: failure()
         run: |
           set -o pipefail
-          node scripts/publish-e2e-failure.mjs playwright-output.log
+          node scripts/publish-e2e-failure.mjs "$RUNNER_TEMP/playwright-output.log"
 
       - name: Upload CI diagnostics & test reports (always, including failure — PR5)
         if: always()
@@ -56,7 +67,8 @@ jobs:
         with:
           name: ci-diagnostics-${{ github.run_id }}
           path: |
-            verify-output.log
+            ${{ runner.temp }}/verify-output.log
+            ${{ runner.temp }}/playwright-output.log
             playwright-report/
             test-results/
           if-no-files-found: warn

@@ -1,7 +1,7 @@
 {
-  "testFiles": 21,
-  "testCases": 125,
-  "assertions": 874,
+  "testFiles": 25,
+  "testCases": 165,
+  "assertions": 1239,
   "suppressions": 0,
   "placeholders": 0
 }

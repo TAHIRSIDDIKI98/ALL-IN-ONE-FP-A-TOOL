@@ -601,4 +601,204 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
       'row 4: DUPLICATE_CODE:1000',
     ]);
   });
+
+  it('loads the canonical board pack from the server with period/year on the URL', async () => {
+    const { fetchImpl, calls } = fakeFetch(() => ({
+      status: 200,
+      body: {
+        companyId: COMPANY['companyId'],
+        companyName: 'Wire Co',
+        baseCurrency: 'USD',
+        range: { fromPeriodCode: 'P01', throughPeriodCode: 'P04', fiscalYear: 2026 },
+        rows: [
+          {
+            section: 'cover',
+            key: 'statement:pnl.revenue',
+            label: 'Revenue (YTD)',
+            value: '1234.56',
+            detail: 'Year to date P01 to P04, FY2026',
+          },
+        ],
+        articulation: { valid: true, checks: [] },
+        sources: [],
+        hasPlan: false,
+        basis: 'Year to date P01 to P04, FY2026; plan basis: no current plan version',
+        disclosure: 'All figures are engine output.',
+        bva: {
+          companyId: COMPANY['companyId'],
+          fiscalYear: 2026,
+          throughPeriodCode: 'P04',
+          scenarioId: null,
+          scenarioName: null,
+          planVersionId: null,
+          versionNo: null,
+          hasPlan: false,
+          rows: [],
+          totals: {
+            actual: '0.00',
+            plan: '0.00',
+            unplannedActual: '0.00',
+            varianceAmount: '0.00',
+            plannedRows: 0,
+            unplannedRows: 0,
+            favorable: 0,
+            unfavorable: 0,
+            neutral: 0,
+            na: 0,
+          },
+          byType: [],
+        },
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const pack = await client.getBoardPack(String(COMPANY['companyId']), {
+      period: 'P04',
+      fiscalYear: 2026,
+    });
+
+    expect(pack.rows[0]?.value).toBe('1234.56');
+    expect(pack.rows[0]?.detail).toBe('Year to date P01 to P04, FY2026');
+    expect(calls[0]?.url).toBe(
+      `/api/companies/${String(COMPANY['companyId'])}/board-pack?period=P04&year=2026`,
+    );
+    expect(calls[0]?.headers['authorization']).toBe('Bearer token-123');
+  });
+
+  it('downloads a real binary artifact with the session token and a validated format', async () => {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    const binaryFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        headers: (init?.headers ?? {}) as Record<string, string>,
+      });
+      return new Response(new Blob(['%PDF-1.3 board pack']), {
+        status: 200,
+        headers: { 'content-type': 'application/pdf' },
+      });
+    }) as unknown as typeof fetch;
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl: binaryFetch });
+
+    const blob = await client.downloadBoardPack(String(COMPANY['companyId']), {
+      period: 'P12',
+      format: 'pdf',
+    });
+
+    expect(await blob.text()).toBe('%PDF-1.3 board pack');
+    expect(calls[0]?.url).toBe(
+      `/api/companies/${String(COMPANY['companyId'])}/board-pack/export?period=P12&format=pdf`,
+    );
+    expect(calls[0]?.headers['authorization']).toBe('Bearer token-123');
+  });
+
+  it('reads and commits versioned source mappings through tenant-scoped relative URLs', async () => {
+    const report = {
+      companyId: COMPANY['companyId'],
+      sourceSystem: 'csv',
+      effectiveFrom: '2026-11-25',
+      mappings: [
+        {
+          sourceSystem: 'csv',
+          sourceCode: 'BANK-EXT',
+          accountCode: '1000',
+          accountName: 'Operating bank',
+          mappingVersion: 2,
+          effectiveFrom: '2026-11-25',
+          status: 'mapped',
+          quarantineReason: null,
+          targetConflict: false,
+          rowCount: 3,
+          sampleValues: ['receipt'],
+        },
+      ],
+      availableAccounts: [{ code: '1000', name: 'Operating bank' }],
+      mappedCount: 1,
+      quarantinedCount: 0,
+      unmappedCount: 0,
+      conflictCount: 0,
+    };
+    const { fetchImpl, calls } = fakeFetch((request) => ({
+      status: request.method === 'POST' ? 201 : 200,
+      body: request.method === 'POST' ? { ...report, written: 1, unchanged: 0 } : report,
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const loaded = await client.getCoaMappings(String(COMPANY['companyId']), { asOfDate: '2026-11-25' });
+    expect(loaded.mappings[0]?.mappingVersion).toBe(2);
+    expect(calls[0]?.url).toBe(
+      `/api/companies/${String(COMPANY['companyId'])}/coa-mapping?asOfDate=2026-11-25`,
+    );
+    expect(calls[0]?.headers['authorization']).toBe('Bearer token-123');
+
+    const committed = await client.commitCoaMappings(String(COMPANY['companyId']), {
+      entries: [
+        {
+          sourceCode: 'BANK-EXT',
+          status: 'mapped',
+          accountCode: '1000',
+          quarantineReason: null,
+        },
+      ],
+    });
+    expect(committed.written).toBe(1);
+    expect(calls[1]?.url).toBe(
+      `/api/companies/${String(COMPANY['companyId'])}/coa-mapping/commit`,
+    );
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({
+      entries: [
+        {
+          sourceCode: 'BANK-EXT',
+          status: 'mapped',
+          accountCode: '1000',
+          quarantineReason: null,
+        },
+      ],
+    });
+  });
+
+  it('surfaces a rejected mapping batch with the server typed code', async () => {
+    const { fetchImpl } = fakeFetch(() => ({
+      status: 422,
+      body: {
+        error: {
+          code: 'VALIDATION_FAILED',
+          userMessage: 'The mapping batch has 1 rejected row(s); nothing was written.',
+          httpStatus: 422,
+          details: { issues: ['row 1: UNKNOWN_ACCOUNT:9999'] },
+        },
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    await expect(
+      client.commitCoaMappings(String(COMPANY['companyId']), {
+        entries: [
+          { sourceCode: 'BANK-EXT', status: 'mapped', accountCode: '9999', quarantineReason: null },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: { issues: ['row 1: UNKNOWN_ACCOUNT:9999'] },
+    });
+  });
+
+  it('maps a foreign-tenant export rejection onto the server typed code', async () => {
+    const { fetchImpl } = fakeFetch(() => ({
+      status: 403,
+      body: {
+        error: {
+          code: 'TENANT_FORBIDDEN',
+          userMessage: 'That company is outside your workspace.',
+          httpStatus: 403,
+          details: {},
+        },
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    await expect(
+      client.downloadBoardPack(String(COMPANY['companyId']), { period: 'P12', format: 'xlsx' }),
+    ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN', httpStatus: 403 });
+  });
+
 });
