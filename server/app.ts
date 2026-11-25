@@ -48,6 +48,8 @@ import { importChart, listChartAccounts } from './db/repositories/chart.js';
 import { getBudget, importBudget } from './db/repositories/budget.js';
 import { getBvaReport } from './db/repositories/bva.js';
 import { BvaReportSchema } from '../shared/bva.js';
+import { BoardPackExportFormatSchema, BoardPackReportSchema } from '../shared/boardPack.js';
+import { buildBoardPackReport, renderBoardPack } from './export/boardPack.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
@@ -558,6 +560,78 @@ export function createSpineApp(context: SpineContext) {
           ...(fiscalYear === null ? {} : { fiscalYear }),
         });
         res.status(200).json(FinancialStatementsSchema.parse(statements));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Board pack: ONE canonical report from the statements + BvA read models. The JSON preview and
+   * both exports are built from this same object, so UI/XLSX/PDF cannot drift (A6, U5, G7).
+   */
+  app.get(
+    '/api/companies/:companyId/board-pack',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const period = readPeriodQuery(req.query['period']);
+        if (period === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The board-pack endpoint requires ?period= (year-to-date through that period).',
+            details: { issues: ['period: required'] },
+          });
+        }
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        const report = await buildBoardPackReport(db, {
+          companyId,
+          throughPeriodCode: period,
+          ...(fiscalYear === null ? {} : { fiscalYear }),
+        });
+        res.status(200).json(BoardPackReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    '/api/companies/:companyId/board-pack/export',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const period = readPeriodQuery(req.query['period']);
+        if (period === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The board-pack export requires ?period= (year-to-date through that period).',
+            details: { issues: ['period: required'] },
+          });
+        }
+        const format = BoardPackExportFormatSchema.safeParse(req.query['format']);
+        if (!format.success) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The board-pack export requires ?format=xlsx or ?format=pdf.',
+            details: { issues: ['format: expected xlsx or pdf'] },
+          });
+        }
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        const report = await buildBoardPackReport(db, {
+          companyId,
+          throughPeriodCode: period,
+          ...(fiscalYear === null ? {} : { fiscalYear }),
+        });
+        const bytes = await renderBoardPack(report, format.data);
+        res.status(200);
+        res.setHeader(
+          'content-type',
+          format.data === 'pdf'
+            ? 'application/pdf'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+        res.setHeader('content-disposition', `attachment; filename="board-pack-${period}.${format.data}"`);
+        res.send(bytes);
       } catch (error) {
         next(error);
       }

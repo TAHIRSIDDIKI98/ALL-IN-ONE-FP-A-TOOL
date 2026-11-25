@@ -110,6 +110,18 @@ export interface ApiClient {
     companyId: string,
     query: { readonly period: string; readonly fiscalYear?: number | null },
   ): Promise<BvaReportPayload>;
+  getBoardPack(
+    companyId: string,
+    query: { readonly period: string; readonly fiscalYear?: number | null },
+  ): Promise<BoardPackReportPayload>;
+  downloadBoardPack(
+    companyId: string,
+    query: {
+      readonly period: string;
+      readonly fiscalYear?: number | null;
+      readonly format: 'xlsx' | 'pdf';
+    },
+  ): Promise<Blob>;
   importBudget(
     companyId: string,
     request: {
@@ -128,6 +140,12 @@ export interface ApiClient {
     accountCode: string,
     query?: { readonly period?: string | null },
   ): Promise<AccountDrilldownPayload>;
+}
+
+function boardPackQuery(period: string, fiscalYear?: number | null): string {
+  const params = new URLSearchParams({ period });
+  if (fiscalYear !== undefined && fiscalYear !== null) params.set('year', String(fiscalYear));
+  return params.toString();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -257,6 +275,36 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         `/api/companies/${encodeURIComponent(companyId)}/bva?${params.toString()}`,
       );
     },
+    getBoardPack: (companyId, query) =>
+      request<BoardPackReportPayload>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/board-pack?${boardPackQuery(query.period, query.fiscalYear)}`,
+      ),
+    /**
+     * Binary export: same token, same relative URL and the same typed error envelope as JSON
+     * routes. The browser receives an opaque Blob; it never parses or reformats a money value.
+     */
+    downloadBoardPack: async (companyId, query) => {
+      const token = options.getToken();
+      if (token === null || token.length === 0) {
+        throw new ApiClientError({
+          code: 'SESSION_REQUIRED',
+          userMessage: 'Sign in before exporting a board pack.',
+          httpStatus: 401,
+          details: {},
+        });
+      }
+      const params = new URLSearchParams(boardPackQuery(query.period, query.fiscalYear));
+      params.set('format', query.format);
+      const response = await doFetch(
+        `${baseUrl}/api/companies/${encodeURIComponent(companyId)}/board-pack/export?${params.toString()}`,
+        { method: 'GET', headers: { authorization: `Bearer ${token}`, accept: '*/*' } },
+      );
+      if (!response.ok) {
+        throw toApiError(response.status, await response.json().catch(() => null));
+      }
+      return response.blob();
+    },
     importBudget: (companyId, budgetRequest) =>
       request<BudgetImportPayload>(
         'POST',
@@ -345,6 +393,38 @@ export interface FinancialStatementsPayload {
     readonly checks: readonly { readonly id: string; readonly name: string; readonly passed: boolean; readonly detail: string }[];
   };
   readonly sources: readonly { readonly sourceFilename: string; readonly sourceHash: string }[];
+}
+
+/** Board-pack wire model (shared/boardPack.ts); every row value is an engine-issued string. */
+export interface BoardPackRowPayload {
+  readonly section: 'cover' | 'pl' | 'bs' | 'cf' | 'bva';
+  readonly key: string;
+  readonly label: string;
+  readonly value: string;
+  readonly detail: string | null;
+}
+
+export interface BoardPackReportPayload {
+  readonly companyId: string;
+  readonly companyName: string;
+  readonly baseCurrency: string;
+  readonly range: { readonly fromPeriodCode: string; readonly throughPeriodCode: string; readonly fiscalYear: number };
+  readonly rows: readonly BoardPackRowPayload[];
+  readonly articulation: {
+    readonly valid: boolean;
+    readonly checks: readonly {
+      readonly id: string;
+      readonly name: string;
+      readonly passed: boolean;
+      readonly delta: string;
+      readonly detail: string;
+    }[];
+  };
+  readonly sources: readonly TrialBalanceSourcePayload[];
+  readonly hasPlan: boolean;
+  readonly basis: string;
+  readonly disclosure: string;
+  readonly bva: BvaReportPayload;
 }
 
 /**

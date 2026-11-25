@@ -1,6 +1,10 @@
 import { once } from 'node:events';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createSpineApp } from './app.js';
 import { createSandboxTokenVerifier, issueSandboxToken, type VerifiedIdentity } from './auth/session.js';
@@ -44,6 +48,32 @@ async function countBatches(companyId: string): Promise<number> {
     [companyId],
   );
   return Number(res.rows[0]?.count ?? 'NaN');
+}
+
+/** Read the exported bytes, never the pre-render definition (A6/U5/G7). */
+async function loadWorkbook(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
+  const directory = mkdtempSync(join(tmpdir(), 'onefpa-api-pack-'));
+  const path = join(directory, 'pack.xlsx');
+  try {
+    writeFileSync(path, bytes);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(path);
+    return workbook;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function extractPdfText(bytes: Uint8Array): string {
+  const latin = Buffer.from(bytes).toString('latin1');
+  let decoded = '';
+  for (const stream of latin.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    for (const token of (stream[1] ?? '').matchAll(/<([0-9A-Fa-f]+)>/g)) {
+      decoded += Buffer.from(token[1] ?? '', 'hex').toString('latin1');
+    }
+    decoded += '\n';
+  }
+  return decoded;
 }
 
 async function listen(app: ReturnType<typeof createSpineApp>): Promise<{ server: Server; baseUrl: string }> {
@@ -1104,6 +1134,85 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(afterReplace.sources).toEqual([
       expect.objectContaining({ batchId: recommitted.batchId }),
     ]);
+    expect(await countBatches(workspace.companyId)).toBe(2);
+
+    // Board pack: the JSON preview and both exported artifacts must carry the SAME engine strings
+    // (A6/U5/G7). The expectations below come from the hand-written journal above, not a renderer.
+    const pack = await client.getBoardPack(workspace.companyId, { period: 'P02', fiscalYear: 2026 });
+    expect(pack.companyName).toBe('Client Import Co');
+    expect(pack.baseCurrency).toBe('USD');
+    expect(pack.range).toEqual({ fromPeriodCode: 'P01', throughPeriodCode: 'P02', fiscalYear: 2026 });
+    expect(pack.rows.find((row) => row.key === 'statement:pnl.revenue')?.value).toBe('1250.50');
+    expect(pack.rows.find((row) => row.key === 'statement:cf.endingCash')?.value).toBe('1250.50');
+    expect(pack.articulation.valid).toBe(true);
+    expect(pack.sources.map((source) => source.sourceFilename)).toEqual(['client_import.csv']);
+
+    const xlsxBlob = await client.downloadBoardPack(workspace.companyId, {
+      period: 'P02',
+      fiscalYear: 2026,
+      format: 'xlsx',
+    });
+    const workbook = await loadWorkbook(new Uint8Array(await xlsxBlob.arrayBuffer()));
+    const cells: string[] = [];
+    for (const sheet of workbook.worksheets) {
+      sheet.eachRow((row) => {
+        const values = row === null ? [] : row.values;
+        for (const cell of Array.isArray(values) ? values : Object.values(values)) {
+          if (typeof cell === 'string') cells.push(cell);
+        }
+      });
+    }
+    const pdfBlob = await client.downloadBoardPack(workspace.companyId, {
+      period: 'P02',
+      fiscalYear: 2026,
+      format: 'pdf',
+    });
+    const pdfText = extractPdfText(new Uint8Array(await pdfBlob.arrayBuffer()));
+    expect(pdfText.length).toBeGreaterThan(0);
+    for (const row of pack.rows) {
+      expect(cells, `xlsx ${row.key}`).toContain(row.label);
+      expect(cells, `xlsx ${row.key}`).toContain(row.value);
+      expect(pdfText, `pdf ${row.key}`).toContain(row.label);
+      expect(pdfText, `pdf ${row.key}`).toContain(row.value);
+      if (row.detail !== null) {
+        expect(cells, `xlsx detail ${row.key}`).toContain(row.detail);
+        expect(pdfText, `pdf detail ${row.key}`).toContain(row.detail);
+      }
+    }
+    expect(cells).toContain(pack.basis);
+    expect(cells).toContain(pack.disclosure);
+    expect(pdfText).toContain(pack.basis);
+
+    // Typed negative cases: no period, unsupported format, foreign tenant. None writes a batch.
+    const clientIdentity: VerifiedIdentity = {
+      firebaseUid: 'sandbox:client-import@onefpa.test',
+      email: 'client-import@onefpa.test',
+      displayName: 'Client Import',
+    };
+    const unauthenticated = await fetch(
+      `${baseUrl}/api/companies/${workspace.companyId}/board-pack?period=P02`,
+    );
+    expect(unauthenticated.status).toBe(401);
+    expect(((await unauthenticated.json()) as { error: { code: string } }).error.code).toBe('SESSION_REQUIRED');
+
+    const noPeriod = await fetch(`${baseUrl}/api/companies/${workspace.companyId}/board-pack`, {
+      headers: bearer(clientIdentity),
+    });
+    expect(noPeriod.status).toBe(422);
+    expect(((await noPeriod.json()) as { error: { details: { issues: string[] } } }).error.details.issues).toEqual([
+      'period: required',
+    ]);
+    const badFormat = await fetch(
+      `${baseUrl}/api/companies/${workspace.companyId}/board-pack/export?period=P02&format=docx`,
+      { headers: bearer(clientIdentity) },
+    );
+    expect(badFormat.status).toBe(422);
+    const foreignPack = await fetch(
+      `${baseUrl}/api/companies/${workspace.companyId}/board-pack?period=P02`,
+      { headers: bearer(INTRUDER) },
+    );
+    expect(foreignPack.status).toBe(403);
+    expect(((await foreignPack.json()) as { error: { code: string } }).error.code).toBe('TENANT_FORBIDDEN');
     expect(await countBatches(workspace.companyId)).toBe(2);
   }, 120_000);
 });
