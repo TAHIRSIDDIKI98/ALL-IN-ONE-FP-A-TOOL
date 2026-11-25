@@ -1,61 +1,19 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppError } from '../../../shared/errors.js';
 import type { CoaSeedAccount } from '../../../shared/import.js';
-import type { CompanySetupRequest } from '../../../shared/setup.js';
 import { verifyCompanyAuditLog } from '../../audit/index.js';
 import { openSandboxDatabase, type DatabaseHandle } from '../client.js';
 import { applyMigrations } from '../migrate.js';
-import { commitImport, seedChartOfAccounts } from './import.js';
 import {
-  createCompanyWorkspace,
-  ensureAppUser,
-  type AppUserIdentity,
-} from './setup.js';
-
-const OCCURRED_AT = '2026-11-25T12:00:00.000Z';
-const ACTOR: AppUserIdentity = {
-  firebaseUid: 'uid-import-owner',
-  email: 'import-owner@onefpa.test',
-  displayName: 'Import Owner',
-};
-
-interface CorpusGlEntry {
-  entryId: string;
-  entryRef: string;
-  postingDate: string;
-  totalDebit: string;
-  totalCredit: string;
-}
-interface CorpusGlLine {
-  entryId: string;
-  accountCode: string;
-  debit: string;
-  credit: string;
-  statementLineKey: string;
-}
-interface CorpusAccount {
-  code: string;
-  name: string;
-  type: CoaSeedAccount['type'];
-  normalSide: CoaSeedAccount['normalSide'];
-  isControl: boolean;
-  parentCode: string | null;
-  statementLineKey: CoaSeedAccount['statementLineKey'];
-  active: boolean;
-}
-
-const CORPUS = JSON.parse(readFileSync(join(process.cwd(), 'fixtures', 'corpus', 'corpus.json'), 'utf8')) as {
-  coa: CorpusAccount[];
-  glEntries: CorpusGlEntry[];
-  glLines: CorpusGlLine[];
-};
-/** Independent BigInt oracle — produced by scripts/generate-independent-oracles.ts (no /core imports). */
-const EXPECTED = JSON.parse(
-  readFileSync(join(process.cwd(), 'fixtures', 'oracles', 'expected', 'corpus_expected.json'), 'utf8'),
-) as { trialBalance: { totalDebits: string; totalCredits: string; balanced: boolean } };
-const MESSY_CSV = readFileSync(join(process.cwd(), 'fixtures', 'messy-exports', 'erp_mixed_gl.csv'), 'utf8');
+  CORPUS,
+  CORPUS_ORACLE,
+  MESSY_CSV,
+  OCCURRED_AT,
+  corpusCsv,
+  importCorpus,
+  seedCorpusCompany,
+} from '../testing/corpus-fixtures.js';
+import { commitImport, seedChartOfAccounts } from './import.js';
 
 let db: DatabaseHandle;
 
@@ -68,51 +26,8 @@ afterAll(async () => {
   await db.close();
 });
 
-function corpusAccounts(): CoaSeedAccount[] {
-  return CORPUS.coa.map((account) => ({
-    code: account.code,
-    name: account.name,
-    type: account.type,
-    normalSide: account.normalSide,
-    parentCode: account.parentCode,
-    isPostable: !account.isControl,
-    statementLineKey: account.statementLineKey,
-    active: account.active,
-  }));
-}
-
-/** Renders the committed corpus GL as a real CSV export (balanced, one row per posting line). */
-function corpusCsv(): string {
-  const entryById = new Map(CORPUS.glEntries.map((entry) => [entry.entryId, entry]));
-  const rows = ['entry_ref,date,account_code,description,debit,credit'];
-  for (const line of CORPUS.glLines) {
-    const entry = entryById.get(line.entryId);
-    if (entry === undefined) {
-      throw new Error(`corpus line references unknown entry ${line.entryId}`);
-    }
-    const account = CORPUS.coa.find((candidate) => candidate.code === line.accountCode);
-    const description = (account?.name ?? 'Corpus posting').replace(/[,"\n]/g, ' ');
-    rows.push([entry.entryRef, entry.postingDate, line.accountCode, description, line.debit, line.credit].join(','));
-  }
-  return `${rows.join('\n')}\n`;
-}
-
-async function makeCompany(name: string, entityCode: string): Promise<{ companyId: string; actorId: string }> {
-  const request: CompanySetupRequest = {
-    companyName: name,
-    baseCurrency: 'USD',
-    calendarKind: '12month',
-    fiscalYear: 2026,
-    yearCount: 1,
-    entityCode,
-    entityName: `${name} HQ`,
-  };
-  return db.transaction(async (tx) => {
-    const workspace = await createCompanyWorkspace(tx, { actor: ACTOR, request, occurredAt: OCCURRED_AT });
-    const actorId = await ensureAppUser(tx, ACTOR);
-    await seedChartOfAccounts(tx, { companyId: workspace.companyId, accounts: corpusAccounts() });
-    return { companyId: workspace.companyId, actorId };
-  });
+function makeCompany(name: string, entityCode: string): Promise<{ companyId: string; actorId: string }> {
+  return seedCorpusCompany(db, { companyName: name, entityCode });
 }
 
 describe('WI-0015 atomic idempotent import commit (G1, G2, D3, D5, C6, C7)', () => {
@@ -137,8 +52,8 @@ describe('WI-0015 atomic idempotent import commit (G1, G2, D3, D5, C6, C7)', () 
     expect(first.quarantinedCount).toBe(0);
     expect(first.quarantined).toEqual([]);
     expect(first.entryCount).toBe(CORPUS.glEntries.length);
-    expect(first.totalDebits).toBe(EXPECTED.trialBalance.totalDebits);
-    expect(first.totalCredits).toBe(EXPECTED.trialBalance.totalCredits);
+    expect(first.totalDebits).toBe(CORPUS_ORACLE.trialBalance.totalDebits);
+    expect(first.totalCredits).toBe(CORPUS_ORACLE.trialBalance.totalCredits);
     expect(first.replacedBatchId).toBeNull();
 
     // Storage-level proof: posted debit/credit columns equal the oracle to the cent (NUMERIC(28,6)).
@@ -153,8 +68,8 @@ describe('WI-0015 atomic idempotent import commit (G1, G2, D3, D5, C6, C7)', () 
       );
 
     const afterFirst = await activeTotals();
-    expect(afterFirst.rows[0]?.debits).toBe(`${EXPECTED.trialBalance.totalDebits}0000`);
-    expect(afterFirst.rows[0]?.credits).toBe(`${EXPECTED.trialBalance.totalCredits}0000`);
+    expect(afterFirst.rows[0]?.debits).toBe(`${CORPUS_ORACLE.trialBalance.totalDebits}0000`);
+    expect(afterFirst.rows[0]?.credits).toBe(`${CORPUS_ORACLE.trialBalance.totalCredits}0000`);
 
     // A second import of the SAME source replaces the prior batch: one active batch, no doubling.
     const second = await db.transaction((tx) =>

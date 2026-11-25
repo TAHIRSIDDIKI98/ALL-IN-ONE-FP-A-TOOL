@@ -159,11 +159,13 @@ async function loadActiveBatch(
  * Batches whose postings are current. Every financial read must filter through this predicate
  * so a replaced batch can never be double-counted (§4.2 append-only replacement).
  */
-export const ACTIVE_BATCH_PREDICATE = `EXISTS (
+export function activeBatchPredicate(entryAlias = 'gl_entry'): string {
+  return `EXISTS (
   SELECT 1 FROM import_batch active_batch
-   WHERE active_batch.id = gl_entry.batch_id
+   WHERE active_batch.id = ${entryAlias}.batch_id
      AND active_batch.status IN ('staged', 'committed')
 )`;
+}
 
 export interface ImportCommitParams {
   readonly companyId: string;
