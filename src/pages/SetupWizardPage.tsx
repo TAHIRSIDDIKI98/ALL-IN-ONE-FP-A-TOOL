@@ -1,18 +1,69 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import { generateFiscalYears, type CalendarKind } from '../../core/calendar/index.js';
+import { ApiClientError, createApiClient } from '../api/client.js';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateFrame.js';
-import { useWorkspaceStore, type WorkspaceCompany } from '../state/workspaceStore.js';
+import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
+/** The six base currencies the M1 setup screen offers; the server validates the ISO code again. */
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'KWD'] as const;
+type CurrencyCode = (typeof CURRENCIES)[number];
+
 export default function SetupWizardPage({ onNavigate, forcedState }: SpinePageProps): ReactElement {
-  const { company, saveCompany } = useWorkspaceStore();
+  const { company, authToken, saveCompany } = useWorkspaceStore();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [companyName, setCompanyName] = useState(company?.name ?? '');
-  const [currency, setCurrency] = useState<WorkspaceCompany['currency']>(company?.currency ?? 'USD');
+  const [currency, setCurrency] = useState<CurrencyCode>(
+    CURRENCIES.find((code) => code === company?.currency) ?? 'USD',
+  );
   const [calendarKind, setCalendarKind] = useState<CalendarKind>(company?.calendarKind ?? '12month');
   const [fiscalYear, setFiscalYear] = useState(company?.fiscalYear ?? 2026);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState('VALIDATION_FAILED');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const saveWorkspace = async (): Promise<void> => {
+    if (!step1Valid) {
+      setErrorCode('VALIDATION_FAILED');
+      setErrorMsg('Company name is required before saving the workspace.');
+      return;
+    }
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const client = createApiClient({ getToken: () => authToken });
+      const workspace = await client.createCompany({
+        companyName: companyName.trim(),
+        baseCurrency: currency,
+        calendarKind,
+        fiscalYear,
+        entityCode: `ENT-${fiscalYear}`,
+        entityName: `${companyName.trim()} HQ`,
+      });
+      const firstPeriod = workspace.periods[0];
+      saveCompany({
+        id: workspace.companyId,
+        name: workspace.companyName,
+        currency: workspace.baseCurrency,
+        calendarKind,
+        fiscalYear: firstPeriod?.fiscalYear ?? fiscalYear,
+        calendarYears: previewYears,
+        periodCount: workspace.periods.length,
+      });
+      onNavigate('/import');
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        setErrorCode(error.code);
+        setErrorMsg(error.message);
+      } else {
+        setErrorCode('INTERNAL_ERROR');
+        setErrorMsg(error instanceof Error ? error.message : 'Unable to create the company workspace.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const previewYears = useMemo(
     () =>
@@ -24,14 +75,14 @@ export default function SetupWizardPage({ onNavigate, forcedState }: SpinePagePr
     [calendarKind, fiscalYear],
   );
 
-  if (forcedState === 'loading') {
-    return <LoadingState label="Loading fiscal setup wizard..." />;
+  if (forcedState === 'loading' || isSaving) {
+    return <LoadingState label="Creating the company, fiscal calendar, and entity on the server..." />;
   }
   if (forcedState === 'error' || errorMsg !== null) {
     return (
       <ErrorState
         title="Company Setup Wizard"
-        code="VALIDATION_FAILED"
+        code={errorCode}
         message={errorMsg ?? 'Setup wizard failed to initialize.'}
         onRetry={() => setErrorMsg(null)}
       />
@@ -90,7 +141,7 @@ export default function SetupWizardPage({ onNavigate, forcedState }: SpinePagePr
             <select
               id="base-currency"
               value={currency}
-              onChange={(e) => setCurrency(e.target.value as WorkspaceCompany['currency'])}
+              onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
               className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
             >
               <option value="USD">USD (scale 2)</option>
@@ -213,18 +264,7 @@ export default function SetupWizardPage({ onNavigate, forcedState }: SpinePagePr
           <button
             type="button"
             onClick={() => {
-              if (!step1Valid) {
-                setErrorMsg('Company name is required before saving workspace.');
-                return;
-              }
-              saveCompany({
-                name: companyName.trim(),
-                currency,
-                calendarKind,
-                fiscalYear,
-                calendarYears: previewYears,
-              });
-              onNavigate('/import');
+              void saveWorkspace();
             }}
             className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >

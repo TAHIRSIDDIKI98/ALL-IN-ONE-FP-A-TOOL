@@ -6,6 +6,7 @@ import { createSpineApp } from './app.js';
 import { createSandboxTokenVerifier, issueSandboxToken, type VerifiedIdentity } from './auth/session.js';
 import { openSandboxDatabase, type DatabaseHandle } from './db/client.js';
 import { applyMigrations } from './db/migrate.js';
+import { ApiClientError, createApiClient } from '../src/api/client.js';
 import { seedChartOfAccounts } from './db/repositories/import.js';
 import { MESSY_CSV } from './db/testing/corpus-fixtures.js';
 
@@ -565,5 +566,67 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(statements.retainedEarnings.rollForwardValid).toBe(true);
     expect(statements.articulation.valid).toBe(true);
     expect(statements.articulation.checks.map((check) => check.id)).toEqual(['A1', 'A2', 'A3', 'A4', 'A5']);
+  }, 120_000);
+
+  it('drives the real spine API through the browser API client (sign-in, workspace, setup)', async () => {
+    const anonymous = createApiClient({ getToken: () => null, baseUrl });
+    let noSession: unknown = null;
+    try {
+      await anonymous.getSessionWorkspace();
+    } catch (error) {
+      noSession = error;
+    }
+    expect(noSession).toBeInstanceOf(ApiClientError);
+    expect((noSession as ApiClientError).code).toBe('SESSION_REQUIRED');
+
+    // Real sign-in against the mounted route: the client mints a token the server itself verifies.
+    const minted = await anonymous.signInSandboxToken({
+      email: 'client-flow@onefpa.test',
+      displayName: 'Client Flow',
+    });
+    expect(minted.tokenType).toBe('sandbox-hmac');
+    expect(minted.token.length).toBeGreaterThan(20);
+
+    const authed = createApiClient({ getToken: () => minted.token, baseUrl });
+    const session = await authed.getSessionWorkspace();
+    expect(session.authenticated).toBe(true);
+    expect(session.identity.email).toBe('client-flow@onefpa.test');
+    expect(session.companies).toEqual([]);
+    expect(session.workspace).toBeNull();
+
+    const workspace = await authed.createCompany({
+      companyName: 'Client Flow Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-CLIENT',
+      entityName: 'Client Flow Co HQ',
+    });
+    expect(workspace.companyName).toBe('Client Flow Co');
+    expect(workspace.currencyScale).toBe(2);
+    expect(workspace.periods).toHaveLength(12);
+    expect(workspace.periods[0]?.code).toBe('P01');
+    expect(workspace.entities[0]?.code).toBe('ENT-CLIENT');
+
+    const reread = await authed.getCompanyWorkspace(workspace.companyId);
+    expect(reread.companyId).toBe(workspace.companyId);
+
+    // The same client, holding somebody else's token, gets the typed tenant error, not data.
+    const intruderClient = createApiClient({
+      getToken: () => issueSandboxToken({ identity: INTRUDER, secret: SECRET, ttlMs: 60_000 }),
+      baseUrl,
+    });
+    let forbidden: unknown = null;
+    try {
+      await intruderClient.getCompanyWorkspace(workspace.companyId);
+    } catch (error) {
+      forbidden = error;
+    }
+    expect(forbidden).toBeInstanceOf(ApiClientError);
+    expect((forbidden as ApiClientError).code).toBe('TENANT_FORBIDDEN');
+    expect((forbidden as ApiClientError).httpStatus).toBe(403);
+
+    const afterSignIn = await authed.getSessionWorkspace();
+    expect(afterSignIn.companies.map((company) => company.name)).toEqual(['Client Flow Co']);
   }, 120_000);
 });
