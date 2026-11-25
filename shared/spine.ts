@@ -8,6 +8,51 @@ import { z } from 'zod';
 export const CalendarKindSchema = z.enum(['12month', '445', '454', '544', '52_53', '13x4']);
 export type CalendarKind = z.infer<typeof CalendarKindSchema>;
 
+/** Canonical statement-line vocabulary (§4.5) — the ONLY financial vocabulary shared by wire contracts. */
+export const StatementLineKeySchema = z.enum([
+  'pl.revenue.product',
+  'pl.revenue.service',
+  'pl.revenue.other',
+  'pl.cogs.direct',
+  'pl.cogs.other',
+  'pl.opex.payroll',
+  'pl.opex.ga',
+  'pl.opex.sm',
+  'pl.opex.rd',
+  'pl.opex.other',
+  'pl.da.depreciation',
+  'pl.da.amortization',
+  'pl.nonop.interest_income',
+  'pl.nonop.interest_expense',
+  'pl.nonop.other',
+  'pl.tax.income_tax',
+  'bs.asset.cash',
+  'bs.asset.ar',
+  'bs.asset.inventory',
+  'bs.asset.other_current',
+  'bs.asset.ppe_gross',
+  'bs.asset.ppe_accum_depr',
+  'bs.asset.other_noncurrent',
+  'bs.liability.ap',
+  'bs.liability.accrued',
+  'bs.liability.deferred_rev',
+  'bs.liability.short_term_debt',
+  'bs.liability.long_term_debt',
+  'bs.liability.other_noncurrent',
+  'bs.equity.common_stock',
+  'bs.equity.retained_earnings',
+  'bs.equity.distributions',
+  'bs.equity.current_net_income',
+  'cf.operating.net_income',
+  'cf.operating.da_addback',
+  'cf.operating.delta_wc',
+  'cf.investing.capex',
+  'cf.financing.debt',
+  'cf.financing.equity',
+  'cf.financing.distributions',
+]);
+export type StatementLineKey = z.infer<typeof StatementLineKeySchema>;
+
 export const SPINE_ROUTE_DEFS = [
   { id: 'sign_in', path: '/sign-in', label: 'Sign In', screen: 'SignInPage' },
   { id: 'setup', path: '/setup', label: 'Setup Wizard', screen: 'SetupWizardPage' },
