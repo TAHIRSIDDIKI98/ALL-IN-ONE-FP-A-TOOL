@@ -91,8 +91,10 @@ test.describe('OneFP&A M1 Spine Harness', () => {
     await expect(page.locator('h1')).toContainText(/Financial Statements/i);
 
     // The company exists but has no postings yet: the server reports zero, and the screen must show
-    // that zero rather than inventing or hiding it.
-    await expect(page.getByRole('row', { name: /Total assets/ })).toContainText('0.00');
+    // that zero rather than inventing or hiding it. Total assets is a balance-sheet line and the
+    // screen opens on the P&L tab, so the balance sheet has to be selected first.
+    await page.getByRole('tab', { name: 'Balance Sheet' }).click();
+    await expect(page.getByRole('row', { name: /Total assets/i })).toContainText('0.00');
     await expect(page.getByText('A1 pass')).toBeVisible();
     await expect(page.getByText(/0 committed source file/)).toBeVisible();
   });

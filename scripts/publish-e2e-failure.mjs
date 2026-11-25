@@ -34,17 +34,32 @@ const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g');
 const lines = raw.replace(ansi, '').split('\n').map((line) => line.trimEnd());
 const nonEmpty = lines.filter((line) => line.trim().length > 0);
 
-const interesting = /(\bError\b|\bExpected\b|\bReceived\b|Timeout \d|Process from config|not able to start|exited early|page\.|locator|waiting for|at .*\.spec\.ts:|›.*›|\bexpect\()/i;
-const signal = nonEmpty.filter((line) => interesting.test(line));
+// Ordered by how much a reader needs the line: the assertion detail first, the test titles last
+// (titles are already visible in the job summary, so they must never crowd out the real message).
+const TIERS = [
+  /^(?:Expected|Received|Error:|Locator:|Call log:|waiting for|Timeout \d+ms|\(retry #\d+\))/i,
+  /(?:Expected (?:string|value)|Received (?:string|value)|ERR_MODULE|Cannot find module|Process from config|exited early|webServer)/i,
+  /(?:at .*\.spec\.ts:\d+:\d+|›.*\d+:\d+)/,
+  /(?:✘|✓|\bfailed\b|\bnot able to start\b)/i,
+];
+
 const picked = [];
-for (const line of signal) {
+const seen = new Set();
+const push = (line) => {
   const trimmed = line.trim();
-  if (picked.includes(trimmed)) continue;
+  if (!trimmed || seen.has(trimmed)) return;
+  seen.add(trimmed);
   picked.push(trimmed);
-  if (picked.length >= MAX_ANNOTATIONS) break;
+};
+
+for (const tier of TIERS) {
+  for (const line of nonEmpty) {
+    if (picked.length >= MAX_ANNOTATIONS) break;
+    if (tier.test(line.trim())) push(line);
+  }
 }
 if (picked.length === 0) {
-  for (const line of nonEmpty.slice(-MAX_ANNOTATIONS)) picked.push(line.trim());
+  for (const line of nonEmpty.slice(-MAX_ANNOTATIONS)) push(line);
 }
 
 console.log('::group::Playwright failure digest');
