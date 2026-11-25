@@ -6,6 +6,7 @@ import {
   type ImportCommitPayload,
   type ImportPreviewPayload,
 } from '../api/client.js';
+import { BudgetImportPanel } from '../components/BudgetImportPanel.js';
 import { EmptyState, ErrorState, LoadingState, PartialBanner } from '../components/StateFrame.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
@@ -42,6 +43,7 @@ export default function ImportWizardPage({ onNavigate, forcedState }: SpinePageP
   const { company, authToken } = useWorkspaceStore();
   const companyId = company?.id ?? null;
 
+  const [dataset, setDataset] = useState<'actuals' | 'budget'>('actuals');
   const [csvDraft, setCsvDraft] = useState('');
   const [sourceFilename, setSourceFilename] = useState('gl-export.csv');
   const [preview, setPreview] = useState<ImportPreviewPayload | null>(null);
@@ -128,7 +130,7 @@ export default function ImportWizardPage({ onNavigate, forcedState }: SpinePageP
     );
   }
 
-  if (companyId === null || authToken === null) {
+  if (companyId === null || authToken === null || company === null) {
     return (
       <EmptyState
         title="GL Import Wizard"
@@ -187,7 +189,48 @@ export default function ImportWizardPage({ onNavigate, forcedState }: SpinePageP
         </div>
       </div>
 
-      <div className="space-y-3">
+      <fieldset className="rounded border border-slate-200 bg-slate-50 px-4 py-3">
+        <legend className="px-1 text-sm font-semibold text-slate-900">Import dataset</legend>
+        <div className="mt-1 flex flex-wrap gap-4 text-sm text-slate-700">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="radio"
+              name="import-dataset"
+              value="actuals"
+              checked={dataset === 'actuals'}
+              onChange={() => setDataset('actuals')}
+              className="h-4 w-4"
+            />
+            Actuals — GL journal CSV
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="radio"
+              name="import-dataset"
+              value="budget"
+              checked={dataset === 'budget'}
+              onChange={() => setDataset('budget')}
+              className="h-4 w-4"
+            />
+            Budget — account × period plan CSV
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          A budget never posts to the general ledger: it is stored as a plan version so actuals and
+          plan can be compared without inflating either.
+        </p>
+      </fieldset>
+
+      {dataset === 'budget' && (
+        <BudgetImportPanel
+          companyId={companyId}
+          fiscalYear={company.fiscalYear}
+          authToken={authToken}
+          onNavigate={navigate}
+        />
+      )}
+
+      <div className="space-y-3" hidden={dataset !== 'actuals'}>
         <label htmlFor="import-file" className="block text-sm font-medium text-slate-700">
           CSV file
         </label>
@@ -251,7 +294,7 @@ export default function ImportWizardPage({ onNavigate, forcedState }: SpinePageP
         </div>
       </div>
 
-      {preview !== null && (
+      {dataset === 'actuals' && preview !== null && (
         <div
           className={`rounded border p-4 space-y-3 ${
             accounted ? 'border-slate-200 bg-slate-50' : 'border-red-300 bg-red-50'
@@ -336,7 +379,7 @@ export default function ImportWizardPage({ onNavigate, forcedState }: SpinePageP
         </div>
       )}
 
-      {committed !== null && (
+      {dataset === 'actuals' && committed !== null && (
         <div className="rounded border border-emerald-300 bg-emerald-50 p-4 space-y-3">
           <h2 className="text-sm font-semibold text-emerald-950">Committed import batch</h2>
           <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-6">

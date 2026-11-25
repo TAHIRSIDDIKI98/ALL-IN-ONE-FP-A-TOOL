@@ -785,6 +785,154 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN' });
   }, 120_000);
 
+  it('stores a budget as a plan version without touching the GL, and versions it on re-import', async () => {
+    const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
+      email: 'client-budget@onefpa.test',
+      displayName: 'Client Budget',
+    });
+    const client = createApiClient({ getToken: () => minted.token, baseUrl });
+    const workspace = await client.createCompany({
+      companyName: 'Budget Co',
+      baseCurrency: 'USD',
+      calendarKind: '12month',
+      fiscalYear: 2026,
+      entityCode: 'ENT-BUDGET',
+      entityName: 'Budget Co HQ',
+    });
+    await db.transaction((tx) =>
+      seedChartOfAccounts(tx, {
+        companyId: workspace.companyId,
+        accounts: [
+          { code: '1000', name: 'Cash', type: 'asset', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'bs.asset.cash', active: true },
+          { code: '4000', name: 'Service Revenue', type: 'revenue', normalSide: 'credit', parentCode: null, isPostable: true, statementLineKey: 'pl.revenue.service', active: true },
+          { code: '5000', name: 'Salaries', type: 'expense', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'pl.opex.payroll', active: true },
+          { code: '6000', name: 'Software', type: 'expense', normalSide: 'debit', parentCode: null, isPostable: true, statementLineKey: 'pl.opex.other', active: true },
+        ],
+      }),
+    );
+
+    // No budget yet: an honest empty report, never an invented all-zero plan.
+    const empty = await client.getBudget(workspace.companyId, { fiscalYear: 2026 });
+    expect(empty.scenarioId).toBeNull();
+    expect(empty.planVersionId).toBeNull();
+    expect(empty.versionNo).toBeNull();
+    expect(empty.lineCount).toBe(0);
+    expect(empty.lines).toEqual([]);
+
+    const budgetCsv = [
+      'account_code,period,amount',
+      '4000,P01,12500.00',
+      '4000,P02,12500.00',
+      '4000,P03,13000.00',
+      '5000,P01,4200.00',
+      '5000,P02,4200.00',
+      '5000,P03,4400.00',
+      '6000,P01,1800.00',
+      '6000,P02,1800.00',
+      '6000,P03,1900.00',
+    ].join('\n');
+
+    const imported = await client.importBudget(workspace.companyId, {
+      csvText: budgetCsv,
+      fiscalYear: 2026,
+      sourceFilename: 'fy2026-budget.csv',
+    });
+    expect(imported.rowCount).toBe(9);
+    expect(imported.lineCount).toBe(9);
+    expect(imported.versionNo).toBe(1);
+    expect(imported.scenarioName).toBe('Budget FY2026');
+    expect(imported.totalAmount).toBe('56300.00');
+    expect(imported.accounts.map((account) => `${account.accountCode}=${account.amount}`)).toEqual([
+      '4000=38000.00',
+      '5000=12800.00',
+      '6000=5500.00',
+    ]);
+
+    // A budget is NOT an actual: the trial balance stays empty.
+    const afterBudget = await client.getTrialBalance(workspace.companyId);
+    expect(afterBudget.totalDebit).toBe('0.00');
+    expect(afterBudget.totalCredit).toBe('0.00');
+    expect(afterBudget.rows.every((row) => row.naturalActivity === '0.00')).toBe(true);
+
+    // Re-importing the same plan creates version 2 and duplicates no plan line.
+    const reimported = await client.importBudget(workspace.companyId, {
+      csvText: budgetCsv,
+      fiscalYear: 2026,
+      sourceFilename: 'fy2026-budget.csv',
+    });
+    expect(reimported.versionNo).toBe(2);
+    expect(reimported.lineCount).toBe(9);
+    expect(reimported.totalAmount).toBe('56300.00');
+    const planRows = await db.query<{ total: number; versions: number; current: number }>(
+      `SELECT (SELECT COUNT(*)::int FROM plan_line WHERE company_id = $1) AS total,
+              (SELECT COUNT(*)::int FROM plan_version WHERE company_id = $1) AS versions,
+              (SELECT COUNT(*)::int FROM plan_version WHERE company_id = $1 AND is_current) AS current`,
+      [workspace.companyId],
+    );
+    expect(planRows.rows[0]).toEqual({ total: 18, versions: 2, current: 1 });
+
+    // A plan line for an account that does not exist is rejected with a named reason, and writes nothing.
+    const unmapped = await client
+      .importBudget(workspace.companyId, {
+        csvText: ['account_code,period,amount', '9999,P01,100.00'].join('\n'),
+        fiscalYear: 2026,
+      })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect(unmapped).toBeInstanceOf(ApiClientError);
+    expect((unmapped as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((unmapped as ApiClientError).details['issues']).toEqual(['row 2: UNMAPPED_ACCOUNT:9999']);
+
+    // A period code outside the requested fiscal year is rejected the same way.
+    const wrongYear = await client
+      .importBudget(workspace.companyId, {
+        csvText: ['account_code,period,amount', '4000,P01,100.00'].join('\n'),
+        fiscalYear: 2030,
+      })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect((wrongYear as ApiClientError).code).toBe('VALIDATION_FAILED');
+    expect((wrongYear as ApiClientError).details['issues']).toEqual([
+      'row 2: UNKNOWN_PERIOD:P01 (fiscal year 2030)',
+    ]);
+
+    const stillTwo = await client.getBudget(workspace.companyId, { fiscalYear: 2026 });
+    expect(stillTwo.versionNo).toBe(2);
+    expect(stillTwo.lineCount).toBe(9);
+
+    // Actuals still post normally alongside the plan; the GL holds only the actual 750.25.
+    const journal = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-B1,2026-04-10,1000,Cash received,750.25,0.00',
+      'JE-B1,2026-04-10,4000,Service revenue,0.00,750.25',
+    ].join('\n');
+    const committed = await client.commitImport(workspace.companyId, {
+      kind: 'actuals',
+      sourceFilename: 'budget_co_actuals.csv',
+      csvText: journal,
+    });
+    expect(committed.totalCredits).toBe('750.25');
+    const gl = await client.getTrialBalance(workspace.companyId);
+    expect(gl.totalDebit).toBe('750.25');
+    expect(
+      gl.rows
+        .filter((row) => row.naturalActivity !== '0.00')
+        .map((row) => `${row.code}=${row.naturalActivity}`),
+    ).toEqual(['1000=750.25', '4000=750.25']);
+
+    // company.create + 2 × budget.import + import.commit; the two rejected budgets wrote nothing.
+    const chain = await verifyCompanyAuditLog(db, workspace.companyId);
+    expect(chain.valid).toBe(true);
+    expect(chain.checkedCount).toBe(4);
+
+    await expect(
+      createApiClient({
+        getToken: () => issueSandboxToken({ identity: INTRUDER, secret: SECRET, ttlMs: 60_000 }),
+        baseUrl,
+      }).getBudget(workspace.companyId, { fiscalYear: 2026 }),
+    ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN' });
+  }, 120_000);
+
   it('drives the import wizard and model grid contracts through the browser client against the real API', async () => {
     const minted = await createApiClient({ getToken: () => null, baseUrl }).signInSandboxToken({
       email: 'client-import@onefpa.test',

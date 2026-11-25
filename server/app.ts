@@ -16,6 +16,11 @@ import {
   ChartOfAccountsReportSchema,
 } from '../shared/chart.js';
 import {
+  BudgetImportRequestSchema,
+  BudgetImportResultSchema,
+  BudgetReportSchema,
+} from '../shared/budget.js';
+import {
   CompanySetupRequestSchema,
   SessionWorkspaceResponseSchema,
   type SessionWorkspaceResponse,
@@ -40,6 +45,7 @@ import {
 } from '../shared/reports.js';
 import { commitImport, previewImport } from './db/repositories/import.js';
 import { importChart, listChartAccounts } from './db/repositories/chart.js';
+import { getBudget, importBudget } from './db/repositories/budget.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
@@ -400,6 +406,60 @@ export function createSpineApp(context: SpineContext) {
           }),
         );
         res.status(201).json(ChartImportResultSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Budget (plan) read model for one fiscal year. An absent budget reports nulls and zero lines —
+   * the screen shows an honest empty state instead of an invented all-zero plan.
+   */
+  app.get(
+    '/api/companies/:companyId/budget',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        if (fiscalYear === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The budget endpoint requires ?year= (the fiscal year being planned).',
+            details: { issues: ['year: required'] },
+          });
+        }
+        const report = await getBudget(db, { companyId, fiscalYear });
+        res.status(200).json(BudgetReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * Budget import. The pure /core parser validates every row first, account/period codes are
+   * resolved against this company's own chart and calendar, and the scenario + plan version + plan
+   * lines + audit row commit in ONE transaction (G4/G10). Nothing here can reach `gl_entry`.
+   */
+  app.post(
+    '/api/companies/:companyId/budget/import',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(BudgetImportRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          importBudget(tx, {
+            companyId,
+            actorId: userId,
+            csvText: body.csvText,
+            fiscalYear: body.fiscalYear,
+            sourceFilename: body.sourceFilename ?? null,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(BudgetImportResultSchema.parse(result));
       } catch (error) {
         next(error);
       }

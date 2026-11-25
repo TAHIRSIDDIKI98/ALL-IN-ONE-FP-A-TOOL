@@ -16,6 +16,8 @@ Milestone M1 is **not** complete; these are the verified increments so far (evid
 - Browser API client, sign-in/setup wired to the API (`WI-0019`), server-driven statements screen (`WI-0020`), and a Playwright harness that drives the real API (`WI-0021`).
 - Import Wizard + Model Grid served from the API, with ONE import classifier shared by a read-only company-scoped preview and the commit (`WI-0022`).
 - Chart of accounts: pure CSV parser/validator (`/core/chart`), atomic audited chart import and chart read model over HTTP, and a working CoA screen — an import can now post instead of quarantining every row as unmapped (`WI-0023`).
+- Budgets as plan data, not actuals: pure budget CSV parser (`/core/budget`), audited atomic import into `scenario` -> `plan_version` -> `plan_line` with version history, budget read model over HTTP, and a Budget panel in the Import Wizard that states plainly that no planned amount was posted to the GL (`WI-0025`).
+- Budget commits are refused by the GL write path instead of being posted as actuals (`WI-0024`).
 
 ### Changed
 - S-COMMIT (INT8) is enforced from an objective codex boundary (`DEC-007`) instead of a fixed-size exemption list.

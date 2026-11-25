@@ -465,6 +465,50 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(imported.accounts[0]?.statementLineKey).toBe('bs.asset.cash');
   });
 
+  it('reads and imports a fiscal-year budget through the company-scoped routes', async () => {
+    const budget = {
+      companyId: '11111111-1111-4111-8111-111111111111',
+      fiscalYear: 2026,
+      scenarioId: null,
+      scenarioName: null,
+      planVersionId: null,
+      versionNo: null,
+      lineCount: 0,
+      totalAmount: '0.00',
+      lines: [],
+      accounts: [],
+    };
+    let call = 0;
+    const { fetchImpl, calls } = fakeFetch(() => {
+      call += 1;
+      return call === 1
+        ? { status: 200, body: budget }
+        : { status: 201, body: { ...budget, rowCount: 1, lineCount: 1, totalAmount: '12500.00' } };
+    });
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    await client.getBudget('11111111-1111-4111-8111-111111111111', { fiscalYear: 2026 });
+    const imported = await client.importBudget('11111111-1111-4111-8111-111111111111', {
+      csvText: 'account_code,period,amount\n4000,P01,12500.00\n',
+      fiscalYear: 2026,
+      sourceFilename: 'fy2026-budget.csv',
+    });
+
+    expect(calls[0]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/budget?year=2026',
+    );
+    expect(calls[1]?.url).toBe(
+      '/api/companies/11111111-1111-4111-8111-111111111111/budget/import',
+    );
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({
+      csvText: 'account_code,period,amount\n4000,P01,12500.00\n',
+      fiscalYear: 2026,
+      sourceFilename: 'fy2026-budget.csv',
+    });
+    expect(imported.totalAmount).toBe('12500.00');
+    expect(imported.rowCount).toBe(1);
+  });
+
   it('surfaces a rejected chart file with its row-level issues so the screen can show them verbatim', async () => {
     const { fetchImpl } = fakeFetch(() => ({
       status: 422,

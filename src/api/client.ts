@@ -102,6 +102,18 @@ export interface ApiClient {
   previewImport(companyId: string, request: ImportPreviewRequest): Promise<ImportPreviewPayload>;
   getChart(companyId: string): Promise<ChartOfAccountsPayload>;
   importChart(companyId: string, request: { readonly csvText: string }): Promise<ChartImportPayload>;
+  getBudget(
+    companyId: string,
+    query: { readonly fiscalYear: number },
+  ): Promise<BudgetReportPayload>;
+  importBudget(
+    companyId: string,
+    request: {
+      readonly csvText: string;
+      readonly fiscalYear: number;
+      readonly sourceFilename?: string;
+    },
+  ): Promise<BudgetImportPayload>;
   commitImport(companyId: string, request: ImportCommitRequest): Promise<ImportCommitPayload>;
   getTrialBalance(
     companyId: string,
@@ -221,6 +233,26 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         'POST',
         `/api/companies/${encodeURIComponent(companyId)}/chart/import`,
         { csvText: chartRequest.csvText },
+      ),
+    getBudget: (companyId, query) => {
+      const params = new URLSearchParams();
+      params.set('year', String(query.fiscalYear));
+      return request<BudgetReportPayload>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/budget?${params.toString()}`,
+      );
+    },
+    importBudget: (companyId, budgetRequest) =>
+      request<BudgetImportPayload>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/budget/import`,
+        {
+          csvText: budgetRequest.csvText,
+          fiscalYear: budgetRequest.fiscalYear,
+          ...(budgetRequest.sourceFilename === undefined
+            ? {}
+            : { sourceFilename: budgetRequest.sourceFilename }),
+        },
       ),
     commitImport: (companyId, commitRequest) =>
       request<ImportCommitPayload>(
@@ -439,4 +471,39 @@ export interface ChartImportPayload {
   readonly inserted: number;
   readonly updated: number;
   readonly accounts: readonly ChartAccountPayload[];
+}
+
+/** Budget (plan) contracts (shared/budget.ts) — plan rows never reach the GL. */
+export interface BudgetLinePayload {
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly accountType: string;
+  readonly periodCode: string;
+  readonly periodNo: number;
+  readonly amount: string;
+}
+
+export interface BudgetAccountTotalPayload {
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly accountType: string;
+  readonly normalSide: string;
+  readonly amount: string;
+}
+
+export interface BudgetReportPayload {
+  readonly companyId: string;
+  readonly fiscalYear: number;
+  readonly scenarioId: string | null;
+  readonly scenarioName: string | null;
+  readonly planVersionId: string | null;
+  readonly versionNo: number | null;
+  readonly lineCount: number;
+  readonly totalAmount: string;
+  readonly lines: readonly BudgetLinePayload[];
+  readonly accounts: readonly BudgetAccountTotalPayload[];
+}
+
+export interface BudgetImportPayload extends BudgetReportPayload {
+  readonly rowCount: number;
 }
