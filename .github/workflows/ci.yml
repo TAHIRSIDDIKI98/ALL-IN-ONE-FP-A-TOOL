@@ -73,7 +73,7 @@ jobs:
       - name: Run PGLite vs Neon schema & query parity gate
         env:
           NEON_PARITY_DATABASE_URL: ${{ secrets.NEON_PARITY_DATABASE_URL }}
-        run: npx tsx scripts/neon-parity.ts | tee neon-parity.log
+        run: npx tsx scripts/schema-parity.ts | tee neon-parity.log
 
       - name: Upload Neon parity diagnostics
         if: always()

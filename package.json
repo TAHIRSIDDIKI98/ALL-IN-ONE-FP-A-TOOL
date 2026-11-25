@@ -28,6 +28,7 @@
     "gate:secret-scan": "node scripts/secret-scan.mjs",
     "gate:no-native-deps": "node scripts/no-native-deps.mjs",
     "gate:schema-scope": "node scripts/schema-scope.mjs",
+    "gate:schema-parity": "tsx scripts/schema-parity.ts",
     "gate:constitution": "node scripts/constitution-check.mjs",
     "gate:licenses": "node scripts/license-check.mjs",
     "gate:work-integrity": "node scripts/work-integrity.mjs",
