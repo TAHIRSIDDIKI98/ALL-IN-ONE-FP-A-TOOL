@@ -93,7 +93,8 @@ test.describe('OneFP&A M1 Spine Harness', () => {
     await planningTab.click();
     await expect(planningTab).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('h1')).toHaveCount(1);
-    await expect(page).toHaveURL(/\/model-grid$/);
+    // The view is deep-linkable on the same route — no eighth screen was added.
+    await expect(page).toHaveURL(/\/model-grid\?tab=planning$/);
 
     await expect(page.getByRole('tabpanel', { name: 'Planning view' })).toContainText(
       /Sign in and create a company workspace before reading planning scenarios/,
