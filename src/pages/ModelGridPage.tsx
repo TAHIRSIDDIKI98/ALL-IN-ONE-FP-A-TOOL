@@ -21,12 +21,21 @@ import {
   LoadingState,
   PartialBanner,
 } from '../components/StateFrame.js';
+import type {
+  AddCompanyMemberRequest,
+  CreateApprovalTaskRequest,
+  CreateWorkflowCommentRequest,
+  TransitionApprovalTaskRequest,
+  WorkflowOverviewResponse,
+} from '../../shared/workflow.js';
 import {
   DriverAuthoringPanel,
   type DriverAuthoringFailure,
   RollingForecastTable,
   ScenarioComparisonTable,
   ScenarioInventory,
+  WorkflowPanel,
+  type WorkflowActionFailure,
 } from '../components/PlanningWorkspace.js';
 import {
   buildDriverDefinitions,
@@ -468,6 +477,19 @@ export function PlanningView(props: {
   const [comparisonFailure, setComparisonFailure] = useState<PlanningFailure | null>(null);
   const [comparisonReload, setComparisonReload] = useState(0);
 
+  const [workflow, setWorkflow] = useState<WorkflowOverviewResponse | null>(null);
+  const [workflowState, setWorkflowState] = useState<'loading' | 'idle' | 'error'>('loading');
+  const [workflowFailure, setWorkflowFailure] = useState<{
+    readonly code: string;
+    readonly message: string;
+  } | null>(null);
+  const [workflowReload, setWorkflowReload] = useState(0);
+  const [workflowBusy, setWorkflowBusy] = useState<string | null>(null);
+  const [workflowActionFailure, setWorkflowActionFailure] = useState<WorkflowActionFailure | null>(
+    null,
+  );
+  const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
+
   useEffect(() => {
     if (companyId === null || authToken === null) return;
     let cancelled = false;
@@ -591,6 +613,30 @@ export function PlanningView(props: {
     };
   }, [companyId, authToken, baseScenario, targetScenario, props.fiscalYear, comparisonReload]);
 
+  useEffect(() => {
+    if (companyId === null || authToken === null) return;
+    let cancelled = false;
+    setWorkflowState('loading');
+    setWorkflowFailure(null);
+    createApiClient({ getToken: () => authToken })
+      .getWorkflowOverview(companyId)
+      .then((result) => {
+        if (cancelled) return;
+        setWorkflow(result);
+        setWorkflowState('idle');
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setWorkflow(null);
+        setWorkflowState('error');
+        const failure = toPlanningFailure(error, 'scenarios');
+        setWorkflowFailure({ code: failure.code, message: failure.message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, authToken, workflowReload]);
+
   if (forcedState === 'loading') {
     return <LoadingState label="Loading planning scenarios and the current plan versions from the server..." />;
   }
@@ -701,10 +747,126 @@ export function PlanningView(props: {
       setScenarioReload((key) => key + 1);
       setForecastReload((key) => key + 1);
       setComparisonReload((key) => key + 1);
+      setWorkflowReload((key) => key + 1);
     } catch (error: unknown) {
       setActionFailure(toDriverFailure(error, 'commit'));
     } finally {
       setActionBusy(null);
+    }
+  };
+
+  const toWorkflowActionFailure = (error: unknown): WorkflowActionFailure => {
+    if (error instanceof ApiClientError) {
+      const rawIssues = error.details['issues'];
+      const issues = Array.isArray(rawIssues) ? rawIssues.map((item) => String(item)) : [];
+      return { code: error.code, message: error.message, issues };
+    }
+    return {
+      code: 'INTERNAL_ERROR',
+      message: error instanceof Error ? error.message : 'Workflow request failed.',
+      issues: [],
+    };
+  };
+
+  const runCreateApprovalTask = async (requestBody: CreateApprovalTaskRequest): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    setWorkflowBusy('create-task');
+    setWorkflowActionFailure(null);
+    setWorkflowNotice(null);
+    try {
+      const created = await createApiClient({ getToken: () => authToken }).createApprovalTask(
+        companyId,
+        requestBody,
+      );
+      setWorkflowNotice(
+        `Created draft approval task "${created.title}" for ${created.scenarioName} v${String(created.versionNo)}.`,
+      );
+      setWorkflowReload((key) => key + 1);
+    } catch (error: unknown) {
+      setWorkflowActionFailure(toWorkflowActionFailure(error));
+    } finally {
+      setWorkflowBusy(null);
+    }
+  };
+
+  const runTransitionApprovalTask = async (
+    taskId: string,
+    requestBody: TransitionApprovalTaskRequest,
+  ): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    setWorkflowBusy('transition-task');
+    setWorkflowActionFailure(null);
+    setWorkflowNotice(null);
+    try {
+      const updated = await createApiClient({ getToken: () => authToken }).transitionApprovalTask(
+        companyId,
+        taskId,
+        requestBody,
+      );
+      setWorkflowNotice(`Approval task "${updated.title}" transitioned to ${updated.status}.`);
+      setWorkflowReload((key) => key + 1);
+    } catch (error: unknown) {
+      setWorkflowActionFailure(toWorkflowActionFailure(error));
+    } finally {
+      setWorkflowBusy(null);
+    }
+  };
+
+  const runCreateWorkflowComment = async (
+    requestBody: CreateWorkflowCommentRequest,
+  ): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    setWorkflowBusy('create-comment');
+    setWorkflowActionFailure(null);
+    setWorkflowNotice(null);
+    try {
+      const created = await createApiClient({ getToken: () => authToken }).createWorkflowComment(
+        companyId,
+        requestBody,
+      );
+      setWorkflowNotice(`Posted comment on ${created.anchorKey} (${created.scenarioName} v${String(created.versionNo)}).`);
+      setWorkflowReload((key) => key + 1);
+    } catch (error: unknown) {
+      setWorkflowActionFailure(toWorkflowActionFailure(error));
+    } finally {
+      setWorkflowBusy(null);
+    }
+  };
+
+  const runMarkNotificationRead = async (notificationId: string): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    setWorkflowBusy('mark-read');
+    setWorkflowActionFailure(null);
+    setWorkflowNotice(null);
+    try {
+      await createApiClient({ getToken: () => authToken }).markNotificationRead(
+        companyId,
+        notificationId,
+      );
+      setWorkflowReload((key) => key + 1);
+    } catch (error: unknown) {
+      setWorkflowActionFailure(toWorkflowActionFailure(error));
+    } finally {
+      setWorkflowBusy(null);
+    }
+  };
+
+  const runAddCompanyMember = async (requestBody: AddCompanyMemberRequest): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    setWorkflowBusy('add-member');
+    setWorkflowActionFailure(null);
+    setWorkflowNotice(null);
+    try {
+      const member = await createApiClient({ getToken: () => authToken }).addCompanyMember(
+        companyId,
+        requestBody,
+      );
+      setWorkflowNotice(`Granted ${member.role} access to ${member.displayName} (${member.email}).`);
+      setWorkflowReload((key) => key + 1);
+    } catch (error: unknown) {
+      setWorkflowActionFailure(toWorkflowActionFailure(error));
+    } finally {
+      setWorkflowBusy(null);
     }
   };
 
@@ -738,6 +900,25 @@ export function PlanningView(props: {
     />
   );
 
+  const workflowPanel = (
+    <WorkflowPanel
+      workflow={workflow}
+      workflowState={workflowState}
+      workflowFailure={workflowFailure}
+      onRetryLoad={() => setWorkflowReload((key) => key + 1)}
+      actionBusy={workflowBusy}
+      actionFailure={workflowActionFailure}
+      actionNotice={workflowNotice}
+      accounts={accounts}
+      periods={periods}
+      onCreateTask={(req) => void runCreateApprovalTask(req)}
+      onTransitionTask={(id, req) => void runTransitionApprovalTask(id, req)}
+      onCreateComment={(req) => void runCreateWorkflowComment(req)}
+      onMarkNotificationRead={(id) => void runMarkNotificationRead(id)}
+      onAddMember={(req) => void runAddCompanyMember(req)}
+    />
+  );
+
   if (scenarios === null || scenarios.length === 0) {
     return (
       <div className="space-y-6">
@@ -747,6 +928,7 @@ export function PlanningView(props: {
           onAction={() => onNavigate('/import')}
         />
         {authoringPanel}
+        {workflowPanel}
       </div>
     );
   }
@@ -905,6 +1087,8 @@ export function PlanningView(props: {
         )}
         {comparisonReady && <ScenarioComparisonTable report={comparison} currency={props.currency} />}
       </section>
+
+      {workflowPanel}
     </div>
   );
 }

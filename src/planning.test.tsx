@@ -8,6 +8,7 @@ import type {
   ScenarioComparisonResponse,
   ScenarioSummary,
 } from '../shared/planning.js';
+import type { WorkflowOverviewResponse } from '../shared/workflow.js';
 import type { ChartAccountPayload } from './api/client.js';
 import {
   DriverAuthoringPanel,
@@ -15,14 +16,19 @@ import {
   RollingForecastTable,
   ScenarioComparisonTable,
   ScenarioInventory,
+  WorkflowPanel,
 } from './components/PlanningWorkspace.js';
 import ModelGridPage from './pages/ModelGridPage.js';
 import {
+  availableTaskActions,
+  buildCommentRequestPayload,
   buildDriverDefinitions,
   createEmptyDriverRow,
+  createInitialCommentDraft,
   createInitialDriverPlanDraft,
   periodCodes,
   resolvePlanningDefaults,
+  unreadNotificationCount,
   type DriverPlanDraft,
 } from './state/planningView.js';
 
@@ -656,5 +662,230 @@ describe('M2 driver-plan authoring inside the Model Grid (WI-0033)', () => {
 
     expect(busyHtml).toContain('Loading chart of accounts for driver target selection');
     expect(busyHtml).toContain('Validating accounts and committing versioned plan lines');
+  });
+});
+
+const sampleWorkflow: WorkflowOverviewResponse = {
+  companyId: COMPANY_ID,
+  actorRole: 'owner',
+  members: [
+    {
+      userId: '66666666-6666-4666-8666-666666666666',
+      email: 'owner@onefpa.test',
+      displayName: 'Owner',
+      role: 'owner',
+    },
+    {
+      userId: '77777777-7777-4777-8777-777777777777',
+      email: 'reviewer@onefpa.test',
+      displayName: 'Reviewer',
+      role: 'reviewer',
+    },
+  ],
+  planVersions: [
+    {
+      planVersionId: '55555555-5555-4555-8555-555555555555',
+      scenarioId: '44444444-4444-4444-8444-444444444444',
+      scenarioName: 'Q2 Rolling Forecast',
+      scenarioKind: 'forecast',
+      versionNo: 2,
+      label: 'Q2 Rolling Forecast v2',
+      isCurrent: true,
+      lockedAt: null,
+    },
+  ],
+  tasks: [
+    {
+      id: '88888888-8888-4888-8888-888888888888',
+      companyId: COMPANY_ID,
+      scenarioId: '44444444-4444-4444-8444-444444444444',
+      scenarioName: 'Q2 Rolling Forecast',
+      planVersionId: '55555555-5555-4555-8555-555555555555',
+      versionNo: 2,
+      versionLabel: 'Q2 Rolling Forecast v2',
+      title: 'Review Q2 Rolling Forecast',
+      status: 'submitted',
+      version: 2,
+      createdBy: '66666666-6666-4666-8666-666666666666',
+      createdByName: 'Owner',
+      assigneeId: '77777777-7777-4777-8777-777777777777',
+      assigneeName: 'Reviewer',
+      submittedBy: '66666666-6666-4666-8666-666666666666',
+      submittedAt: '2026-11-25T12:00:00.000Z',
+      decidedBy: null,
+      decidedByName: null,
+      decidedAt: null,
+      decisionReason: null,
+      createdAt: '2026-11-25T11:55:00.000Z',
+      updatedAt: '2026-11-25T12:00:00.000Z',
+    },
+  ],
+  comments: [
+    {
+      id: '99999999-9999-4999-8999-999999999999',
+      companyId: COMPANY_ID,
+      planVersionId: '55555555-5555-4555-8555-555555555555',
+      versionNo: 2,
+      scenarioName: 'Q2 Rolling Forecast',
+      anchorKind: 'cell',
+      anchorKey: 'cell:4000:P01',
+      accountCode: '4000',
+      periodCode: 'P01',
+      statementLineKey: null,
+      authorId: '66666666-6666-4666-8666-666666666666',
+      authorName: 'Owner',
+      authorEmail: 'owner@onefpa.test',
+      body: 'Verify seasonality with @reviewer@onefpa.test',
+      mentionedUserIds: ['77777777-7777-4777-8777-777777777777'],
+      createdAt: '2026-11-25T12:00:00.000Z',
+    },
+  ],
+  notifications: [
+    {
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      companyId: COMPANY_ID,
+      recipientId: '66666666-6666-4666-8666-666666666666',
+      jobId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      eventKind: 'mention',
+      planVersionId: '55555555-5555-4555-8555-555555555555',
+      taskId: null,
+      commentId: '99999999-9999-4999-8999-999999999999',
+      title: 'Mentioned on cell:4000:P01',
+      body: 'Verify seasonality with @reviewer@onefpa.test',
+      readAt: null,
+      createdAt: '2026-11-25T12:00:00.000Z',
+    },
+  ],
+};
+
+describe('M2 collaboration & workflow view inside the Model Grid (WI-0034)', () => {
+  it('enforces pure comment payload validation and role-based approval action rules', () => {
+    const emptyDraft = createInitialCommentDraft('', '', '');
+    const invalid = buildCommentRequestPayload(emptyDraft);
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(invalid.issues.some((i) => i.includes('PLAN_VERSION_REQUIRED'))).toBe(true);
+      expect(invalid.issues.some((i) => i.includes('COMMENT_BODY_REQUIRED'))).toBe(true);
+    }
+
+    const cellBuilt = buildCommentRequestPayload({
+      planVersionId: '55555555-5555-4555-8555-555555555555',
+      anchorKind: 'cell',
+      accountCode: '4000',
+      periodCode: 'P01',
+      statementLineKey: '',
+      body: 'Check @reviewer@onefpa.test',
+    });
+    expect(cellBuilt.ok).toBe(true);
+    if (cellBuilt.ok) {
+      expect(cellBuilt.payload.anchor).toEqual({
+        kind: 'cell',
+        accountCode: '4000',
+        periodCode: 'P01',
+      });
+    }
+
+    expect(availableTaskActions('editor', 'draft')).toEqual(['submit']);
+    expect(availableTaskActions('editor', 'submitted')).toEqual([]);
+    expect(availableTaskActions('reviewer', 'submitted')).toEqual(['approve', 'reject']);
+    expect(availableTaskActions('viewer', 'submitted')).toEqual([]);
+    expect(availableTaskActions('owner', 'approved')).toEqual([]);
+    expect(unreadNotificationCount(sampleWorkflow.notifications)).toBe(1);
+  });
+
+  it('renders WorkflowPanel across loading, error, populated owner, and read-only viewer states without adding h1s', () => {
+    const populatedHtml = renderToStaticMarkup(
+      createElement(WorkflowPanel, {
+        workflow: sampleWorkflow,
+        workflowState: 'idle',
+        workflowFailure: null,
+        onRetryLoad: noop,
+        actionBusy: null,
+        actionFailure: null,
+        actionNotice: 'Approved version v2.',
+        accounts: sampleChartAccounts,
+        periods: ['P01', 'P02', 'P03'],
+        onCreateTask: noop,
+        onTransitionTask: noop,
+        onCreateComment: noop,
+        onMarkNotificationRead: noop,
+        onAddMember: noop,
+      }),
+    );
+
+    expect(populatedHtml).toContain('Collaboration, approvals &amp; inbox');
+    expect(populatedHtml).toContain('Review Q2 Rolling Forecast');
+    expect(populatedHtml).toContain('cell:4000:P01');
+    expect(populatedHtml).toContain('Mentioned on cell:4000:P01');
+    expect(populatedHtml).toContain('1 unread notification(s)');
+    expect(populatedHtml).toContain('Approve &amp; lock');
+    expect(populatedHtml).toContain('Mark read');
+    expect(populatedHtml).toContain('Add member');
+    expect(populatedHtml).not.toContain('<h1');
+
+    const viewerHtml = renderToStaticMarkup(
+      createElement(WorkflowPanel, {
+        workflow: { ...sampleWorkflow, actorRole: 'viewer' },
+        workflowState: 'idle',
+        workflowFailure: null,
+        onRetryLoad: noop,
+        actionBusy: null,
+        actionFailure: null,
+        actionNotice: null,
+        accounts: sampleChartAccounts,
+        periods: ['P01', 'P02', 'P03'],
+        onCreateTask: noop,
+        onTransitionTask: noop,
+        onCreateComment: noop,
+        onMarkNotificationRead: noop,
+        onAddMember: noop,
+      }),
+    );
+    expect(viewerHtml).toContain('No actions available');
+    expect(viewerHtml).not.toContain('Post anchored comment');
+    expect(viewerHtml).not.toContain('Add member');
+
+    const loadingHtml = renderToStaticMarkup(
+      createElement(WorkflowPanel, {
+        workflow: null,
+        workflowState: 'loading',
+        workflowFailure: null,
+        onRetryLoad: noop,
+        actionBusy: null,
+        actionFailure: null,
+        actionNotice: null,
+        accounts: [],
+        periods: ['P01'],
+        onCreateTask: noop,
+        onTransitionTask: noop,
+        onCreateComment: noop,
+        onMarkNotificationRead: noop,
+        onAddMember: noop,
+      }),
+    );
+    expect(loadingHtml).toContain('role="status"');
+    expect(loadingHtml).toContain('aria-busy="true"');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(WorkflowPanel, {
+        workflow: null,
+        workflowState: 'error',
+        workflowFailure: { code: 'TENANT_FORBIDDEN', message: 'Forbidden' },
+        onRetryLoad: noop,
+        actionBusy: null,
+        actionFailure: null,
+        actionNotice: null,
+        accounts: [],
+        periods: ['P01'],
+        onCreateTask: noop,
+        onTransitionTask: noop,
+        onCreateComment: noop,
+        onMarkNotificationRead: noop,
+        onAddMember: noop,
+      }),
+    );
+    expect(errorHtml).toContain('role="alert"');
+    expect(errorHtml).toContain('TENANT_FORBIDDEN');
+    expect(errorHtml).toContain('Retry failed action');
   });
 });

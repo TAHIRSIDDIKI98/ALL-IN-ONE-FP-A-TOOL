@@ -1,12 +1,14 @@
 {
-  "schemaVersion": "0001_m1_spine",
-  "migration": "db/migrations/0001_m1_spine.sql",
-  "tableCount": 18,
+  "schemaVersion": "0002_m2_collaboration",
+  "migration": "db/migrations/0002_m2_collaboration.sql",
+  "tableCount": 22,
   "tables": [
     "account",
     "app_user",
+    "approval_task",
     "audit_log",
     "coa_mapping",
+    "comment",
     "company",
     "department",
     "entity",
@@ -16,7 +18,9 @@
     "gl_line",
     "import_batch",
     "import_row_raw",
+    "job",
     "membership",
+    "notification",
     "plan_line",
     "plan_version",
     "scenario",
@@ -186,6 +190,118 @@
       "default": "now()"
     },
     {
+      "table": "approval_task",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "approval_task",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "scenario_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "plan_version_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "title",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": "'draft'::text"
+    },
+    {
+      "table": "approval_task",
+      "column": "version",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "approval_task",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "assignee_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "submitted_by",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "submitted_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "decided_by",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "decided_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "decision_reason",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "approval_task",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "approval_task",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
       "table": "audit_log",
       "column": "id",
       "type": "uuid",
@@ -334,6 +450,90 @@
     },
     {
       "table": "coa_mapping",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "comment",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "comment",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "plan_version_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "anchor_kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "anchor_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "account_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "statement_line_key",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "author_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "body",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "comment",
+      "column": "mentioned_user_ids",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'[]'::jsonb"
+    },
+    {
+      "table": "comment",
       "column": "created_at",
       "type": "timestamp with time zone",
       "nullable": false,
@@ -921,6 +1121,90 @@
       "default": "now()"
     },
     {
+      "table": "job",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "job",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "job",
+      "column": "kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "job",
+      "column": "idempotency_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "job",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "job",
+      "column": "attempts",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "job",
+      "column": "payload",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "job",
+      "column": "result_ref",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "job",
+      "column": "error_code",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "job",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "job",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "job",
+      "column": "completed_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
       "table": "membership",
       "column": "id",
       "type": "uuid",
@@ -950,6 +1234,90 @@
     },
     {
       "table": "membership",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "notification",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "notification",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "recipient_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "job_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "event_kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "plan_version_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "task_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "comment_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "title",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "body",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "notification",
+      "column": "read_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "notification",
       "column": "created_at",
       "type": "timestamp with time zone",
       "nullable": false,
@@ -1411,6 +1779,209 @@
       "references": "app_user.firebase_uid"
     },
     {
+      "table": "approval_task",
+      "name": "approval_task_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.decided_at"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_check1",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.decision_reason"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.company_id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.created_at"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_created_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.created_by"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_plan_version_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.plan_version_id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_scenario_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.scenario_id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.status"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.status"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_title_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.title"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_title_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.title"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_updated_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.updated_at"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_version_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.version"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_version_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "approval_task.version"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_assignee_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "assignee_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_decided_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "decided_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_plan_version_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "plan_version_id"
+      ],
+      "references": "plan_version.id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_scenario_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "scenario_id"
+      ],
+      "references": "scenario.id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_submitted_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "submitted_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "approval_task.id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "approval_task.id"
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_plan_version_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "plan_version_id"
+      ],
+      "references": "approval_task.company_id"
+    },
+    {
       "table": "audit_log",
       "name": "audit_log_action_not_null",
       "type": "CHECK",
@@ -1654,6 +2225,181 @@
         "mapping_version"
       ],
       "references": "coa_mapping.company_id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_anchor_key_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.anchor_key"
+    },
+    {
+      "table": "comment",
+      "name": "comment_anchor_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.anchor_key"
+    },
+    {
+      "table": "comment",
+      "name": "comment_anchor_kind_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.anchor_kind"
+    },
+    {
+      "table": "comment",
+      "name": "comment_anchor_kind_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.anchor_kind"
+    },
+    {
+      "table": "comment",
+      "name": "comment_author_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.author_id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_body_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.body"
+    },
+    {
+      "table": "comment",
+      "name": "comment_body_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.body"
+    },
+    {
+      "table": "comment",
+      "name": "comment_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.account_id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.company_id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.created_at"
+    },
+    {
+      "table": "comment",
+      "name": "comment_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_mentioned_user_ids_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.mentioned_user_ids"
+    },
+    {
+      "table": "comment",
+      "name": "comment_mentioned_user_ids_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.mentioned_user_ids"
+    },
+    {
+      "table": "comment",
+      "name": "comment_plan_version_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "comment.plan_version_id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_company_id_account_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "account_id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_company_id_author_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "author_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_company_id_plan_version_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "plan_version_id"
+      ],
+      "references": "plan_version.id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_statement_line_key_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "statement_line_key"
+      ],
+      "references": "statement_line.key"
+    },
+    {
+      "table": "comment",
+      "name": "comment_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "comment.id"
+    },
+    {
+      "table": "comment",
+      "name": "comment_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "comment.id"
     },
     {
       "table": "company",
@@ -2813,6 +3559,146 @@
       "references": "import_row_raw.id"
     },
     {
+      "table": "job",
+      "name": "job_attempts_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.attempts"
+    },
+    {
+      "table": "job",
+      "name": "job_attempts_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.attempts"
+    },
+    {
+      "table": "job",
+      "name": "job_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.company_id"
+    },
+    {
+      "table": "job",
+      "name": "job_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.created_at"
+    },
+    {
+      "table": "job",
+      "name": "job_created_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.created_by"
+    },
+    {
+      "table": "job",
+      "name": "job_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.id"
+    },
+    {
+      "table": "job",
+      "name": "job_idempotency_key_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.idempotency_key"
+    },
+    {
+      "table": "job",
+      "name": "job_idempotency_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.idempotency_key"
+    },
+    {
+      "table": "job",
+      "name": "job_kind_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.kind"
+    },
+    {
+      "table": "job",
+      "name": "job_kind_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.kind"
+    },
+    {
+      "table": "job",
+      "name": "job_payload_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.payload"
+    },
+    {
+      "table": "job",
+      "name": "job_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.status"
+    },
+    {
+      "table": "job",
+      "name": "job_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "job.status"
+    },
+    {
+      "table": "job",
+      "name": "job_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "job",
+      "name": "job_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "job",
+      "name": "job_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "job.id"
+    },
+    {
+      "table": "job",
+      "name": "job_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "job.id"
+    },
+    {
+      "table": "job",
+      "name": "job_company_id_kind_idempotency_key_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "kind",
+        "idempotency_key"
+      ],
+      "references": "job.company_id"
+    },
+    {
       "table": "membership",
       "name": "membership_company_id_not_null",
       "type": "CHECK",
@@ -2900,6 +3786,168 @@
         "user_id"
       ],
       "references": "membership.company_id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_body_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.body"
+    },
+    {
+      "table": "notification",
+      "name": "notification_body_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.body"
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.company_id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.created_at"
+    },
+    {
+      "table": "notification",
+      "name": "notification_event_kind_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.event_kind"
+    },
+    {
+      "table": "notification",
+      "name": "notification_event_kind_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.event_kind"
+    },
+    {
+      "table": "notification",
+      "name": "notification_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_job_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.job_id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_plan_version_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.plan_version_id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_recipient_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.recipient_id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_title_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.title"
+    },
+    {
+      "table": "notification",
+      "name": "notification_title_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "notification.title"
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_comment_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "comment_id"
+      ],
+      "references": "comment.id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_job_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "job_id"
+      ],
+      "references": "job.id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_plan_version_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "plan_version_id"
+      ],
+      "references": "plan_version.id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_recipient_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "recipient_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_task_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "task_id"
+      ],
+      "references": "approval_task.id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "notification.id"
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "notification.id"
     },
     {
       "table": "plan_line",
@@ -3403,6 +4451,42 @@
       ]
     },
     {
+      "table": "approval_task",
+      "name": "approval_task_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_company_id_plan_version_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "plan_version_id"
+      ]
+    },
+    {
+      "table": "approval_task",
+      "name": "approval_task_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "approval_task",
+      "name": "idx_approval_task_company_status",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "status",
+        "updated_at"
+      ]
+    },
+    {
       "table": "audit_log",
       "name": "audit_log_pkey",
       "unique": true,
@@ -3446,6 +4530,33 @@
       "unique": true,
       "columns": [
         "id"
+      ]
+    },
+    {
+      "table": "comment",
+      "name": "comment_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "comment",
+      "name": "comment_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "comment",
+      "name": "idx_comment_company_version",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "plan_version_id",
+        "created_at"
       ]
     },
     {
@@ -3682,6 +4793,42 @@
       ]
     },
     {
+      "table": "job",
+      "name": "idx_job_company_created",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "created_at"
+      ]
+    },
+    {
+      "table": "job",
+      "name": "job_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "job",
+      "name": "job_company_id_kind_idempotency_key_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "kind",
+        "idempotency_key"
+      ]
+    },
+    {
+      "table": "job",
+      "name": "job_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
       "table": "membership",
       "name": "membership_company_id_id_key",
       "unique": true,
@@ -3702,6 +4849,33 @@
     {
       "table": "membership",
       "name": "membership_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "notification",
+      "name": "idx_notification_recipient_inbox",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "recipient_id",
+        "created_at"
+      ]
+    },
+    {
+      "table": "notification",
+      "name": "notification_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "notification",
+      "name": "notification_pkey",
       "unique": true,
       "columns": [
         "id"
@@ -3810,6 +4984,11 @@
     }
   ],
   "triggers": [
+    {
+      "table": "approval_task",
+      "name": "trg_approval_task_state_machine",
+      "deferrable": false
+    },
     {
       "table": "audit_log",
       "name": "trg_audit_log_append_only",

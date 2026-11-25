@@ -44,7 +44,15 @@
 17. `plan_line`
 18. `audit_log`
 
-Enforced by `/scripts/schema-scope`: any table outside this set fails the build.
+Enforced by `/scripts/schema-scope`: any table outside the locked M1 set (and M2 collaboration tables once opened under `DEC-017`) fails the build.
+
+### 2.1b Approved M2 Collaboration Tables (`0002_m2_collaboration.sql`, `DEC-017`)
+19. `approval_task` — versioned plan approval state machine (`draft -> submitted -> approved | rejected`) tied to `(company_id, scenario_id, plan_version_id)` with optimistic concurrency `version` and DB trigger transition enforcement.
+20. `comment` — plan comments tied to `(company_id, plan_version_id)` and anchored via canonical keys (`version`, `account:<code>`, `cell:<code>:<period>`, `statement:<key>`) backed by composite company-scoped FKs.
+21. `job` — typed background/in-process job ledger (`§11.2`) keyed idempotently on `(company_id, kind, idempotency_key)` so duplicate dispatch keys never double-execute.
+22. `notification` — company-scoped in-app inbox notifications emitted by `notification.dispatch` jobs for `@mentions` and approval transitions, linked to `job_id`, `plan_version_id`, and `task_id` / `comment_id`.
+
+Migration `0002_m2_collaboration.sql` also expands `membership.role` from `('owner')` to `('owner', 'editor', 'reviewer', 'viewer')` per §4.3 (M2 RBAC expansion).
 
 ### 2.2 Integrity Constraints
 - **IDs & Tenancy**: `uuid PRIMARY KEY DEFAULT gen_random_uuid()`. Child foreign keys are composite `(company_id, <fk>)` referencing `UNIQUE (company_id, id)` on the parent.
@@ -148,6 +156,22 @@ Enforced by `/scripts/schema-scope`: any table outside this set fails the build.
 - **Forecast cutoff resolution**: `GET /api/companies/:companyId/planning/rolling-forecast?year=&scenario=[&cutoffPeriod=]` treats an **omitted** `cutoffPeriod` as “last posted period”: the server resolves it to the highest `fiscal_period.period_no` of that fiscal year that has a line in an ACTIVE import batch, and reports that code in `cutoffPeriod`. A company with no active postings keeps the pure-forecast horizon (`cutoffPeriod: 'NONE'`, every cell `forecast`). An explicit `cutoffPeriod` is honoured exactly as before, and an unknown code is still a typed `PERIOD_NOT_FOUND` (422).
 - **Scenario Comparison (`compareScenarios`)**: Compares `base` vs `target` scenarios account-by-account using §3.5 zero-base rules (`0 vs 0 -> 0.00%`, `x vs 0 -> n/m`). Accounts absent from one scenario keep `null` on that side and `deltaPctStatus: 'null'` — never fabricated as zero.
 
+### 3.8 M2 Collaboration & Workflow Engine (`/core/workflow`, `§11.9`, `WI-0034`)
+- **State Machine (`transitionApprovalTask`)**: Enforces `draft -> submitted -> approved | rejected` in both `/core/workflow` and the `approval_task` PostgreSQL `BEFORE UPDATE` trigger:
+  - `draft -> submitted`: requires actor role `owner` or `editor`; clears no decision fields because none exist yet.
+  - `submitted -> approved`: requires actor role `owner` or `reviewer`; stamps `decided_by`, `decided_at`, optional `decision_reason`, and locks `plan_version.locked_at`. Terminal state (further transitions return `409 MODEL_VERSION_LOCKED`).
+  - `submitted -> rejected`: requires actor role `owner` or `reviewer` and a non-empty `reason` (blank reason returns `422 VALIDATION_FAILED`). Terminal state for that `plan_version`; revisions commit a new `plan_version` (`v2+`).
+  - Disallowed edges (`draft -> approved`, `draft -> rejected`, `submitted -> draft`, `rejected -> *`, `approved -> *`) return typed errors without DB mutation (`COL1`).
+  - Stale `expectedVersion` on transition fails with `409 MODEL_VERSION_LOCKED` (`CC1`).
+- **Canonical Comment Anchors (`buildCommentAnchorKey`)**: Anchors every comment strictly to a `plan_version` plus one canonical scope:
+  - `version` -> `anchorKey = "version"`
+  - `account` -> `anchorKey = "account:<accountCode>"` (composite FK to active/existing company `account`)
+  - `cell` -> `anchorKey = "cell:<accountCode>:<periodCode>"` (composite FKs to company `account` + non-adjustment `fiscal_period`)
+  - `statement_line` -> `anchorKey = "statement:<statementLineKey>"` (FK to `statement_line.key`)
+- **`@Mentions` & Job-Backed Notifications (`extractMentionTokens`, `dispatchNotificationJob`)**:
+  - Mentions starting at whitespace or string start (`@email` or unambiguous `@localpart`) resolve strictly against company `membership` + `app_user`; unknown or ambiguous `@mentions` fail whole with `422 VALIDATION_FAILED` (`UNKNOWN_MENTION:*` / `AMBIGUOUS_MENTION:*`) and write nothing.
+  - Every comment with `@mentions` and every approval transition (`submitted` / `approved` / `rejected`) executes a synchronous sandbox `job` (`kind = 'notification.dispatch'`, deduplicated on `(company_id, kind, idempotency_key)`), inserts `notification` inbox rows, and appends `audit_log` rows for both the workflow mutation and `job.completed` in ONE DB transaction (`COL3`, `JOB1`, `JOB3`).
+
 ---
 
 ## 4. Coherent Sample Corpus & Oracles (M0–M1 — Gates C1–C10)
@@ -181,6 +205,7 @@ The §9.1 seven-screen inventory is unchanged at M2. Planning appears as a **vie
 - **Rolling forecast**: rendered strictly from `RollingForecastResponse`. Each period header names its basis (`actual` / `forecast`); a `null` cell prints `not posted` (actual basis) or `not planned` (forecast basis) and is never shown as `0`; per-row `missingCellCount` and the horizon `totalMissingCells` are displayed; a scenario with `planVersionNo: null` carries a partial banner stating no plan amount was inferred. The cutoff control defaults to **Automatic — last period with actual postings** (server-resolved, §3.7) and every explicit `Pnn` is selectable.
 - **Scenario comparison**: base/target selectors, then the server's `ScenarioComparisonRow`s. `deltaPctStatus: 'zero'` prints the server's zero percent, `'nm'` prints `n/m`, `'null'` prints `not planned` with a comparability column (`not planned in base` / `not planned in target`), and totals are the server's.
 - **States**: loading, empty (no scenario, with an Import-Wizard CTA and the driver authoring form below for authenticated workspaces), error (typed code + retry of the exact failed read or authoring action) and partial (missing cells, no current plan version, one scenario only, base = target, or no postable chart accounts) are all explicit; there is no fabricated forecast, percentage, or second scenario. Browser money arithmetic is zero: every amount is a server decimal string (§5.2).
+- **Collaboration & Workflow panel (`WI-0034`)**: `WorkflowPanel` inside `/model-grid?tab=planning` lets workspace members create/submit/approve/reject `approval_task` records for real committed `plan_version`s (with rejection reasons and optimistic concurrency), post anchored comments with `@mentions` (`version`, `account`, `cell`, `statement_line`), view & acknowledge in-app inbox notifications emitted by notification jobs, and (for owners) add workspace members (`owner`, `editor`, `reviewer`, `viewer`). Zero extra routes or screens are added (`DEC-015`).
 
 ---
 

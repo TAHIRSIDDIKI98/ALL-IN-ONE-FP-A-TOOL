@@ -74,6 +74,25 @@ import {
 } from './db/repositories/planning.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
+  AddCompanyMemberRequestSchema,
+  ApprovalTaskSummarySchema,
+  CompanyMemberSchema,
+  CreateApprovalTaskRequestSchema,
+  CreateWorkflowCommentRequestSchema,
+  TransitionApprovalTaskRequestSchema,
+  WorkflowCommentSummarySchema,
+  WorkflowNotificationSummarySchema,
+  WorkflowOverviewResponseSchema,
+} from '../shared/workflow.js';
+import {
+  addCompanyMember,
+  createApprovalTask,
+  createWorkflowComment,
+  listWorkflowOverview,
+  markWorkflowNotificationRead,
+  transitionApprovalTaskRecord,
+} from './db/repositories/workflow.js';
+import {
   createCompanyWorkspace,
   findAppUserByFirebaseUid,
   getCompanyWorkspace,
@@ -110,6 +129,17 @@ function readUuidParam(rawValue: string | string[] | undefined): string {
   const value = Array.isArray(rawValue) ? (rawValue[0] ?? '') : (rawValue ?? '');
   if (!z.string().uuid().safeParse(value).success) {
     throw new AppError('TENANT_FORBIDDEN');
+  }
+  return value;
+}
+
+function readEntityUuidParam(rawValue: string | string[] | undefined, field: string): string {
+  const value = Array.isArray(rawValue) ? (rawValue[0] ?? '') : (rawValue ?? '');
+  if (!z.string().uuid().safeParse(value).success) {
+    throw new AppError('VALIDATION_FAILED', {
+      userMessage: `Invalid ${field} identifier.`,
+      details: { issues: [`${field}: expected a UUID`] },
+    });
   }
   return value;
 }
@@ -842,6 +872,145 @@ export function createSpineApp(context: SpineContext) {
           targetScenarioName: target,
         });
         res.status(200).json(ScenarioComparisonResponseSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Collaboration & Workflow Engine endpoints (SPEC §3.8, WI-0034):
+   * role-guarded member invitations, approval task state machine, anchored comments with @mentions,
+   * and job-backed inbox notifications.
+   */
+  app.get(
+    '/api/companies/:companyId/workflow',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const scenarioName =
+          typeof req.query['scenario'] === 'string' && req.query['scenario'].trim().length > 0
+            ? req.query['scenario'].trim()
+            : undefined;
+        const overview = await listWorkflowOverview(db, {
+          companyId,
+          actorId: userId,
+          ...(scenarioName === undefined ? {} : { scenarioName }),
+        });
+        res.status(200).json(WorkflowOverviewResponseSchema.parse(overview));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/members',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(AddCompanyMemberRequestSchema, req.body);
+        const member = await db.transaction((tx) =>
+          addCompanyMember(tx, {
+            companyId,
+            actorId: userId,
+            request: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(CompanyMemberSchema.parse(member));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/workflow/approvals',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(CreateApprovalTaskRequestSchema, req.body);
+        const task = await db.transaction((tx) =>
+          createApprovalTask(tx, {
+            companyId,
+            actorId: userId,
+            request: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(ApprovalTaskSummarySchema.parse(task));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/workflow/approvals/:taskId/transition',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const taskId = readEntityUuidParam(req.params['taskId'], 'taskId');
+        const body = parseBody(TransitionApprovalTaskRequestSchema, req.body);
+        const task = await db.transaction((tx) =>
+          transitionApprovalTaskRecord(tx, {
+            companyId,
+            actorId: userId,
+            taskId,
+            request: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(200).json(ApprovalTaskSummarySchema.parse(task));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/workflow/comments',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(CreateWorkflowCommentRequestSchema, req.body);
+        const comment = await db.transaction((tx) =>
+          createWorkflowComment(tx, {
+            companyId,
+            actorId: userId,
+            request: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(WorkflowCommentSummarySchema.parse(comment));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/workflow/notifications/:notificationId/read',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const notificationId = readEntityUuidParam(req.params['notificationId'], 'notificationId');
+        const notification = await db.transaction((tx) =>
+          markWorkflowNotificationRead(tx, {
+            companyId,
+            actorId: userId,
+            notificationId,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(200).json(WorkflowNotificationSummarySchema.parse(notification));
       } catch (error) {
         next(error);
       }

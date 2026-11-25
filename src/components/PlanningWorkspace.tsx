@@ -7,9 +7,23 @@ import type {
   ScenarioKind,
   ScenarioSummary,
 } from '../../shared/planning.js';
+import type {
+  AddCompanyMemberRequest,
+  CommentAnchorKind,
+  CreateApprovalTaskRequest,
+  CreateWorkflowCommentRequest,
+  MembershipRole,
+  TransitionApprovalTaskRequest,
+  WorkflowOverviewResponse,
+} from '../../shared/workflow.js';
 import type { ChartAccountPayload } from '../api/client.js';
 import {
+  availableTaskActions,
+  buildCommentRequestPayload,
   createEmptyDriverRow,
+  createInitialCommentDraft,
+  unreadNotificationCount,
+  type CommentDraft,
   type DriverKind,
   type DriverPlanDraft,
   type DriverRowDraft,
@@ -1017,6 +1031,684 @@ export function DriverAuthoringPanel(props: {
       {props.previewResult !== null && (
         <DriverPlanPreviewTable report={props.previewResult} currency={props.currency} />
       )}
+    </section>
+  );
+}
+
+export interface WorkflowActionFailure {
+  readonly code: string;
+  readonly message: string;
+  readonly issues: readonly string[];
+}
+
+export interface WorkflowPanelProps {
+  readonly workflow: WorkflowOverviewResponse | null;
+  readonly workflowState: 'loading' | 'idle' | 'error';
+  readonly workflowFailure: { readonly code: string; readonly message: string } | null;
+  readonly onRetryLoad: () => void;
+  readonly actionBusy: string | null;
+  readonly actionFailure: WorkflowActionFailure | null;
+  readonly actionNotice: string | null;
+  readonly accounts: readonly ChartAccountPayload[];
+  readonly periods: readonly string[];
+  readonly onCreateTask: (request: CreateApprovalTaskRequest) => void;
+  readonly onTransitionTask: (
+    taskId: string,
+    request: TransitionApprovalTaskRequest,
+  ) => void;
+  readonly onCreateComment: (request: CreateWorkflowCommentRequest) => void;
+  readonly onMarkNotificationRead: (notificationId: string) => void;
+  readonly onAddMember: (request: AddCompanyMemberRequest) => void;
+}
+
+const ANCHOR_KIND_OPTIONS: readonly { readonly value: CommentAnchorKind; readonly label: string }[] = [
+  { value: 'version', label: 'Whole plan version' },
+  { value: 'account', label: 'Account code' },
+  { value: 'cell', label: 'Account + period cell' },
+  { value: 'statement_line', label: 'Statement line key' },
+];
+
+const MEMBER_ROLE_OPTIONS: readonly MembershipRole[] = ['owner', 'editor', 'reviewer', 'viewer'];
+
+export function WorkflowPanel(props: WorkflowPanelProps): ReactElement {
+  const { workflow, actionBusy } = props;
+  const postableAccounts = props.accounts.filter((account) => account.active && account.isPostable);
+  const firstAccount = postableAccounts[0]?.code ?? '';
+  const firstPeriod = props.periods[0] ?? 'P01';
+  const defaultVersionId = workflow?.planVersions[0]?.planVersionId ?? '';
+
+  const [selectedTaskVersionId, setSelectedTaskVersionId] = useState<string>('');
+  const [taskTitle, setTaskTitle] = useState<string>('');
+  const [taskAssigneeId, setTaskAssigneeId] = useState<string>('');
+  const [rejectReasons, setRejectReasons] = useState<Readonly<Record<string, string>>>({});
+
+  const [commentDraft, setCommentDraft] = useState<CommentDraft>(() =>
+    createInitialCommentDraft(defaultVersionId, firstAccount, firstPeriod),
+  );
+  const [commentValidationIssues, setCommentValidationIssues] = useState<readonly string[]>([]);
+
+  const [memberEmail, setMemberEmail] = useState<string>('');
+  const [memberName, setMemberName] = useState<string>('');
+  const [memberRole, setMemberRole] = useState<MembershipRole>('reviewer');
+
+  if (props.workflowState === 'loading') {
+    return (
+      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-6">
+        <h3 className="text-sm font-semibold text-slate-900">Collaboration, approvals &amp; inbox</h3>
+        <LoadingState label="Loading approval tasks, anchored comments, members, and notifications..." />
+      </section>
+    );
+  }
+
+  if (props.workflowState === 'error' && props.workflowFailure !== null) {
+    return (
+      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-6">
+        <h3 className="text-sm font-semibold text-slate-900">Collaboration, approvals &amp; inbox</h3>
+        <InlineErrorState
+          code={props.workflowFailure.code}
+          message={props.workflowFailure.message}
+          onRetry={props.onRetryLoad}
+        />
+      </section>
+    );
+  }
+
+  if (workflow === null) {
+    return (
+      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-6">
+        <h3 className="text-sm font-semibold text-slate-900">Collaboration, approvals &amp; inbox</h3>
+        <PartialBanner detail="Workflow state is not available for this company yet." />
+      </section>
+    );
+  }
+
+  const unreadCount = unreadNotificationCount(workflow.notifications);
+  const taskVersionIds = new Set(workflow.tasks.map((task) => task.planVersionId));
+  const eligibleTaskVersions = workflow.planVersions.filter(
+    (pv) => pv.lockedAt === null && !taskVersionIds.has(pv.planVersionId),
+  );
+  const effectiveTaskVersionId =
+    selectedTaskVersionId.length > 0 &&
+    eligibleTaskVersions.some((pv) => pv.planVersionId === selectedTaskVersionId)
+      ? selectedTaskVersionId
+      : (eligibleTaskVersions[0]?.planVersionId ?? '');
+
+  const effectiveCommentVersionId =
+    commentDraft.planVersionId.length > 0 &&
+    workflow.planVersions.some((pv) => pv.planVersionId === commentDraft.planVersionId)
+      ? commentDraft.planVersionId
+      : defaultVersionId;
+
+  const canCreateTask = workflow.actorRole === 'owner' || workflow.actorRole === 'editor';
+  const canComment = workflow.actorRole !== 'viewer';
+  const canManageMembers = workflow.actorRole === 'owner';
+
+  const handleCreateTask = (): void => {
+    if (effectiveTaskVersionId.length === 0 || taskTitle.trim().length === 0) return;
+    props.onCreateTask({
+      planVersionId: effectiveTaskVersionId,
+      title: taskTitle.trim(),
+      assigneeId: taskAssigneeId.length > 0 ? taskAssigneeId : null,
+    });
+    setTaskTitle('');
+  };
+
+  const handlePostComment = (): void => {
+    const built = buildCommentRequestPayload({
+      ...commentDraft,
+      planVersionId: effectiveCommentVersionId,
+      accountCode:
+        commentDraft.accountCode.length > 0 ? commentDraft.accountCode : firstAccount,
+      periodCode: commentDraft.periodCode.length > 0 ? commentDraft.periodCode : firstPeriod,
+    });
+    if (!built.ok) {
+      setCommentValidationIssues(built.issues);
+      return;
+    }
+    setCommentValidationIssues([]);
+    props.onCreateComment(built.payload);
+    setCommentDraft((prev) => ({ ...prev, body: '' }));
+  };
+
+  const handleAddMember = (): void => {
+    if (memberEmail.trim().length === 0 || memberName.trim().length === 0) return;
+    props.onAddMember({
+      email: memberEmail.trim(),
+      displayName: memberName.trim(),
+      role: memberRole,
+    });
+    setMemberEmail('');
+    setMemberName('');
+  };
+
+  return (
+    <section className="space-y-6 rounded-lg border border-slate-200 bg-white p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Collaboration, approvals &amp; inbox</h3>
+          <p className="mt-1 text-xs text-slate-600">
+            Role: <span className="font-mono font-medium text-slate-900">{workflow.actorRole}</span> ·{' '}
+            {String(workflow.tasks.length)} approval task(s) · {String(workflow.comments.length)} comment(s) ·{' '}
+            {String(unreadCount)} unread notification(s)
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={actionBusy !== null}
+          onClick={props.onRetryLoad}
+          className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Refresh workflow
+        </button>
+      </div>
+
+      {props.actionNotice !== null && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs text-emerald-950"
+        >
+          {props.actionNotice}
+        </div>
+      )}
+
+      {props.actionFailure !== null && (
+        <div className="space-y-2">
+          <InlineErrorState
+            code={props.actionFailure.code}
+            message={props.actionFailure.message}
+            onRetry={props.onRetryLoad}
+          />
+          {props.actionFailure.issues.length > 0 && (
+            <ul
+              aria-label="Workflow validation issues"
+              className="list-disc space-y-1 rounded border border-red-200 bg-red-50 px-6 py-2 font-mono text-xs text-red-900"
+            >
+              {props.actionFailure.issues.map((issue, idx) => (
+                <li key={`${String(idx)}-${issue}`}>{issue}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Approval tasks */}
+      <article className="space-y-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+          Plan version approvals
+        </h4>
+
+        {workflow.tasks.length === 0 ? (
+          <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            No approval tasks exist for this company yet. Commit a plan version, then open a draft review task below.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200 text-xs">
+              <caption className="sr-only">Approval tasks by plan version with workflow state and actions</caption>
+              <thead className="bg-slate-50 text-left font-medium text-slate-700">
+                <tr>
+                  <th scope="col" className="px-3 py-2">Plan version</th>
+                  <th scope="col" className="px-3 py-2">Task</th>
+                  <th scope="col" className="px-3 py-2">Status</th>
+                  <th scope="col" className="px-3 py-2">Owner / Reviewer</th>
+                  <th scope="col" className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {workflow.tasks.map((task) => {
+                  const actions = availableTaskActions(workflow.actorRole, task.status);
+                  const versionInfo = workflow.planVersions.find(
+                    (pv) => pv.planVersionId === task.planVersionId,
+                  );
+                  const isLocked = versionInfo?.lockedAt !== null && versionInfo?.lockedAt !== undefined;
+                  return (
+                    <tr key={task.id}>
+                      <th scope="row" className="px-3 py-2 text-left font-mono text-slate-800">
+                        {task.scenarioName} v{String(task.versionNo)}
+                        {isLocked ? ' (locked)' : ''}
+                      </th>
+                      <td className="px-3 py-2 text-slate-800">
+                        <div className="font-medium">{task.title}</div>
+                        {task.decisionReason !== null && (
+                          <div className="mt-0.5 text-slate-600">Note: {task.decisionReason}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-700">
+                        {task.status} · v{String(task.version)}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        <div>Created by {task.createdByName}</div>
+                        {task.assigneeName !== null && <div>Assignee: {task.assigneeName}</div>}
+                        {task.decidedByName !== null && <div>Decided by {task.decidedByName}</div>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {actions.length === 0 ? (
+                          <span className="text-slate-500">No actions available</span>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {actions.includes('submit') && (
+                              <button
+                                type="button"
+                                disabled={actionBusy !== null}
+                                onClick={() =>
+                                  props.onTransitionTask(task.id, {
+                                    targetStatus: 'submitted',
+                                    expectedVersion: task.version,
+                                  })
+                                }
+                                className="rounded bg-slate-900 px-2.5 py-1 font-medium text-white hover:bg-slate-800"
+                              >
+                                Submit for review
+                              </button>
+                            )}
+                            {actions.includes('approve') && (
+                              <button
+                                type="button"
+                                disabled={actionBusy !== null}
+                                onClick={() =>
+                                  props.onTransitionTask(task.id, {
+                                    targetStatus: 'approved',
+                                    expectedVersion: task.version,
+                                  })
+                                }
+                                className="rounded bg-emerald-700 px-2.5 py-1 font-medium text-white hover:bg-emerald-800"
+                              >
+                                Approve &amp; lock
+                              </button>
+                            )}
+                            {actions.includes('reject') && (
+                              <div className="flex flex-wrap items-center gap-1">
+                                <input
+                                  type="text"
+                                  aria-label={`Rejection reason for ${task.title}`}
+                                  value={rejectReasons[task.id] ?? ''}
+                                  disabled={actionBusy !== null}
+                                  onChange={(event) =>
+                                    setRejectReasons((prev) => ({
+                                      ...prev,
+                                      [task.id]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="Rejection reason"
+                                  className="rounded border border-slate-300 px-2 py-1 text-xs"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={actionBusy !== null}
+                                  onClick={() =>
+                                    props.onTransitionTask(task.id, {
+                                      targetStatus: 'rejected',
+                                      reason: rejectReasons[task.id] ?? '',
+                                      expectedVersion: task.version,
+                                    })
+                                  }
+                                  className="rounded border border-red-300 bg-white px-2.5 py-1 font-medium text-red-700 hover:bg-red-50"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {canCreateTask && eligibleTaskVersions.length > 0 && (
+          <div className="grid gap-3 rounded border border-slate-200 bg-slate-50 p-3 md:grid-cols-4">
+            <div>
+              <label htmlFor="wf-task-version" className="block text-xs font-medium text-slate-600">
+                Plan version
+              </label>
+              <select
+                id="wf-task-version"
+                value={effectiveTaskVersionId}
+                disabled={actionBusy !== null}
+                onChange={(event) => setSelectedTaskVersionId(event.target.value)}
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs"
+              >
+                {eligibleTaskVersions.map((pv) => (
+                  <option key={pv.planVersionId} value={pv.planVersionId}>
+                    {pv.scenarioName} v{String(pv.versionNo)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="wf-task-title" className="block text-xs font-medium text-slate-600">
+                Approval task title
+              </label>
+              <input
+                id="wf-task-title"
+                type="text"
+                value={taskTitle}
+                disabled={actionBusy !== null}
+                onChange={(event) => setTaskTitle(event.target.value)}
+                placeholder="Sign off Q2 forecast v1"
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs"
+              />
+            </div>
+            <div>
+              <label htmlFor="wf-task-assignee" className="block text-xs font-medium text-slate-600">
+                Reviewer assignee (optional)
+              </label>
+              <select
+                id="wf-task-assignee"
+                value={taskAssigneeId}
+                disabled={actionBusy !== null}
+                onChange={(event) => setTaskAssigneeId(event.target.value)}
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs"
+              >
+                <option value="">Any reviewer</option>
+                {workflow.members.map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.displayName} ({member.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                type="button"
+                disabled={actionBusy !== null || taskTitle.trim().length === 0}
+                onClick={handleCreateTask}
+                className="w-full rounded bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Create draft task
+              </button>
+            </div>
+          </div>
+        )}
+      </article>
+
+      {/* Anchored comments & @mentions */}
+      <article className="space-y-3 border-t border-slate-200 pt-4">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+          Anchored comments &amp; @mentions
+        </h4>
+
+        {canComment && workflow.planVersions.length > 0 && (
+          <div className="space-y-3 rounded border border-slate-200 bg-slate-50 p-3">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div>
+                <label htmlFor="wf-comment-version" className="block text-xs font-medium text-slate-600">
+                  Plan version
+                </label>
+                <select
+                  id="wf-comment-version"
+                  value={effectiveCommentVersionId}
+                  disabled={actionBusy !== null}
+                  onChange={(event) =>
+                    setCommentDraft((prev) => ({ ...prev, planVersionId: event.target.value }))
+                  }
+                  className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                >
+                  {workflow.planVersions.map((pv) => (
+                    <option key={pv.planVersionId} value={pv.planVersionId}>
+                      {pv.scenarioName} v{String(pv.versionNo)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="wf-comment-anchor" className="block text-xs font-medium text-slate-600">
+                  Anchor scope
+                </label>
+                <select
+                  id="wf-comment-anchor"
+                  value={commentDraft.anchorKind}
+                  disabled={actionBusy !== null}
+                  onChange={(event) =>
+                    setCommentDraft((prev) => ({
+                      ...prev,
+                      anchorKind: event.target.value as CommentAnchorKind,
+                    }))
+                  }
+                  className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                >
+                  {ANCHOR_KIND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {(commentDraft.anchorKind === 'account' || commentDraft.anchorKind === 'cell') && (
+                <div>
+                  <label htmlFor="wf-comment-account" className="block text-xs font-medium text-slate-600">
+                    Account code
+                  </label>
+                  <input
+                    id="wf-comment-account"
+                    type="text"
+                    value={commentDraft.accountCode || firstAccount}
+                    disabled={actionBusy !== null}
+                    onChange={(event) =>
+                      setCommentDraft((prev) => ({ ...prev, accountCode: event.target.value }))
+                    }
+                    placeholder="4000"
+                    className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs"
+                  />
+                </div>
+              )}
+              {commentDraft.anchorKind === 'cell' && (
+                <div>
+                  <label htmlFor="wf-comment-period" className="block text-xs font-medium text-slate-600">
+                    Period code
+                  </label>
+                  <select
+                    id="wf-comment-period"
+                    value={commentDraft.periodCode || firstPeriod}
+                    disabled={actionBusy !== null}
+                    onChange={(event) =>
+                      setCommentDraft((prev) => ({ ...prev, periodCode: event.target.value }))
+                    }
+                    className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs"
+                  >
+                    {props.periods.map((code) => (
+                      <option key={code} value={code}>
+                        {code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {commentDraft.anchorKind === 'statement_line' && (
+                <div>
+                  <label htmlFor="wf-comment-stmt" className="block text-xs font-medium text-slate-600">
+                    Statement line key
+                  </label>
+                  <input
+                    id="wf-comment-stmt"
+                    type="text"
+                    value={commentDraft.statementLineKey}
+                    disabled={actionBusy !== null}
+                    onChange={(event) =>
+                      setCommentDraft((prev) => ({ ...prev, statementLineKey: event.target.value }))
+                    }
+                    placeholder="pl.revenue.service"
+                    className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs"
+                  />
+                </div>
+              )}
+            </div>
+            <div>
+              <label htmlFor="wf-comment-body" className="block text-xs font-medium text-slate-600">
+                Comment body (mention members with @email)
+              </label>
+              <textarea
+                id="wf-comment-body"
+                rows={2}
+                value={commentDraft.body}
+                disabled={actionBusy !== null}
+                onChange={(event) =>
+                  setCommentDraft((prev) => ({ ...prev, body: event.target.value }))
+                }
+                placeholder={`Confirm Q1 assumption with @${workflow.members[0]?.email ?? 'reviewer@company.com'}`}
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+              />
+            </div>
+            {commentValidationIssues.length > 0 && (
+              <ul
+                role="alert"
+                className="list-disc space-y-1 rounded border border-red-200 bg-red-50 px-5 py-2 font-mono text-xs text-red-900"
+              >
+                {commentValidationIssues.map((issue, idx) => (
+                  <li key={`${String(idx)}-${issue}`}>{issue}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] text-slate-600">
+                Members: {workflow.members.map((m) => `@${m.email}`).join(', ')}
+              </p>
+              <button
+                type="button"
+                disabled={actionBusy !== null}
+                onClick={handlePostComment}
+                className="rounded bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+              >
+                Post anchored comment
+              </button>
+            </div>
+          </div>
+        )}
+
+        {workflow.comments.length === 0 ? (
+          <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            No anchored comments posted on plan versions yet.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {workflow.comments.map((comment) => (
+              <li key={comment.id} className="rounded border border-slate-200 bg-white p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono font-medium text-slate-800">
+                    {comment.scenarioName} v{String(comment.versionNo)} · {comment.anchorKey}
+                  </span>
+                  <span className="text-slate-500">
+                    {comment.authorName} ({comment.authorEmail})
+                  </span>
+                </div>
+                <p className="mt-1 text-slate-800">{comment.body}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+
+      {/* Notification inbox & members */}
+      <div className="grid gap-4 border-t border-slate-200 pt-4 md:grid-cols-2">
+        <article className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+            Notification inbox ({String(unreadCount)} unread)
+          </h4>
+          {workflow.notifications.length === 0 ? (
+            <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              No notifications in your inbox yet.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {workflow.notifications.map((notif) => (
+                <li key={notif.id} className="rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-slate-900">{notif.title}</div>
+                      <div className="mt-0.5 text-slate-700">{notif.body}</div>
+                      <div className="mt-1 font-mono text-[11px] text-slate-500">
+                        {notif.eventKind} · {notif.readAt === null ? 'unread' : 'read'}
+                      </div>
+                    </div>
+                    {notif.readAt === null && (
+                      <button
+                        type="button"
+                        disabled={actionBusy !== null}
+                        onClick={() => props.onMarkNotificationRead(notif.id)}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        Mark read
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+
+        <article className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+            Workspace members ({String(workflow.members.length)})
+          </h4>
+          <ul className="divide-y divide-slate-100 rounded border border-slate-200 text-xs">
+            {workflow.members.map((member) => (
+              <li key={member.userId} className="flex items-center justify-between px-3 py-2">
+                <span>
+                  <span className="font-medium text-slate-900">{member.displayName}</span>{' '}
+                  <span className="text-slate-600">({member.email})</span>
+                </span>
+                <span className="font-mono text-slate-700">{member.role}</span>
+              </li>
+            ))}
+          </ul>
+
+          {canManageMembers && (
+            <div className="grid gap-2 rounded border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
+              <input
+                type="email"
+                aria-label="Member email"
+                value={memberEmail}
+                disabled={actionBusy !== null}
+                onChange={(event) => setMemberEmail(event.target.value)}
+                placeholder="reviewer@onefpa.test"
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+              />
+              <input
+                type="text"
+                aria-label="Member display name"
+                value={memberName}
+                disabled={actionBusy !== null}
+                onChange={(event) => setMemberName(event.target.value)}
+                placeholder="Reviewer Name"
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+              />
+              <div className="flex gap-1">
+                <select
+                  aria-label="Member role"
+                  value={memberRole}
+                  disabled={actionBusy !== null}
+                  onChange={(event) => setMemberRole(event.target.value as MembershipRole)}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+                >
+                  {MEMBER_ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={
+                    actionBusy !== null ||
+                    memberEmail.trim().length === 0 ||
+                    memberName.trim().length === 0
+                  }
+                  onClick={handleAddMember}
+                  className="rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add member
+                </button>
+              </div>
+            </div>
+          )}
+        </article>
+      </div>
     </section>
   );
 }

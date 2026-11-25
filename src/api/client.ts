@@ -17,6 +17,17 @@ import type {
   ScenarioComparisonResponse,
   ScenarioListResponse,
 } from '../../shared/planning.js';
+import type {
+  AddCompanyMemberRequest,
+  ApprovalTaskSummary,
+  CompanyMember,
+  CreateApprovalTaskRequest,
+  CreateWorkflowCommentRequest,
+  TransitionApprovalTaskRequest,
+  WorkflowCommentSummary,
+  WorkflowNotificationSummary,
+  WorkflowOverviewResponse,
+} from '../../shared/workflow.js';
 
 export interface ApiErrorEnvelope {
   readonly code: string;
@@ -182,6 +193,28 @@ export interface ApiClient {
       readonly target: string;
     },
   ): Promise<ScenarioComparisonResponse>;
+  getWorkflowOverview(
+    companyId: string,
+    query?: { readonly scenario?: string | null },
+  ): Promise<WorkflowOverviewResponse>;
+  addCompanyMember(companyId: string, request: AddCompanyMemberRequest): Promise<CompanyMember>;
+  createApprovalTask(
+    companyId: string,
+    request: CreateApprovalTaskRequest,
+  ): Promise<ApprovalTaskSummary>;
+  transitionApprovalTask(
+    companyId: string,
+    taskId: string,
+    request: TransitionApprovalTaskRequest,
+  ): Promise<ApprovalTaskSummary>;
+  createWorkflowComment(
+    companyId: string,
+    request: CreateWorkflowCommentRequest,
+  ): Promise<WorkflowCommentSummary>;
+  markNotificationRead(
+    companyId: string,
+    notificationId: string,
+  ): Promise<WorkflowNotificationSummary>;
 }
 
 function boardPackQuery(period: string, fiscalYear?: number | null): string {
@@ -441,6 +474,47 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         `/api/companies/${encodeURIComponent(companyId)}/planning/compare?${params.toString()}`,
       );
     },
+    getWorkflowOverview: (companyId, query) => {
+      const params = new URLSearchParams();
+      if (query?.scenario !== undefined && query.scenario !== null && query.scenario.trim().length > 0) {
+        params.set('scenario', query.scenario.trim());
+      }
+      const suffix = params.toString();
+      return request<WorkflowOverviewResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/workflow${suffix.length > 0 ? `?${suffix}` : ''}`,
+      );
+    },
+    addCompanyMember: (companyId, memberRequest) =>
+      request<CompanyMember>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/members`,
+        memberRequest,
+      ),
+    createApprovalTask: (companyId, taskRequest) =>
+      request<ApprovalTaskSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/workflow/approvals`,
+        taskRequest,
+      ),
+    transitionApprovalTask: (companyId, taskId, transitionRequest) =>
+      request<ApprovalTaskSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/workflow/approvals/${encodeURIComponent(taskId)}/transition`,
+        transitionRequest,
+      ),
+    createWorkflowComment: (companyId, commentRequest) =>
+      request<WorkflowCommentSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/workflow/comments`,
+        commentRequest,
+      ),
+    markNotificationRead: (companyId, notificationId) =>
+      request<WorkflowNotificationSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/workflow/notifications/${encodeURIComponent(notificationId)}/read`,
+        {},
+      ),
   };
 }
 

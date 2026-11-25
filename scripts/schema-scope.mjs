@@ -30,7 +30,18 @@ export const APPROVED_M1_TABLES = [
   'audit_log',
 ];
 
-const APPROVED_SET = new Set(APPROVED_M1_TABLES);
+/** Opened in M2 under DEC-014 & DEC-017 (§11.2, §11.9). Workforce/CapEx/FX/Consolidation remain blocked. */
+export const APPROVED_M2_COLLABORATION_TABLES = [
+  'approval_task',
+  'comment',
+  'job',
+  'notification',
+];
+
+const APPROVED_SET = new Set([
+  ...APPROVED_M1_TABLES,
+  ...APPROVED_M2_COLLABORATION_TABLES,
+]);
 
 export function checkSchemaScope(rootDir = process.cwd(), { requireComplete = false } = {}) {
   const migDir = join(rootDir, 'db', 'migrations');
@@ -89,5 +100,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const v of violations) console.error(`  ✗ ${v}`);
     process.exit(1);
   }
-  console.log(`✓ schema-scope green (${tables.length} migration table(s) verified against M1 18-table law).`);
+  console.log(`✓ schema-scope green (${tables.length} migration table(s) verified against M1+M2 collaboration scope).`);
 }

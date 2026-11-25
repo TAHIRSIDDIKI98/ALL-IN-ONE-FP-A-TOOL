@@ -1,4 +1,12 @@
 import type { DriverDefinitionInput, ScenarioKind, ScenarioSummary } from '../../shared/planning.js';
+import type {
+  ApprovalStatus,
+  CommentAnchorKind,
+  CommentAnchorRequest,
+  CreateWorkflowCommentRequest,
+  MembershipRole,
+  WorkflowNotificationSummary,
+} from '../../shared/workflow.js';
 
 /**
  * Pure selection and driver-authoring rules for the planning view (WI-0032, WI-0033).
@@ -342,4 +350,115 @@ export function buildDriverDefinitions(
     drivers: built,
   };
 }
+
+export interface CommentDraft {
+  readonly planVersionId: string;
+  readonly anchorKind: CommentAnchorKind;
+  readonly accountCode: string;
+  readonly periodCode: string;
+  readonly statementLineKey: string;
+  readonly body: string;
+}
+
+export function createInitialCommentDraft(
+  defaultPlanVersionId = '',
+  defaultAccountCode = '',
+  defaultPeriodCode = 'P01',
+): CommentDraft {
+  return {
+    planVersionId: defaultPlanVersionId,
+    anchorKind: 'version',
+    accountCode: defaultAccountCode,
+    periodCode: defaultPeriodCode,
+    statementLineKey: 'pl.revenue.service',
+    body: '',
+  };
+}
+
+export function buildCommentRequestPayload(
+  draft: CommentDraft,
+): { readonly ok: true; readonly payload: CreateWorkflowCommentRequest } | { readonly ok: false; readonly issues: readonly string[] } {
+  const issues: string[] = [];
+  const planVersionId = draft.planVersionId.trim();
+  const body = draft.body.trim();
+
+  if (planVersionId.length === 0) {
+    issues.push('PLAN_VERSION_REQUIRED: Select a committed plan version before posting a comment.');
+  }
+  if (body.length === 0) {
+    issues.push('COMMENT_BODY_REQUIRED: Enter a comment message before posting.');
+  }
+
+  let anchor: CommentAnchorRequest | null = null;
+  if (draft.anchorKind === 'version') {
+    anchor = { kind: 'version' };
+  } else if (draft.anchorKind === 'account') {
+    const accountCode = draft.accountCode.trim();
+    if (accountCode.length === 0) {
+      issues.push('ACCOUNT_CODE_REQUIRED: Select an account code for an account-anchored comment.');
+    } else {
+      anchor = { kind: 'account', accountCode };
+    }
+  } else if (draft.anchorKind === 'cell') {
+    const accountCode = draft.accountCode.trim();
+    const periodCode = draft.periodCode.trim();
+    if (accountCode.length === 0) {
+      issues.push('ACCOUNT_CODE_REQUIRED: Select an account code for a cell-anchored comment.');
+    }
+    if (periodCode.length === 0) {
+      issues.push('PERIOD_CODE_REQUIRED: Select a fiscal period for a cell-anchored comment.');
+    }
+    if (accountCode.length > 0 && periodCode.length > 0) {
+      anchor = { kind: 'cell', accountCode, periodCode };
+    }
+  } else {
+    const statementLineKey = draft.statementLineKey.trim();
+    if (statementLineKey.length === 0) {
+      issues.push('STATEMENT_LINE_REQUIRED: Provide a statement line key (e.g. pl.revenue.service).');
+    } else {
+      anchor = { kind: 'statement_line', statementLineKey };
+    }
+  }
+
+  if (issues.length > 0 || anchor === null) {
+    return { ok: false, issues };
+  }
+
+  return {
+    ok: true,
+    payload: {
+      planVersionId,
+      anchor,
+      body,
+    },
+  };
+}
+
+export function unreadNotificationCount(
+  notifications: readonly WorkflowNotificationSummary[],
+): number {
+  let count = 0;
+  for (const item of notifications) {
+    if (item.readAt === null) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export type ApprovalActionKind = 'submit' | 'approve' | 'reject';
+
+export function availableTaskActions(
+  actorRole: MembershipRole,
+  status: ApprovalStatus,
+): readonly ApprovalActionKind[] {
+  if (status === 'draft') {
+    return actorRole === 'owner' || actorRole === 'editor' ? ['submit'] : [];
+  }
+  if (status === 'submitted') {
+    return actorRole === 'owner' || actorRole === 'reviewer' ? ['approve', 'reject'] : [];
+  }
+  return [];
+}
+
 

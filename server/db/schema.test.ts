@@ -190,7 +190,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
     const actualTables = tablesRes.rows.map((r) => r.tablename);
     const expectedTables = [...schemaSnapshot.tables].sort();
     expect(actualTables).toEqual(expectedTables);
-    expect(actualTables).toHaveLength(18);
+    expect(actualTables).toHaveLength(22);
 
     // Idempotent second run applies 0 new files
     const secondRun = await applyMigrations(db);
@@ -411,5 +411,158 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
     await expect(
       db.query(`DELETE FROM audit_log WHERE id = $1`, [first.id]),
     ).rejects.toThrow(/AUDIT_LOG_IMMUTABLE/);
+  });
+
+  it('WI-0034 COL1–COL3: enforces approval_task state machine, anchored comment keys, job idempotency, and tenant membership FKs', async () => {
+    const s = await seedBaseTenants(db, 'wf');
+    const verBRes = await db.query<{ id: string }>(
+      `INSERT INTO scenario (company_id, kind, name, status) VALUES ($1, 'forecast', 'Tenant B Forecast', 'draft') RETURNING id`,
+      [s.companyB],
+    );
+    const scenB = verBRes.rows[0]!.id;
+    const pvBRes = await db.query<{ id: string }>(
+      `INSERT INTO plan_version (company_id, scenario_id, version_no, label) VALUES ($1, $2, 1, 'B v1') RETURNING id`,
+      [s.companyB, scenB],
+    );
+    const versionB = pvBRes.rows[0]!.id;
+
+    // Create a second user belonging ONLY to companyB (not companyA)
+    const revUserRes = await db.query<{ id: string }>(
+      `INSERT INTO app_user (firebase_uid, email, display_name) VALUES ('uid-wf-b-only', 'bonly@example.com', 'B Only') RETURNING id`,
+    );
+    const bOnlyUserId = revUserRes.rows[0]!.id;
+    await db.query(`INSERT INTO membership (company_id, user_id, role) VALUES ($1, $2, 'reviewer')`, [
+      s.companyB,
+      bOnlyUserId,
+    ]);
+
+    // Negative: assigning approval_task in companyA to non-member bOnlyUserId fails composite membership FK
+    await expect(
+      db.query(
+        `INSERT INTO approval_task (company_id, scenario_id, plan_version_id, title, status, created_by, assignee_id)
+         VALUES ($1, $2, $3, 'Cross-tenant assignee', 'draft', $4, $5)`,
+        [s.companyA, s.scenarioA, s.versionA, s.userId, bOnlyUserId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative: referencing companyB plan_version from companyA fails composite FK
+    await expect(
+      db.query(
+        `INSERT INTO approval_task (company_id, scenario_id, plan_version_id, title, status, created_by)
+         VALUES ($1, $2, $3, 'Cross-tenant version', 'draft', $4)`,
+        [s.companyA, s.scenarioA, versionB, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Positive: create task in draft
+    const taskRes = await db.query<{ id: string }>(
+      `INSERT INTO approval_task (company_id, scenario_id, plan_version_id, title, status, created_by)
+       VALUES ($1, $2, $3, 'Review FY26 Budget v1', 'draft', $4) RETURNING id`,
+      [s.companyA, s.scenarioA, s.versionA, s.userId],
+    );
+    const taskId = taskRes.rows[0]!.id;
+
+    // Negative COL1: draft -> approved direct jump blocked by trigger
+    await expect(
+      db.query(
+        `UPDATE approval_task
+            SET status = 'approved', submitted_by = $1, submitted_at = now(), decided_by = $1, decided_at = now()
+          WHERE id = $2`,
+        [s.userId, taskId],
+      ),
+    ).rejects.toThrow(/INVALID_WORKFLOW_TRANSITION/);
+
+    // Positive: draft -> submitted
+    await db.query(
+      `UPDATE approval_task
+          SET status = 'submitted', submitted_by = $1, submitted_at = now(), version = version + 1
+        WHERE id = $2`,
+      [s.userId, taskId],
+    );
+
+    // Negative COL1: submitted -> rejected without reason blocked by CHECK
+    await expect(
+      db.query(
+        `UPDATE approval_task
+            SET status = 'rejected', decided_by = $1, decided_at = now(), decision_reason = '   '
+          WHERE id = $2`,
+        [s.userId, taskId],
+      ),
+    ).rejects.toThrow();
+
+    // Positive: submitted -> approved
+    await db.query(
+      `UPDATE approval_task
+          SET status = 'approved', decided_by = $1, decided_at = now(), decision_reason = 'Signed off', version = version + 1
+        WHERE id = $2`,
+      [s.userId, taskId],
+    );
+
+    // Negative COL1: approved -> rejected blocked by trigger (terminal)
+    await expect(
+      db.query(
+        `UPDATE approval_task
+            SET status = 'rejected', decision_reason = 'Revert'
+          WHERE id = $1`,
+        [taskId],
+      ),
+    ).rejects.toThrow(/INVALID_WORKFLOW_TRANSITION/);
+
+    // Negative COL2: cell anchor missing period_id or mismatched key prefix rejected by CHECK
+    await expect(
+      db.query(
+        `INSERT INTO comment (company_id, plan_version_id, anchor_kind, anchor_key, account_id, author_id, body)
+         VALUES ($1, $2, 'cell', 'cell:004000:P01', $3, $4, 'Missing period FK')`,
+        [s.companyA, s.versionA, s.revAcctA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      db.query(
+        `INSERT INTO comment (company_id, plan_version_id, anchor_kind, anchor_key, account_id, period_id, author_id, body)
+         VALUES ($1, $2, 'cell', 'cell:004000:P01', $3, $4, $5, 'Cross-tenant account')`,
+        [s.companyA, s.versionA, s.revAcctB, s.periodA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Positive COL2: valid cell comment + job + notification + duplicate idempotency_key blocked (JOB1)
+    const commentRes = await db.query<{ id: string }>(
+      `INSERT INTO comment (company_id, plan_version_id, anchor_kind, anchor_key, account_id, period_id, author_id, body, mentioned_user_ids)
+       VALUES ($1, $2, 'cell', 'cell:004000:P01', $3, $4, $5, 'Check Q1 growth @owner', $6::jsonb)
+       RETURNING id`,
+      [s.companyA, s.versionA, s.revAcctA, s.periodA, s.userId, JSON.stringify([s.userId])],
+    );
+    const commentId = commentRes.rows[0]!.id;
+
+    const jobRes = await db.query<{ id: string }>(
+      `INSERT INTO job (company_id, kind, idempotency_key, status, attempts, payload, result_ref, created_by, completed_at)
+       VALUES ($1, 'notification.dispatch', 'comment:test-1', 'completed', 1, '{}'::jsonb, '{"count":1}'::jsonb, $2, now())
+       RETURNING id`,
+      [s.companyA, s.userId],
+    );
+    const jobId = jobRes.rows[0]!.id;
+
+    await expect(
+      db.query(
+        `INSERT INTO job (company_id, kind, idempotency_key, status, attempts, payload, created_by)
+         VALUES ($1, 'notification.dispatch', 'comment:test-1', 'queued', 0, '{}'::jsonb, $2)`,
+        [s.companyA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    await db.query(
+      `INSERT INTO notification (company_id, recipient_id, job_id, event_kind, plan_version_id, comment_id, title, body)
+       VALUES ($1, $2, $3, 'mention', $4, $5, 'Mentioned on cell:004000:P01', 'Check Q1 growth')`,
+      [s.companyA, s.userId, jobId, s.versionA, commentId],
+    );
+
+    // Negative COL3: cross-tenant notification recipient rejected
+    await expect(
+      db.query(
+        `INSERT INTO notification (company_id, recipient_id, job_id, event_kind, plan_version_id, comment_id, title, body)
+         VALUES ($1, $2, $3, 'mention', $4, $5, 'Cross tenant', 'Should fail')`,
+        [s.companyA, bOnlyUserId, jobId, s.versionA, commentId],
+      ),
+    ).rejects.toThrow();
   });
 });

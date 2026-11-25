@@ -37,10 +37,15 @@ export async function appendAuditLog(
   payload: AuditEntryPayload,
 ): Promise<AuditChainRecord> {
   const latest = await tx.query<{ entry_hash: string }>(
-    `SELECT entry_hash
-       FROM audit_log
-      WHERE company_id = $1
-      ORDER BY occurred_at DESC, created_at DESC, id DESC
+    `SELECT a.entry_hash
+       FROM audit_log a
+      WHERE a.company_id = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM audit_log child
+           WHERE child.company_id = $1
+             AND child.prev_hash = a.entry_hash
+        )
+      ORDER BY a.occurred_at DESC, a.created_at DESC, a.id DESC
       LIMIT 1`,
     [payload.companyId],
   );
@@ -89,7 +94,7 @@ export async function verifyCompanyAuditLog(
     [companyId],
   );
 
-  const records: AuditChainRecord[] = res.rows.map((r) => ({
+  const rawRecords: AuditChainRecord[] = res.rows.map((r) => ({
     id: r.id,
     companyId: r.company_id,
     actorId: r.actor_id,
@@ -103,5 +108,39 @@ export async function verifyCompanyAuditLog(
     entryHash: r.entry_hash,
   }));
 
-  return verifyAuditChain(records);
+  // Walk the hash-linked chain from GENESIS_PREV_HASH so rows committed in the same transaction
+  // or millisecond are verified in true link order rather than arbitrary UUIDv4 tie-break order.
+  const byPrev = new Map<string, AuditChainRecord[]>();
+  for (const rec of rawRecords) {
+    const bucket = byPrev.get(rec.prevHash);
+    if (bucket === undefined) {
+      byPrev.set(rec.prevHash, [rec]);
+    } else {
+      bucket.push(rec);
+    }
+  }
+
+  const ordered: AuditChainRecord[] = [];
+  const visited = new Set<AuditChainRecord>();
+  let cursor = GENESIS_PREV_HASH;
+  while (true) {
+    const candidates = byPrev.get(cursor);
+    if (candidates === undefined || candidates.length !== 1) {
+      break;
+    }
+    const next = candidates[0]!;
+    if (visited.has(next)) {
+      break;
+    }
+    visited.add(next);
+    ordered.push(next);
+    cursor = next.entryHash;
+  }
+  for (const rec of rawRecords) {
+    if (!visited.has(rec)) {
+      ordered.push(rec);
+    }
+  }
+
+  return verifyAuditChain(ordered);
 }

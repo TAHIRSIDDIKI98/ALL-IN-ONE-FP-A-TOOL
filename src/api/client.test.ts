@@ -949,4 +949,148 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(cmp.totalDelta).toBe('1547.00');
   });
 
+  it('calls M2 workflow endpoints with relative URLs and typed payloads (WI-0034)', async () => {
+    const companyId = '11111111-1111-4111-8111-111111111111';
+    const versionId = '22222222-2222-4222-8222-222222222222';
+    const taskId = '33333333-3333-4333-8333-333333333333';
+    const commentId = '44444444-4444-4444-8444-444444444444';
+    const notifId = '55555555-5555-4555-8555-555555555555';
+    const userId = '66666666-6666-4666-8666-666666666666';
+
+    let step = 0;
+    const { fetchImpl, calls } = fakeFetch(() => {
+      step += 1;
+      if (step === 1) {
+        return {
+          status: 200,
+          body: {
+            companyId,
+            actorRole: 'owner',
+            members: [],
+            planVersions: [],
+            tasks: [],
+            comments: [],
+            notifications: [],
+          },
+        };
+      }
+      if (step === 2) {
+        return {
+          status: 201,
+          body: { userId, email: 'rev@onefpa.test', displayName: 'Reviewer', role: 'reviewer' },
+        };
+      }
+      if (step === 3 || step === 4) {
+        return {
+          status: step === 3 ? 201 : 200,
+          body: {
+            id: taskId,
+            companyId,
+            scenarioId: versionId,
+            scenarioName: 'Base Forecast',
+            planVersionId: versionId,
+            versionNo: 1,
+            versionLabel: 'Base Forecast v1',
+            title: 'Approve Q1',
+            status: step === 3 ? 'draft' : 'submitted',
+            version: step === 3 ? 1 : 2,
+            createdBy: userId,
+            createdByName: 'Owner',
+            assigneeId: null,
+            assigneeName: null,
+            submittedBy: step === 3 ? null : userId,
+            submittedAt: step === 3 ? null : '2026-11-25T12:00:00.000Z',
+            decidedBy: null,
+            decidedByName: null,
+            decidedAt: null,
+            decisionReason: null,
+            createdAt: '2026-11-25T12:00:00.000Z',
+            updatedAt: '2026-11-25T12:00:00.000Z',
+          },
+        };
+      }
+      if (step === 5) {
+        return {
+          status: 201,
+          body: {
+            id: commentId,
+            companyId,
+            planVersionId: versionId,
+            versionNo: 1,
+            scenarioName: 'Base Forecast',
+            anchorKind: 'cell',
+            anchorKey: 'cell:4000:P01',
+            accountCode: '4000',
+            periodCode: 'P01',
+            statementLineKey: null,
+            authorId: userId,
+            authorName: 'Owner',
+            authorEmail: 'owner@onefpa.test',
+            body: 'Check @rev@onefpa.test',
+            mentionedUserIds: [userId],
+            createdAt: '2026-11-25T12:00:00.000Z',
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          id: notifId,
+          companyId,
+          recipientId: userId,
+          jobId: versionId,
+          eventKind: 'mention',
+          planVersionId: versionId,
+          taskId: null,
+          commentId,
+          title: 'Mentioned on cell:4000:P01',
+          body: 'Check @rev@onefpa.test',
+          readAt: '2026-11-25T12:01:00.000Z',
+          createdAt: '2026-11-25T12:00:00.000Z',
+        },
+      };
+    });
+
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const overview = await client.getWorkflowOverview(companyId, { scenario: 'Base Forecast' });
+    expect(overview.actorRole).toBe('owner');
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/workflow?scenario=Base+Forecast`);
+
+    const member = await client.addCompanyMember(companyId, {
+      email: 'rev@onefpa.test',
+      displayName: 'Reviewer',
+      role: 'reviewer',
+    });
+    expect(member.role).toBe('reviewer');
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/members`);
+
+    const createdTask = await client.createApprovalTask(companyId, {
+      planVersionId: versionId,
+      title: 'Approve Q1',
+    });
+    expect(createdTask.status).toBe('draft');
+    expect(calls[2]?.url).toBe(`/api/companies/${companyId}/workflow/approvals`);
+
+    const submitted = await client.transitionApprovalTask(companyId, taskId, {
+      targetStatus: 'submitted',
+      expectedVersion: 1,
+    });
+    expect(submitted.status).toBe('submitted');
+    expect(calls[3]?.url).toBe(`/api/companies/${companyId}/workflow/approvals/${taskId}/transition`);
+
+    const comment = await client.createWorkflowComment(companyId, {
+      planVersionId: versionId,
+      anchor: { kind: 'cell', accountCode: '4000', periodCode: 'P01' },
+      body: 'Check @rev@onefpa.test',
+    });
+    expect(comment.anchorKey).toBe('cell:4000:P01');
+    expect(calls[4]?.url).toBe(`/api/companies/${companyId}/workflow/comments`);
+
+    const readNotif = await client.markNotificationRead(companyId, notifId);
+    expect(readNotif.readAt).toBe('2026-11-25T12:01:00.000Z');
+    expect(calls[5]?.url).toBe(
+      `/api/companies/${companyId}/workflow/notifications/${notifId}/read`,
+    );
+  });
 });

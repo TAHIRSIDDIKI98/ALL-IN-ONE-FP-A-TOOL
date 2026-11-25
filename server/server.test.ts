@@ -1705,4 +1705,426 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     const unauthRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/scenarios`);
     expect(unauthRes.status).toBe(401);
   }, 60_000);
+
+  it('WI-0034 COL1–COL3 & JOB1/3: executes approval state machine, RBAC, anchored @mentions, job-backed notifications, and audit chain over HTTP', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:wf-owner@onefpa.test',
+      email: 'wf-owner@onefpa.test',
+      displayName: 'WF Owner',
+    };
+    const editor: VerifiedIdentity = {
+      firebaseUid: 'sandbox:wf-editor@onefpa.test',
+      email: 'wf-editor@onefpa.test',
+      displayName: 'WF Editor',
+    };
+    const reviewer: VerifiedIdentity = {
+      firebaseUid: 'sandbox:wf-reviewer@onefpa.test',
+      email: 'wf-reviewer@onefpa.test',
+      displayName: 'WF Reviewer',
+    };
+    const viewer: VerifiedIdentity = {
+      firebaseUid: 'sandbox:wf-viewer@onefpa.test',
+      email: 'wf-viewer@onefpa.test',
+      displayName: 'WF Viewer',
+    };
+
+    // 1. Setup company, chart, and commit two plan versions (v1 and v2)
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Workflow Collab Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'HQ',
+        entityName: 'HQ',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    const chartCsv = [
+      'code,name,type,normal_side,statement_line_key',
+      '4000,Subscription Revenue,revenue,credit,pl.revenue.service',
+      '5000,Hosting COGS,expense,debit,pl.cogs.direct',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ csvText: chartCsv }),
+        })
+      ).status,
+    ).toBe(201);
+
+    const commitV1Res = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'FY26 Base',
+        scenarioKind: 'forecast',
+        periods: ['P01', 'P02'],
+        drivers: [
+          {
+            kind: 'fixed',
+            driverKey: 'rev',
+            accountCode: '4000',
+            assumptionLabel: 'Core SaaS',
+            amount: '1000.00',
+          },
+        ],
+      }),
+    });
+    expect(commitV1Res.status).toBe(201);
+    const v1 = (await commitV1Res.json()) as { planVersionId: string };
+
+    const commitV2Res = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'FY26 Base',
+        scenarioKind: 'forecast',
+        periods: ['P01', 'P02'],
+        drivers: [
+          {
+            kind: 'fixed',
+            driverKey: 'rev',
+            accountCode: '4000',
+            assumptionLabel: 'Revised SaaS',
+            amount: '1200.00',
+          },
+        ],
+      }),
+    });
+    expect(commitV2Res.status).toBe(201);
+    const v2 = (await commitV2Res.json()) as { planVersionId: string };
+
+    // 2. Owner adds editor, reviewer, viewer; non-owner blocked from member management (403)
+    const addEd = await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({ email: editor.email, displayName: editor.displayName, role: 'editor' }),
+    });
+    expect(addEd.status).toBe(201);
+    const addRev = await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({ email: reviewer.email, displayName: reviewer.displayName, role: 'reviewer' }),
+    });
+    expect(addRev.status).toBe(201);
+    const reviewerMember = (await addRev.json()) as { userId: string };
+    const addView = await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({ email: viewer.email, displayName: viewer.displayName, role: 'viewer' }),
+    });
+    expect(addView.status).toBe(201);
+
+    const nonOwnerAdd = await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+      method: 'POST',
+      headers: bearer(editor),
+      body: JSON.stringify({ email: 'extra@onefpa.test', displayName: 'Extra', role: 'viewer' }),
+    });
+    expect(nonOwnerAdd.status).toBe(403);
+
+    // 3. Viewer cannot create approval task or comment (403)
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/workflow/approvals`, {
+          method: 'POST',
+          headers: bearer(viewer),
+          body: JSON.stringify({ planVersionId: v1.planVersionId, title: 'Viewer task' }),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/workflow/comments`, {
+          method: 'POST',
+          headers: bearer(viewer),
+          body: JSON.stringify({
+            planVersionId: v1.planVersionId,
+            anchor: { kind: 'version' },
+            body: 'Viewer note',
+          }),
+        })
+      ).status,
+    ).toBe(403);
+
+    // 4. Editor creates draft approval task for v1; duplicate task on same planVersionId rejected (409)
+    const createT1 = await fetch(`${baseUrl}/api/companies/${companyId}/workflow/approvals`, {
+      method: 'POST',
+      headers: bearer(editor),
+      body: JSON.stringify({
+        planVersionId: v1.planVersionId,
+        title: 'Approve v1 forecast',
+        assigneeId: reviewerMember.userId,
+      }),
+    });
+    expect(createT1.status).toBe(201);
+    const task1 = (await createT1.json()) as { id: string; status: string; version: number };
+    expect(task1.status).toBe('draft');
+    expect(task1.version).toBe(1);
+
+    const dupT1 = await fetch(`${baseUrl}/api/companies/${companyId}/workflow/approvals`, {
+      method: 'POST',
+      headers: bearer(editor),
+      body: JSON.stringify({ planVersionId: v1.planVersionId, title: 'Duplicate' }),
+    });
+    expect(dupT1.status).toBe(409);
+
+    // Negative COL1: draft -> approved direct jump fails (422)
+    const skipSubmit = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task1.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(reviewer),
+        body: JSON.stringify({ targetStatus: 'approved', expectedVersion: 1 }),
+      },
+    );
+    expect(skipSubmit.status).toBe(422);
+
+    // Editor submits v1 (draft -> submitted); dispatches notification job to reviewer
+    const submitT1 = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task1.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(editor),
+        body: JSON.stringify({ targetStatus: 'submitted', expectedVersion: 1 }),
+      },
+    );
+    expect(submitT1.status).toBe(200);
+    const submittedT1 = (await submitT1.json()) as { status: string; version: number };
+    expect(submittedT1.status).toBe('submitted');
+    expect(submittedT1.version).toBe(2);
+
+    // Negative RBAC: editor cannot approve (403)
+    const editorApprove = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task1.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(editor),
+        body: JSON.stringify({ targetStatus: 'approved', expectedVersion: 2 }),
+      },
+    );
+    expect(editorApprove.status).toBe(403);
+
+    // Negative COL1: reviewer cannot reject without reason (422)
+    const rejectNoReason = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task1.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(reviewer),
+        body: JSON.stringify({ targetStatus: 'rejected', reason: '   ', expectedVersion: 2 }),
+      },
+    );
+    expect(rejectNoReason.status).toBe(422);
+
+    // Reviewer rejects v1 WITH reason -> notifies editor & creator
+    const rejectOk = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task1.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(reviewer),
+        body: JSON.stringify({
+          targetStatus: 'rejected',
+          reason: 'Revise P02 run rate upward',
+          expectedVersion: 2,
+        }),
+      },
+    );
+    expect(rejectOk.status).toBe(200);
+    const rejectedT1 = (await rejectOk.json()) as { status: string; decisionReason: string; version: number };
+    expect(rejectedT1.status).toBe('rejected');
+    expect(rejectedT1.decisionReason).toBe('Revise P02 run rate upward');
+
+    // Negative COL1: rejected task cannot transition further (422)
+    const afterReject = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task1.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(reviewer),
+        body: JSON.stringify({ targetStatus: 'approved', expectedVersion: 3 }),
+      },
+    );
+    expect(afterReject.status).toBe(422);
+
+    // 5. v2 approval: draft -> submitted -> optimistic stale check (409) -> approved -> locks plan_version (409 on further edits)
+    const createT2 = await fetch(`${baseUrl}/api/companies/${companyId}/workflow/approvals`, {
+      method: 'POST',
+      headers: bearer(editor),
+      body: JSON.stringify({
+        planVersionId: v2.planVersionId,
+        title: 'Approve v2 revised forecast',
+        assigneeId: reviewerMember.userId,
+      }),
+    });
+    expect(createT2.status).toBe(201);
+    const task2 = (await createT2.json()) as { id: string; version: number };
+
+    const submitT2 = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task2.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(editor),
+        body: JSON.stringify({ targetStatus: 'submitted', expectedVersion: 1 }),
+      },
+    );
+    expect(submitT2.status).toBe(200);
+
+    // Stale expectedVersion = 1 returns 409 MODEL_VERSION_LOCKED
+    const staleApprove = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task2.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(reviewer),
+        body: JSON.stringify({ targetStatus: 'approved', expectedVersion: 1 }),
+      },
+    );
+    expect(staleApprove.status).toBe(409);
+
+    const approveT2 = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task2.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(reviewer),
+        body: JSON.stringify({
+          targetStatus: 'approved',
+          reason: 'Aligned to revised SaaS pipeline',
+          expectedVersion: 2,
+        }),
+      },
+    );
+    expect(approveT2.status).toBe(200);
+
+    // Verify plan_version.locked_at stamped in DB
+    const pvLockCheck = await db.query<{ locked_at: Date | null }>(
+      `SELECT locked_at FROM plan_version WHERE company_id = $1 AND id = $2`,
+      [companyId, v2.planVersionId],
+    );
+    expect(pvLockCheck.rows[0]?.locked_at).not.toBeNull();
+
+    // Terminal approved task refuses further transition (409 MODEL_VERSION_LOCKED)
+    const reTransitionLocked = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/approvals/${task2.id}/transition`,
+      {
+        method: 'POST',
+        headers: bearer(reviewer),
+        body: JSON.stringify({ targetStatus: 'rejected', reason: 'Late change', expectedVersion: 3 }),
+      },
+    );
+    expect(reTransitionLocked.status).toBe(409);
+
+    // 6. Anchored comments & @mentions -> job-backed inbox notification & read tracking
+    const cellCommentRes = await fetch(`${baseUrl}/api/companies/${companyId}/workflow/comments`, {
+      method: 'POST',
+      headers: bearer(editor),
+      body: JSON.stringify({
+        planVersionId: v2.planVersionId,
+        anchor: { kind: 'cell', accountCode: '4000', periodCode: 'P01' },
+        body: `Confirmed revenue uplift with @${reviewer.email} and @${owner.email}`,
+      }),
+    });
+    expect(cellCommentRes.status).toBe(201);
+    const cellComment = (await cellCommentRes.json()) as {
+      anchorKey: string;
+      mentionedUserIds: string[];
+    };
+    expect(cellComment.anchorKey).toBe('cell:4000:P01');
+    expect(cellComment.mentionedUserIds).toHaveLength(2);
+
+    const stmtCommentRes = await fetch(`${baseUrl}/api/companies/${companyId}/workflow/comments`, {
+      method: 'POST',
+      headers: bearer(reviewer),
+      body: JSON.stringify({
+        planVersionId: v2.planVersionId,
+        anchor: { kind: 'statement_line', statementLineKey: 'pl.revenue.service' },
+        body: 'Matches P&L service revenue target.',
+      }),
+    });
+    expect(stmtCommentRes.status).toBe(201);
+
+    // Negative COL2/COL3: unknown account anchor and unknown @mention fail cleanly (422)
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/workflow/comments`, {
+          method: 'POST',
+          headers: bearer(editor),
+          body: JSON.stringify({
+            planVersionId: v2.planVersionId,
+            anchor: { kind: 'account', accountCode: '9999' },
+            body: 'Bad account',
+          }),
+        })
+      ).status,
+    ).toBe(422);
+
+    const badMentionRes = await fetch(`${baseUrl}/api/companies/${companyId}/workflow/comments`, {
+      method: 'POST',
+      headers: bearer(editor),
+      body: JSON.stringify({
+        planVersionId: v2.planVersionId,
+        anchor: { kind: 'version' },
+        body: 'Ping @ghost@outside.com',
+      }),
+    });
+    expect(badMentionRes.status).toBe(422);
+
+    // Owner inbox contains mention notification; owner marks it read
+    const ownerOverviewRes = await fetch(`${baseUrl}/api/companies/${companyId}/workflow`, {
+      headers: bearer(owner),
+    });
+    expect(ownerOverviewRes.status).toBe(200);
+    const ownerOverview = (await ownerOverviewRes.json()) as {
+      notifications: { id: string; eventKind: string; readAt: string | null }[];
+      comments: { anchorKey: string }[];
+      tasks: { status: string }[];
+    };
+    expect(ownerOverview.tasks).toHaveLength(2);
+    expect(ownerOverview.comments.map((c) => c.anchorKey)).toEqual([
+      'statement:pl.revenue.service',
+      'cell:4000:P01',
+    ]);
+    const mentionNotif = ownerOverview.notifications.find((n) => n.eventKind === 'mention');
+    expect(mentionNotif).toBeDefined();
+    expect(mentionNotif?.readAt).toBeNull();
+
+    const markReadRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/workflow/notifications/${mentionNotif!.id}/read`,
+      {
+        method: 'POST',
+        headers: bearer(owner),
+        body: JSON.stringify({}),
+      },
+    );
+    expect(markReadRes.status).toBe(200);
+    const markedRead = (await markReadRes.json()) as { readAt: string | null };
+    expect(markedRead.readAt).not.toBeNull();
+
+    // Job ledger contains completed notification.dispatch jobs
+    const jobCountRes = await db.query<{ cnt: string }>(
+      `SELECT COUNT(*)::text AS cnt FROM job WHERE company_id = $1 AND kind = 'notification.dispatch' AND status = 'completed'`,
+      [companyId],
+    );
+    expect(Number(jobCountRes.rows[0]?.cnt ?? '0')).toBeGreaterThanOrEqual(4);
+
+    // Cross-tenant and unauthenticated access denied
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/workflow`, {
+          headers: bearer(INTRUDER),
+        })
+      ).status,
+    ).toBe(403);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/workflow`)).status).toBe(401);
+
+    // D7: unbroken SHA-256 audit hash chain across company setup, chart, planning, member grants, approvals, comments, jobs, and notification reads
+    const auditVerification = await verifyCompanyAuditLog(db, companyId);
+    expect(auditVerification.valid).toBe(true);
+    expect(auditVerification.checkedCount).toBeGreaterThanOrEqual(15);
+  }, 60_000);
 });
