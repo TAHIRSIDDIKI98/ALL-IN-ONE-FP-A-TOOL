@@ -115,3 +115,25 @@ export const CompanyWorkspaceSchema = z.object({
 });
 
 export type CompanyWorkspace = z.infer<typeof CompanyWorkspaceSchema>;
+
+/**
+ * Session bootstrap contract: the identity, the companies the actor may select, and the
+ * selected company workspace (null until setup completes).
+ */
+export const SessionWorkspaceResponseSchema = z.object({
+  authenticated: z.literal(true),
+  identity: z.object({
+    email: z.string(),
+    displayName: z.string(),
+  }),
+  companies: z.array(
+    z.object({
+      id: z.string().uuid(),
+      name: z.string().min(1),
+      baseCurrency: z.string().length(3),
+    }),
+  ),
+  workspace: CompanyWorkspaceSchema.nullable(),
+});
+
+export type SessionWorkspaceResponse = z.infer<typeof SessionWorkspaceResponseSchema>;

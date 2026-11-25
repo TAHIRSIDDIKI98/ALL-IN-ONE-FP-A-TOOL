@@ -408,3 +408,36 @@ export async function listActorCompanies(
   );
   return res.rows.map((row) => ({ id: row.id, name: row.name, baseCurrency: row.base_currency }));
 }
+
+/** Resolves a verified Firebase identity to the internal user row (no writes). */
+export async function findAppUserByFirebaseUid(
+  db: SqlExecutor,
+  firebaseUid: string,
+): Promise<{ readonly id: string; readonly email: string; readonly displayName: string } | null> {
+  const res = await db.query<{ id: string; email: string; display_name: string }>(
+    `SELECT id, email, display_name FROM app_user WHERE firebase_uid = $1`,
+    [firebaseUid],
+  );
+  const row = res.rows[0];
+  if (row === undefined) return null;
+  return { id: row.id, email: row.email, displayName: row.display_name };
+}
+
+/**
+ * Tenant guard (D2 / SEC2): a company is visible only through an explicit membership row.
+ * Unknown companies answer exactly like foreign companies so existence is never leaked.
+ */
+export async function isActorMember(
+  db: SqlExecutor,
+  companyId: string,
+  actorId: string,
+): Promise<boolean> {
+  const res = await db.query<{ allowed: boolean }>(
+    `SELECT EXISTS (
+              SELECT 1 FROM membership m
+               WHERE m.company_id = $1 AND m.user_id = $2
+            ) AS allowed`,
+    [companyId, actorId],
+  );
+  return res.rows[0]?.allowed === true;
+}

@@ -40,3 +40,24 @@ export const ImportPreviewRequestSchema = z.object({
 });
 
 export type ImportPreviewRequest = z.infer<typeof ImportPreviewRequestSchema>;
+
+/**
+ * Sandbox-only session contract (§3.1 verifiability doctrine): the dev token endpoint exists
+ * only when the server runs a non-production sandbox verifier. It is never mounted in
+ * production and issues a real expiring, HMAC-signed token — not a bypass.
+ */
+export const SandboxTokenRequestSchema = z.object({
+  email: z.string().trim().email().max(200),
+  displayName: z.string().trim().min(1).max(120).default('Sandbox User'),
+  ttlSeconds: z.number().int().min(60).max(86_400).default(3600),
+});
+
+export type SandboxTokenRequest = z.infer<typeof SandboxTokenRequestSchema>;
+
+export const SandboxTokenResponseSchema = z.object({
+  token: z.string().min(1),
+  tokenType: z.literal('sandbox-hmac'),
+  expiresInSeconds: z.number().int().positive(),
+});
+
+export type SandboxTokenResponse = z.infer<typeof SandboxTokenResponseSchema>;
