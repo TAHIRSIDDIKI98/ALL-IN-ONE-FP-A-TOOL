@@ -1426,4 +1426,227 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(((await foreignPack.json()) as { error: { code: string } }).error.code).toBe('TENANT_FORBIDDEN');
     expect(await countBatches(workspace.companyId)).toBe(2);
   }, 120_000);
+
+  it('M2 Planning endpoints: driver preview/commit, scenarios list, rolling forecast, scenario compare, and tenant/validation guards (WI-0030)', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:m2-planner@onefpa.test',
+      email: 'm2-planner@onefpa.test',
+      displayName: 'M2 Planner',
+    };
+
+    const createRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        companyName: 'M2 Planning Corp',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'HQ',
+        entityName: 'HQ',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as { companyId: string };
+    const companyId = created.companyId;
+
+    // Seed a 3-account chart (1000 Cash, 4000 Revenue, 5000 COGS)
+    const chartRes = await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        csvText: [
+          'code,name,type,normal_side,statement_line_key',
+          '1000,Cash,asset,debit,bs.asset.cash',
+          '4000,Revenue,revenue,credit,pl.revenue.service',
+          '5000,COGS,expense,debit,pl.cogs.direct',
+        ].join('\n'),
+      }),
+    });
+    expect(chartRes.status).toBe(201);
+
+    // Post P01 actuals (Revenue 1200.00, Cash 1200.00)
+    const actualsRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'p01_actuals.csv',
+        csvText: [
+          'date,entry_ref,account_code,debit,credit,memo',
+          '2026-01-15,JE-1,1000,1200.00,0.00,Cash sale',
+          '2026-01-15,JE-1,4000,0.00,1200.00,Cash sale',
+        ].join('\n'),
+      }),
+    });
+    expect(actualsRes.status).toBe(201);
+
+    const baseDrivers = [
+      {
+        kind: 'growth_rate' as const,
+        driverKey: 'rev_growth',
+        accountCode: '4000',
+        assumptionLabel: 'Revenue +10% MoM (assumption)',
+        baseAmount: '1000.00',
+        ratePerPeriod: '0.10',
+      },
+      {
+        kind: 'percent_of_account' as const,
+        driverKey: 'cogs_pct',
+        accountCode: '5000',
+        assumptionLabel: 'COGS 30% of Revenue (assumption)',
+        sourceAccountCode: '4000',
+        ratio: '0.30',
+      },
+    ];
+
+    // 1. Preview writes nothing
+    const previewRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/preview`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        periods: ['P01', 'P02', 'P03'],
+        drivers: baseDrivers,
+      }),
+    });
+    expect(previewRes.status).toBe(200);
+    const preview = (await previewRes.json()) as {
+      grandTotal: string;
+      totalsByAccount: Record<string, string>;
+    };
+    // 4000: 1000 + 1100 + 1210 = 3310.00; 5000: 300 + 330 + 363 = 993.00; grand = 4303.00
+    expect(preview.totalsByAccount).toEqual({ '4000': '3310.00', '5000': '993.00' });
+    expect(preview.grandTotal).toBe('4303.00');
+
+    const scenariosBefore = await fetch(`${baseUrl}/api/companies/${companyId}/planning/scenarios`, {
+      headers: bearer(owner),
+    });
+    expect(scenariosBefore.status).toBe(200);
+    expect(((await scenariosBefore.json()) as { scenarios: unknown[] }).scenarios).toEqual([]);
+
+    // 2. Commit Base Forecast (v1) & Upside Forecast (v1)
+    const commitBase = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'Base Forecast',
+        scenarioKind: 'forecast',
+        periods: ['P01', 'P02', 'P03'],
+        drivers: baseDrivers,
+      }),
+    });
+    expect(commitBase.status).toBe(201);
+    const baseCommitted = (await commitBase.json()) as { versionNo: number; grandTotal: string };
+    expect(baseCommitted.versionNo).toBe(1);
+    expect(baseCommitted.grandTotal).toBe('4303.00');
+
+    const commitUpside = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'Upside Forecast',
+        scenarioKind: 'forecast',
+        periods: ['P01', 'P02', 'P03'],
+        drivers: [
+          {
+            kind: 'fixed',
+            driverKey: 'rev_upside',
+            accountCode: '4000',
+            assumptionLabel: 'Upside flat 1500 (assumption)',
+            amount: '1500.00',
+          },
+          {
+            kind: 'percent_of_account',
+            driverKey: 'cogs_upside',
+            accountCode: '5000',
+            assumptionLabel: 'COGS 30% (assumption)',
+            sourceAccountCode: '4000',
+            ratio: '0.30',
+          },
+        ],
+      }),
+    });
+    expect(commitUpside.status).toBe(201);
+
+    // 3. List scenarios
+    const listRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/scenarios`, {
+      headers: bearer(owner),
+    });
+    expect(listRes.status).toBe(200);
+    const listed = (await listRes.json()) as { scenarios: Array<{ name: string; currentVersionNo: number }> };
+    expect(listed.scenarios.map((s) => `${s.name}:v${String(s.currentVersionNo)}`)).toEqual([
+      'Base Forecast:v1',
+      'Upside Forecast:v1',
+    ]);
+
+    // 4. Rolling forecast (cutoff P01 -> P01 actuals 1200 Cash + 1200 Rev = 2400; P02+P03 forecast 4000=2310, 5000=693 -> 3003)
+    const rfRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/planning/rolling-forecast?year=2026&cutoffPeriod=P01&scenario=${encodeURIComponent('Base Forecast')}`,
+      { headers: bearer(owner) },
+    );
+    expect(rfRes.status).toBe(200);
+    const rf = (await rfRes.json()) as {
+      totalActual: string;
+      totalForecast: string;
+      totalFullHorizon: string;
+      actualPeriods: string[];
+      rows: Array<{ accountCode: string; actualSubtotal: string; forecastSubtotal: string; fullHorizonTotal: string }>;
+    };
+    expect(rf.actualPeriods).toEqual(['P01']);
+    expect(rf.totalActual).toBe('2400.00');
+    expect(rf.totalForecast).toBe('3003.00');
+    expect(rf.totalFullHorizon).toBe('5403.00');
+    const revRow = rf.rows.find((r) => r.accountCode === '4000');
+    expect(revRow?.actualSubtotal).toBe('1200.00');
+    expect(revRow?.forecastSubtotal).toBe('2310.00');
+    expect(revRow?.fullHorizonTotal).toBe('3510.00');
+
+    // 5. Scenario comparison (Base 4303.00 vs Upside 4500+1350=5850.00 -> delta +1547.00)
+    const cmpRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/planning/compare?year=2026&base=${encodeURIComponent('Base Forecast')}&target=${encodeURIComponent('Upside Forecast')}`,
+      { headers: bearer(owner) },
+    );
+    expect(cmpRes.status).toBe(200);
+    const cmp = (await cmpRes.json()) as {
+      totalBase: string;
+      totalTarget: string;
+      totalDelta: string;
+    };
+    expect(cmp.totalBase).toBe('4303.00');
+    expect(cmp.totalTarget).toBe('5850.00');
+    expect(cmp.totalDelta).toBe('1547.00');
+
+    // 6. Negative cases: unmapped account rejected atomically, foreign tenant 403, unauthenticated 401
+    const badAccountRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'Bad Scenario',
+        scenarioKind: 'forecast',
+        periods: ['P01'],
+        drivers: [
+          {
+            kind: 'fixed',
+            driverKey: 'bad',
+            accountCode: '9999',
+            assumptionLabel: 'Missing account',
+            amount: '100.00',
+          },
+        ],
+      }),
+    });
+    expect(badAccountRes.status).toBe(422);
+
+    const foreignRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/scenarios`, {
+      headers: bearer(INTRUDER),
+    });
+    expect(foreignRes.status).toBe(403);
+
+    const unauthRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/scenarios`);
+    expect(unauthRes.status).toBe(401);
+  }, 60_000);
 });

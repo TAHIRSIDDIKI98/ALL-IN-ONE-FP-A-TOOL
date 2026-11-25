@@ -55,7 +55,23 @@ import {
   CoaMappingReportSchema,
 } from '../shared/coaMapping.js';
 import { BoardPackExportFormatSchema, BoardPackReportSchema } from '../shared/boardPack.js';
+import {
+  DriverPlanCommitRequestSchema,
+  DriverPlanCommitResponseSchema,
+  DriverPlanPreviewRequestSchema,
+  DriverPlanPreviewResponseSchema,
+  RollingForecastResponseSchema,
+  ScenarioComparisonResponseSchema,
+  ScenarioListResponseSchema,
+} from '../shared/planning.js';
 import { buildBoardPackReport, renderBoardPack } from './export/boardPack.js';
+import {
+  commitDriverPlan,
+  getRollingForecast,
+  getScenarioComparison,
+  listScenarios,
+  previewDriverPlan,
+} from './db/repositories/planning.js';
 import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './db/repositories/reports.js';
 import {
   createCompanyWorkspace,
@@ -701,6 +717,131 @@ export function createSpineApp(context: SpineContext) {
         );
         res.setHeader('content-disposition', `attachment; filename="board-pack-${period}.${format.data}"`);
         res.send(bytes);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Planning Suite endpoints (SPEC §3.7, DEC-014): scenarios, driver-based plan preview/commit,
+   * rolling forecast (active GL actuals + forecast scenario), and scenario comparison.
+   */
+  app.get(
+    '/api/companies/:companyId/planning/scenarios',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const list = await listScenarios(db, companyId);
+        res.status(200).json(ScenarioListResponseSchema.parse(list));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/planning/drivers/preview',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const body = parseBody(DriverPlanPreviewRequestSchema, req.body);
+        const preview = await previewDriverPlan(db, companyId, body);
+        res.status(200).json(DriverPlanPreviewResponseSchema.parse(preview));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/planning/drivers/commit',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(DriverPlanCommitRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          commitDriverPlan(tx, {
+            companyId,
+            actorId: userId,
+            input: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(DriverPlanCommitResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    '/api/companies/:companyId/planning/rolling-forecast',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        if (fiscalYear === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The rolling-forecast endpoint requires ?year=.',
+            details: { issues: ['year: required'] },
+          });
+        }
+        const scenario = typeof req.query['scenario'] === 'string' ? req.query['scenario'].trim() : '';
+        if (!scenario) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The rolling-forecast endpoint requires ?scenario=.',
+            details: { issues: ['scenario: required'] },
+          });
+        }
+        const cutoffRaw = req.query['cutoffPeriod'];
+        const cutoffPeriod =
+          typeof cutoffRaw === 'string' && cutoffRaw.trim().length > 0 ? cutoffRaw.trim() : null;
+        const report = await getRollingForecast(db, {
+          companyId,
+          fiscalYear,
+          cutoffPeriod,
+          scenarioName: scenario,
+        });
+        res.status(200).json(RollingForecastResponseSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    '/api/companies/:companyId/planning/compare',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        if (fiscalYear === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The scenario compare endpoint requires ?year=.',
+            details: { issues: ['year: required'] },
+          });
+        }
+        const base = typeof req.query['base'] === 'string' ? req.query['base'].trim() : '';
+        const target = typeof req.query['target'] === 'string' ? req.query['target'].trim() : '';
+        if (!base || !target) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The scenario compare endpoint requires ?base= and ?target=.',
+            details: { issues: ['base/target: required'] },
+          });
+        }
+        const report = await getScenarioComparison(db, {
+          companyId,
+          fiscalYear,
+          baseScenarioName: base,
+          targetScenarioName: target,
+        });
+        res.status(200).json(ScenarioComparisonResponseSchema.parse(report));
       } catch (error) {
         next(error);
       }
