@@ -1,6 +1,10 @@
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig } from '@playwright/test';
 
 const PORT = 3000;
+/** Playwright resolves `webServer.cwd` from this config's directory, not the repo root. */
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SANDBOX_SECRET = 'e2e-sandbox-secret-long-enough-for-hmac';
 
 /**
@@ -22,6 +26,7 @@ export default defineConfig({
   },
   webServer: {
     command: `npx tsx server/index.ts`,
+    cwd: REPO_ROOT,
     url: `http://127.0.0.1:${PORT}/healthz`,
     reuseExistingServer: !process.env['CI'],
     timeout: 60_000,
