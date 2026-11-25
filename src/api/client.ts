@@ -95,6 +95,10 @@ export interface ApiClient {
   getSessionWorkspace(): Promise<SessionWorkspace>;
   createCompany(request: CreateCompanyRequest): Promise<CompanyWorkspace>;
   getCompanyWorkspace(companyId: string): Promise<CompanyWorkspace>;
+  getStatements(
+    companyId: string,
+    query: { readonly period: string; readonly fiscalYear?: number | null },
+  ): Promise<FinancialStatementsPayload>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -173,5 +177,64 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       request<CompanyWorkspace>('POST', '/api/setup/company', companyRequest),
     getCompanyWorkspace: (companyId) =>
       request<CompanyWorkspace>('GET', `/api/companies/${encodeURIComponent(companyId)}/workspace`),
+    getStatements: (companyId, query) => {
+      const params = new URLSearchParams({ period: query.period });
+      if (query.fiscalYear !== undefined && query.fiscalYear !== null) {
+        params.set('year', String(query.fiscalYear));
+      }
+      return request<FinancialStatementsPayload>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/statements?${params.toString()}`,
+      );
+    },
   };
+}
+
+export interface FinancialStatementsPayload {
+  readonly companyId: string;
+  readonly range: { readonly fromPeriodCode: string; readonly throughPeriodCode: string; readonly fiscalYear: number };
+  readonly pnl: Readonly<Record<string, string>> & {
+    readonly revenue: string;
+    readonly cogs: string;
+    readonly grossProfit: string;
+    readonly opex: string;
+    readonly ebitda: string;
+    readonly depreciation: string;
+    readonly ebit: string;
+    readonly nonOperatingNet: string;
+    readonly ebt: string;
+    readonly tax: string;
+    readonly netIncome: string;
+  };
+  readonly balanceSheet: Readonly<Record<string, string>> & {
+    readonly totalAssets: string;
+    readonly totalLiabilities: string;
+    readonly totalEquity: string;
+    readonly totalLiabilitiesAndEquity: string;
+    readonly cashBalance: string;
+    readonly isBalanced: boolean;
+  };
+  readonly cashFlow: Readonly<Record<string, string>> & {
+    readonly netIncome: string;
+    readonly nonCashAddbacks: string;
+    readonly deltaWorkingCapitalCashImpact: string;
+    readonly operatingCashFlow: string;
+    readonly investingCashFlow: string;
+    readonly freeCashFlow: string;
+    readonly financingCashFlow: string;
+    readonly beginningCash: string;
+    readonly endingCash: string;
+  };
+  readonly retainedEarnings: {
+    readonly opening: string;
+    readonly netIncome: string;
+    readonly distributions: string;
+    readonly closingTotal: string;
+    readonly rollForwardValid: boolean;
+  };
+  readonly articulation: {
+    readonly valid: boolean;
+    readonly checks: readonly { readonly id: string; readonly name: string; readonly passed: boolean; readonly detail: string }[];
+  };
+  readonly sources: readonly { readonly sourceFilename: string; readonly sourceHash: string }[];
 }

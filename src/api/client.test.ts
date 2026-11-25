@@ -182,4 +182,34 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect((caught as ApiClientError).code).toBe('INTERNAL_ERROR');
     expect((caught as ApiClientError).httpStatus).toBe(502);
   });
+
+  it('asks for statements with period scoping and passes money strings through untouched', async () => {
+    const { fetchImpl, calls } = fakeFetch(() => ({
+      status: 200,
+      body: {
+        companyId: COMPANY['companyId'],
+        range: { fromPeriodCode: 'P01', throughPeriodCode: 'P03', fiscalYear: 2026 },
+        pnl: { revenue: '1000.00', netIncome: '1000.00' },
+        balanceSheet: { totalAssets: '1000.00', isBalanced: true },
+        cashFlow: { endingCash: '1000.00' },
+        retainedEarnings: { opening: '0.00', closingTotal: '1000.00', rollForwardValid: true },
+        articulation: { valid: true, checks: [] },
+        sources: [{ sourceFilename: 'cash_sale.csv', sourceHash: 'a'.repeat(64) }],
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const statements = await client.getStatements(String(COMPANY['companyId']), {
+      period: 'P03',
+      fiscalYear: 2026,
+    });
+
+    expect(calls[0]?.url).toBe(
+      `/api/companies/${COMPANY['companyId']}/statements?period=P03&year=2026`,
+    );
+    expect(statements.pnl.revenue).toBe('1000.00');
+    expect(typeof statements.pnl.netIncome).toBe('string');
+    expect(statements.articulation.valid).toBe(true);
+    expect(statements.sources[0]?.sourceFilename).toBe('cash_sale.csv');
+  });
 });
