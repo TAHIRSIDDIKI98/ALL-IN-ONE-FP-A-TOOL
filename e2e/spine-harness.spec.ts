@@ -107,7 +107,13 @@ test.describe('OneFP&A M1 Spine Harness', () => {
     await signIn(page, owner, 'E2E Owner');
     await createCompanyThroughWizard(page, 'Cascade Analytics Inc.');
 
-    await page.goto('/statements');
+    // The API token is memory-only by design (§3.2): a hard page load re-authenticates, so the spine
+    // is navigated in-app through the primary nav exactly as a user would.
+    await page
+      .getByRole('navigation', { name: 'Primary Spine Navigation' })
+      .getByRole('link', { name: 'Statements' })
+      .click();
+    await expect(page).toHaveURL(/\/statements$/);
     await expect(page.locator('h1')).toContainText(/Financial Statements/i);
     await expect(page.getByRole('tablist', { name: 'Statement Views' })).toBeVisible();
 
