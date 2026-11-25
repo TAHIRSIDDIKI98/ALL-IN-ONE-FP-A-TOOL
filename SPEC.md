@@ -1,6 +1,6 @@
 # OneFP&A — Living Specification (SPEC.md)
 
-> Scope: **Current Phase (M0 Foundation)** + **Next Phase (M1 The Spine)** ONLY (MASTER_PROMPT §8.1, §8.11).
+> Scope: **Current Phase (M2 Planning Suite)** + **Verified Spine (M0–M1)** (MASTER_PROMPT §2.5, §8.1, §8.11; opened by `DEC-014`).
 > Authority: Owner commands > `MASTER_PROMPT.md` > `SPEC.md` > `TASKBOARD.md`.
 
 ---
@@ -139,6 +139,13 @@ Enforced by `/scripts/schema-scope`: any table outside this set fails the build.
 
 ### 3.6 Fiscal Calendars (`/core/calendar`)
 - Deterministically generates periods for `12month`, `445`, `454`, `544`, `52_53` (NRF with explicit W53 rule), and `13x4`. Proven against Q2 NRF 2024–2028 oracle fixtures (including the 53-week year).
+
+### 3.7 M2 Planning Engine (`/core/planning`)
+- **Driver-Based Plan (`computeDriverPlan`)**: Evaluates typed drivers (`fixed`, `growth_rate`, `percent_of_account`, `price_times_volume`) across an ordered period sequence using `decimal.js` via `/core/money` (storage-scale compounding, currency-scale presentation).
+  - Resolves `percent_of_account` dependencies via Kahn's topological sort; rejects cycles (`CYCLE_DETECTED:<codes>`), self-references (`SELF_REFERENCE_DRIVER:<code>`), unknown sources (`UNKNOWN_DRIVER_SOURCE:<driver>-><target>`), duplicate driver accounts, and empty/duplicate periods.
+  - Every computed line carries `source: 'driver' | 'override'`, `driverKey`, and `assumptionLabel` (§1.6-4 Honesty Law).
+- **Rolling Forecast (`buildRollingForecast`)**: Stitches closed actuals (`period <= cutoffPeriod`) with forecast lines (`period > cutoffPeriod`). Every cell is explicitly tagged `basis: 'actual' | 'forecast'`. Absent cells remain `null` (Null Law §3.1) and are counted in `missingCellCount`; `actualSubtotal + forecastSubtotal == fullHorizonTotal` exact.
+- **Scenario Comparison (`compareScenarios`)**: Compares `base` vs `target` scenarios account-by-account using §3.5 zero-base rules (`0 vs 0 -> 0.00%`, `x vs 0 -> n/m`). Accounts absent from one scenario keep `null` on that side and `deltaPctStatus: 'null'` — never fabricated as zero.
 
 ---
 
