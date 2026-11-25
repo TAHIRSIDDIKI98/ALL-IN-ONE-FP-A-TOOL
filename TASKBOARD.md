@@ -91,6 +91,7 @@
 | `bundle-size` | `node scripts/bundle-size.mjs` | `0` | `2026-11-24T11:49:47Z` | `bundle-size green (initial JS: 120.64 KB gzip / 250.00 KB budget).` |
 
 | `ci-process` | CI run `45667643804` check-run annotation | `1` | `2026-11-25T17:44:00Z` | **RED**: `Unexpected root entry "verify-output.log" violates MASTER_PROMPT §3.3 / §8.1` (`Tests 1 failed | 153 passed (154)`). Fixed by DEC-013; rerun pending. |
+| `ci-process` | GitHub Actions run `45668054546` on `73c622d` (PR #3) | `0` | `2026-11-25T17:49:00Z` | **GREEN**: both `Run sandbox verification suite` and `Run Playwright Spine Harness` succeeded; all sandbox-and-e2e steps green. This is the first run tied to the final HEAD after DEC-007/010/011/012/013 and the WI-0027 product fix; no false green (full history, `pipefail`, no root log file). |
 
 ---
 
