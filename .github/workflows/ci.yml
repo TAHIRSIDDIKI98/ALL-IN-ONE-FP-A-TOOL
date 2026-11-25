@@ -38,7 +38,17 @@ jobs:
       - name: Run Playwright Spine Harness
         env:
           CI: 'true'
-        run: npx playwright test --config=e2e/playwright.config.ts
+        run: |
+          set -o pipefail
+          npx playwright test --config=e2e/playwright.config.ts 2>&1 | tee playwright-output.log
+
+      # Artifact download is not reachable from every environment, so on failure the harness
+      # promotes its own error lines to check-run annotations, which the REST API can always read.
+      - name: Publish E2E failure annotations
+        if: failure()
+        run: |
+          set -o pipefail
+          node scripts/publish-e2e-failure.mjs playwright-output.log
 
       - name: Upload CI diagnostics & test reports (always, including failure — PR5)
         if: always()

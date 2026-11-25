@@ -198,6 +198,7 @@ None.
 - **GATES**: `npm run verify` exit `0` — `VERIFY GREEN: 16/16 gates passed in 48713ms (<60000ms budget, 0 secrets)`; ratchet 18 test files / 99 tests / 616 assertions. Budget headroom is now ~11s — the next WI must not add another PGLite boot to the sandbox suite without removing one.
 - **NEXT**: `WI-0015` — atomic idempotent import commit (`import_batch`/`import_row_raw`/`gl_entry`/`gl_line` in one transaction, `(company, kind, source_hash)` replace semantics, `imported + quarantined = row_count`), the first half of Spine Gate G1/D5/C7.
 - **BLOCKED**: None in sandbox.
+- **CI DIAGNOSTICS NOTE (2026-11-25)**: the required job `Sandbox Gates, Build & Playwright E2E` failed at the Playwright step while the artifact blob host was unreachable from the build environment (artifact download returned `EOF`). `scripts/publish-e2e-failure.mjs` now promotes the harness's own error lines to check-run annotations, which the REST API serves directly, and the harness output is tee'd to `playwright-output.log`; this removes the blind spot without weakening any assertion.
 - **QUESTIONS**: `Q-004` (Firebase + postgres driver remain CI-gated), `Q-005` (`DEC-005` ratification).
 
 ### HANDOVER 2026-11-25 / Session M1-WI-0015
