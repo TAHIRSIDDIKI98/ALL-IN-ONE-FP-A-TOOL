@@ -1,10 +1,5 @@
 {
-  "decision": "DEC-005",
-  "note": "S-COMMIT (INT8) exemptions are limited to repository-import commits that predate gate enforcement and can only be removed by fixing forward. MASTER_PROMPT §8.9 forbids history rewrites, so this one inherited commit is recorded here instead of being amended.",
-  "exempt": [
-    {
-      "hash": "1114c3e42a34a3a957396a1d95001e56fa528266",
-      "reason": "Owner repository-import commit ('chore: integrate Vite middleware into custom server') that squashed the M0 history before S-COMMIT was enforced; it is main's published tip and cannot be amended without rewriting history."
-    }
-  ]
+  "decision": "DEC-007",
+  "enforcedFrom": "a7132dba6571432c0c33f768c08a80fd2c2135a4",
+  "note": "S-COMMIT (INT8) governs commits authored after the Work-Integrity Codex took effect. This boundary is the first commit that repaired the gate with a decided baseline (a7132db); every commit at or before it predates enforcement and is published history that MASTER_PROMPT §8.9 forbids rewriting. The boundary commit itself must satisfy S-COMMIT, so no violating commit can ever become the boundary, and every commit newer than it is checked."
 }
