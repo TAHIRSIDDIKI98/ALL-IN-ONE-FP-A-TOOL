@@ -1762,6 +1762,36 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     });
     expect(calls[2]?.url).toBe(`/api/companies/${companyId}/onboarding/rehearse`);
     expect(rehearsed.trialBalanceAfter.totalDebit).toBe('58000.00');
+
+    const sampleChecklist = {
+      companyId,
+      actorRole: 'owner',
+      steps: [
+        { id: 'company_setup', done: true, evidence: '12 periods active.', actionPath: '/setup' },
+        { id: 'chart_of_accounts', done: true, evidence: '6 accounts active.', actionPath: '/coa-mapper' },
+        { id: 'actuals_import', done: true, evidence: '1 actuals batch.', actionPath: '/import' },
+        { id: 'plan_baseline', done: true, evidence: '1 current plan.', actionPath: '/model-grid' },
+        { id: 'owner_signoff', done: true, evidence: 'Signed off.', actionPath: '/setup' },
+      ],
+      completedCount: 5,
+      totalCount: 5,
+      readyForSignoff: true,
+      isComplete: true,
+      signedOffAt: '2026-11-26T05:40:00.000Z',
+      signedOffByName: 'Owner',
+    };
+    const { fetchImpl: checklistFetch, calls: checklistCalls } = fakeFetch(() => ({
+      status: 200,
+      body: sampleChecklist,
+    }));
+    const checklistClient = createApiClient({ getToken: () => 'token-123', fetchImpl: checklistFetch });
+    const loadedChecklist = await checklistClient.getOnboardingChecklist(companyId);
+    const signedChecklist = await checklistClient.signOffOnboardingChecklist(companyId);
+    expect(checklistCalls[0]?.url).toBe(`/api/companies/${companyId}/onboarding/checklist`);
+    expect(checklistCalls[1]?.url).toBe(`/api/companies/${companyId}/onboarding/checklist/signoff`);
+    expect(loadedChecklist.completedCount).toBe(5);
+    expect(signedChecklist.isComplete).toBe(true);
   });
 });
+
 

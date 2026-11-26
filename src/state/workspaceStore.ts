@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { GeneratedFiscalYear } from '../../core/calendar/index.js';
+import type { SupportedLocale } from '../../shared/guidance.js';
 import type { ScreenUiState } from '../../shared/spine.js';
 
 export interface WorkspaceCompany {
@@ -21,6 +22,8 @@ export interface WorkspaceStoreState {
   readonly sessionError: string | null;
   readonly userEmail: string | null;
   readonly company: WorkspaceCompany | null;
+  readonly displayLocale: SupportedLocale;
+  readonly displayTimeZone: string;
   readonly mappingDecisions: Readonly<Record<string, string>>;
   readonly quarantinedMappings: Readonly<Record<string, string>>;
   readonly setAuthToken: (token: string | null) => void;
@@ -29,6 +32,8 @@ export interface WorkspaceStoreState {
   readonly signInSuccess: (email: string) => void;
   readonly signOut: () => void;
   readonly saveCompany: (company: WorkspaceCompany) => void;
+  readonly setDisplayLocale: (locale: SupportedLocale) => void;
+  readonly setDisplayTimeZone: (timeZone: string) => void;
   readonly mapAccountCode: (sourceCode: string, targetAccountCode: string) => void;
   readonly quarantineAccountCode: (sourceCode: string, reason: string) => void;
 }
@@ -39,6 +44,8 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
   sessionError: null,
   userEmail: null,
   company: null,
+  displayLocale: 'en-US',
+  displayTimeZone: 'UTC',
   mappingDecisions: {},
   quarantinedMappings: {},
 
@@ -53,10 +60,12 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       sessionError: null,
       userEmail: null,
       company: null,
-          mappingDecisions: {},
+      mappingDecisions: {},
       quarantinedMappings: {},
     }),
   saveCompany: (company: WorkspaceCompany) => set({ company }),
+  setDisplayLocale: (locale: SupportedLocale) => set({ displayLocale: locale }),
+  setDisplayTimeZone: (timeZone: string) => set({ displayTimeZone: timeZone }),
   mapAccountCode: (sourceCode: string, targetAccountCode: string) =>
     set((prev) => ({
       mappingDecisions: { ...prev.mappingDecisions, [sourceCode]: targetAccountCode },
@@ -66,3 +75,4 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       quarantinedMappings: { ...prev.quarantinedMappings, [sourceCode]: reason },
     })),
 }));
+

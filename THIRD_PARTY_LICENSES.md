@@ -1,7 +1,7 @@
 # Third-Party Dependency Licenses
 
 > Generated deterministically from `package-lock.json` (`MASTER_PROMPT §12.16 LIC2`).
-> Packages: **574** · Manifest Digest: `e22b670ea8922ad5`
+> Packages: **574** · Manifest Digest: `576c1836c87cdaa5`
 
 | Package | Version | License |
 |---|---|---|
@@ -423,7 +423,7 @@
 | `node-domexception` | `1.0.0` | `MIT` |
 | `node-fetch` | `2.7.0` | `MIT` |
 | `node-fetch` | `3.3.2` | `MIT` |
-| `node-releases` | `2.0.65` | `MIT` |
+| `node-releases` | `2.0.66` | `MIT` |
 | `normalize-path` | `3.0.0` | `MIT` |
 | `object-assign` | `4.1.1` | `MIT` |
 | `object-hash` | `3.0.0` | `MIT` |

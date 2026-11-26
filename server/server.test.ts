@@ -3699,5 +3699,167 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     const auditVerification = await verifyCompanyAuditLog(db, companyId);
     expect(auditVerification.valid).toBe(true);
   }, 60_000);
+
+  it('tracks live 5-step onboarding checklist prerequisites, enforces owner/editor signoff after preconditions, and replays idempotently (WI-0043 DOC3)', async () => {
+    const owner = {
+      firebaseUid: 'sandbox:wi43-owner@onefpa.test',
+      email: 'wi43-owner@onefpa.test',
+      displayName: 'Onboarding Checklist Owner',
+    };
+    const viewerEmail = 'wi43-viewer@onefpa.test';
+    const viewer = {
+      firebaseUid: `sandbox:${viewerEmail}`,
+      email: viewerEmail,
+      displayName: 'Checklist Viewer',
+    };
+
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Checklist Guided Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'CHK-1',
+        entityName: 'Checklist HQ',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    const addViewer = await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({ email: viewerEmail, displayName: 'Checklist Viewer', role: 'viewer' }),
+    });
+    expect(addViewer.status).toBe(201);
+
+    // Initially only company_setup (1/5) is done; sign-off must be blocked (422)
+    const initialRes = await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/checklist`, {
+      headers: bearer(owner),
+    });
+    expect(initialRes.status).toBe(200);
+    const initial = (await initialRes.json()) as {
+      completedCount: number;
+      readyForSignoff: boolean;
+      isComplete: boolean;
+      steps: { id: string; done: boolean }[];
+    };
+    expect(initial.completedCount).toBe(1);
+    expect(initial.readyForSignoff).toBe(false);
+    expect(initial.isComplete).toBe(false);
+
+    const earlySignoff = await fetch(
+      `${baseUrl}/api/companies/${companyId}/onboarding/checklist/signoff`,
+      { method: 'POST', headers: bearer(owner), body: JSON.stringify({}) },
+    );
+    expect(earlySignoff.status).toBe(422);
+
+    // Seed CoA, Actuals, and Plan Baseline
+    const chartRes = await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        csvText:
+          'code,name,type,normal_side,statement_line_key\n1000,Cash,asset,debit,bs.asset.cash\n4000,Revenue,revenue,credit,pl.revenue.product\n',
+      }),
+    });
+    expect(chartRes.status).toBe(201);
+
+    const actualsRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'chk-actuals.csv',
+        csvText:
+          'entry_ref,date,account_code,description,debit,credit\nJE-CHK-1,2026-01-15,1000,Cash sale,500.00,0.00\nJE-CHK-1,2026-01-15,4000,Revenue sale,0.00,500.00\n',
+      }),
+    });
+    expect(actualsRes.status).toBe(201);
+
+    const planRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/drivers/commit`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'Checklist Budget',
+        scenarioKind: 'budget',
+        periods: ['P01'],
+        drivers: [
+          {
+            kind: 'fixed',
+            driverKey: 'rev_p1',
+            accountCode: '4000',
+            assumptionLabel: 'Jan target',
+            amount: '600.00',
+          },
+        ],
+      }),
+    });
+    expect(planRes.status).toBe(201);
+
+    const readyRes = await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/checklist`, {
+      headers: bearer(owner),
+    });
+    expect(readyRes.status).toBe(200);
+    const ready = (await readyRes.json()) as { completedCount: number; readyForSignoff: boolean };
+    expect(ready.completedCount).toBe(4);
+    expect(ready.readyForSignoff).toBe(true);
+
+    // RBAC & unauthenticated negative checks
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/checklist/signoff`, {
+          method: 'POST',
+          headers: bearer(viewer),
+          body: JSON.stringify({}),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/checklist`, {
+          headers: bearer(INTRUDER),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/checklist`)).status,
+    ).toBe(401);
+
+    // Owner sign-off writes audit_log entry & subsequent sign-off is idempotent
+    const signoffRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/onboarding/checklist/signoff`,
+      { method: 'POST', headers: bearer(owner), body: JSON.stringify({}) },
+    );
+    expect(signoffRes.status).toBe(201);
+    const completed = (await signoffRes.json()) as {
+      completedCount: number;
+      isComplete: boolean;
+      signedOffAt: string | null;
+      signedOffByName: string | null;
+    };
+    expect(completed.completedCount).toBe(5);
+    expect(completed.isComplete).toBe(true);
+    expect(completed.signedOffAt).not.toBeNull();
+    expect(completed.signedOffByName).toBe('Onboarding Checklist Owner');
+
+    const replaySignoff = await fetch(
+      `${baseUrl}/api/companies/${companyId}/onboarding/checklist/signoff`,
+      { method: 'POST', headers: bearer(owner), body: JSON.stringify({}) },
+    );
+    expect(replaySignoff.status).toBe(201);
+    const auditCntRes = await db.query<{ cnt: string }>(
+      `SELECT COUNT(*)::text AS cnt
+         FROM audit_log
+        WHERE company_id = $1 AND action = 'onboarding.checklist_signoff'`,
+      [companyId],
+    );
+    expect(Number(auditCntRes.rows[0]?.cnt ?? '0')).toBe(1);
+    expect((await verifyCompanyAuditLog(db, companyId)).valid).toBe(true);
+  }, 60_000);
 });
+
 

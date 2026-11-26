@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactElement } from 'react';
 import { buildSyntheticPartnerDataset } from '../../core/onboarding/index.js';
-import type { CoaMappingEditPayload } from '../../shared/coaMapping.js';
+import type { CoaMappingEdit } from '../../shared/coaMapping.js';
 import type { SpineRoutePath } from '../../shared/spine.js';
 import {
   ApiClientError,
@@ -152,7 +152,7 @@ export function OnboardingPipelinePanel(props: {
 
   const runApproveMappings = useCallback(async (): Promise<void> => {
     if (validation === null) return;
-    const entries: CoaMappingEditPayload[] = [];
+    const entries: CoaMappingEdit[] = [];
     for (const sug of validation.suggestions) {
       const chosen = draftTargets[sug.sourceCode] ?? '';
       if (chosen.trim().length === 0) continue;

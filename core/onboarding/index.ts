@@ -86,8 +86,7 @@ const TOKEN_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
 
 const STOP_TOKENS = new Set(['the', 'and', 'for', 'of', 'in', 'to', 'on', 'with', 'account', 'other']);
 
-function tokenizeForMatching(input: string): Set<string> {
-  const tokens = new Set<string>();
+function tokenizeWordGroups(input: string): readonly Set<string>[] {
   const rawParts = input
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
@@ -95,15 +94,30 @@ function tokenizeForMatching(input: string): Set<string> {
     .split(/\s+/)
     .filter((t) => t.length >= 2);
 
+  const groups: Set<string>[] = [];
   for (const part of rawParts) {
+    const group = new Set<string>();
     if (!STOP_TOKENS.has(part)) {
-      tokens.add(part);
+      group.add(part);
     }
     const expanded = TOKEN_SYNONYMS[part];
     if (expanded !== undefined) {
       for (const syn of expanded) {
-        if (!STOP_TOKENS.has(syn)) tokens.add(syn);
+        if (!STOP_TOKENS.has(syn)) group.add(syn);
       }
+    }
+    if (group.size > 0) {
+      groups.push(group);
+    }
+  }
+  return groups;
+}
+
+function tokenizeForMatching(input: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const group of tokenizeWordGroups(input)) {
+    for (const token of group) {
+      tokens.add(token);
     }
   }
   return tokens;
@@ -312,24 +326,36 @@ export function suggestCoaMappings(params: {
       }
     }
 
-    // 3. Deterministic token overlap on source code + row descriptions
-    const srcTokens = tokenizeForMatching(`${normSource} ${src.sampleValues.join(' ')}`);
+    // 3. Deterministic token overlap on source code (high weight) + row descriptions (low weight)
+    const srcCodeGroups = tokenizeWordGroups(normSource);
+    const descGroups = tokenizeWordGroups(src.sampleValues.join(' '));
     let bestAcc: OnboardingChartAccountInput | null = null;
     let bestScore = 0;
+    let bestHits = 0;
     let tiedTop = false;
 
     for (const acc of postableAccounts) {
       const targetTokens = accountTokens.get(acc.code);
       if (targetTokens === undefined) continue;
-      let shared = 0;
-      for (const token of srcTokens) {
-        if (targetTokens.has(token)) shared += 1;
+      let codeHits = 0;
+      for (const group of srcCodeGroups) {
+        if ([...group].some((token) => targetTokens.has(token))) {
+          codeHits += 1;
+        }
       }
-      if (shared > bestScore) {
-        bestScore = shared;
+      let descHits = 0;
+      for (const group of descGroups) {
+        if ([...group].some((token) => targetTokens.has(token))) {
+          descHits += 1;
+        }
+      }
+      const score = codeHits * 4 + descHits;
+      if (score > bestScore) {
+        bestScore = score;
+        bestHits = codeHits + descHits;
         bestAcc = acc;
         tiedTop = false;
-      } else if (shared > 0 && shared === bestScore) {
+      } else if (score > 0 && score === bestScore) {
         tiedTop = true;
       }
     }
@@ -344,8 +370,8 @@ export function suggestCoaMappings(params: {
         suggestedAccountCode: bestAcc.code,
         suggestedAccountName: bestAcc.name,
         matchRule: 'token_name_match',
-        confidenceScore: Math.min(82, 58 + bestScore * 8),
-        reason: `Deterministic keyword match (${bestScore} shared accounting token(s)) with ${bestAcc.code} — ${bestAcc.name}; review before approving.`,
+        confidenceScore: Math.min(82, 58 + bestHits * 6),
+        reason: `Deterministic keyword match (${bestHits} shared accounting token(s)) with ${bestAcc.code} — ${bestAcc.name}; review before approving.`,
         requiresHumanApproval: true,
       };
     }
@@ -636,7 +662,7 @@ export function analyzeOnboardingValidation(params: {
 
   if (rowMagnitudes.length >= 4) {
     const sorted = [...rowMagnitudes].sort((a, b) => compare(a.magnitude, b.magnitude));
-    const medianMagnitude = sorted[Math.floor(sorted.length / 2)]!.magnitude;
+    const medianMagnitude = sorted[Math.floor((sorted.length - 1) / 2)]!.magnitude;
     if (!isZero(medianMagnitude)) {
       const outlierLimit = mul(medianMagnitude, money('10'));
       const outliers = rowMagnitudes.filter((entry) => compare(entry.magnitude, outlierLimit) > 0);

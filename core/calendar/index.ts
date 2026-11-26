@@ -407,3 +407,132 @@ export function selectTtmPeriods(
       : `TTM (${first.fyLabel} ${first.code}–${last.fyLabel} ${last.code})`,
   };
 }
+
+export interface PeriodCutoffRule {
+  readonly periodCode: string;
+  /** Strict UTC ISO-8601 instant ending in Z (inclusive cutoff; instants strictly after cutoff roll forward). */
+  readonly cutoffUtc: string;
+  readonly isClosed?: boolean;
+}
+
+export interface CutoffResolutionResult {
+  readonly resolvedPeriod: GeneratedPeriod;
+  readonly shiftedFromPeriodCode: string | null;
+  readonly reason: 'within_cutoff' | 'post_cutoff_rolled_forward';
+}
+
+const STRICT_UTC_INSTANT_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?Z$/;
+
+function parseUtcInstantMs(utcInstant: string): { readonly ms: number; readonly utcDate: string } {
+  const m = STRICT_UTC_INSTANT_RE.exec(utcInstant);
+  if (!m) {
+    throw new Error(`INVALID_UTC_INSTANT: "${utcInstant}"`);
+  }
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const second = Number(m[6]);
+  if (hour > 23 || minute > 59 || second > 59) {
+    throw new Error(`INVALID_UTC_INSTANT: "${utcInstant}"`);
+  }
+  const dateOnly = `${m[1]}-${m[2]}-${m[3]}`;
+  parseIsoDateUtc(dateOnly);
+  const ms = Date.parse(utcInstant);
+  if (!Number.isFinite(ms)) {
+    throw new Error(`INVALID_UTC_INSTANT: "${utcInstant}"`);
+  }
+  const check = new Date(ms);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() + 1 !== month ||
+    check.getUTCDate() !== day
+  ) {
+    throw new Error(`INVALID_UTC_INSTANT: "${utcInstant}"`);
+  }
+  return { ms, utcDate: dateOnly };
+}
+
+/**
+ * Resolve an event UTC instant against fiscal periods and explicit close cutoff rules (TMP2).
+ * Never reads implicit local clock (`new Date()` with 0 args); strictly deterministic UTC boundary math.
+ */
+export function resolvePeriodForCutoff(
+  periods: readonly GeneratedPeriod[],
+  eventInstantUtc: string,
+  cutoffRules: readonly PeriodCutoffRule[],
+): CutoffResolutionResult {
+  const { ms: eventMs, utcDate } = parseUtcInstantMs(eventInstantUtc);
+  const regularChronological = periods
+    .filter((p) => !p.isAdjustment)
+    .slice()
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.periodNo - b.periodNo);
+
+  const basePeriod = resolvePeriodForDate(regularChronological, utcDate);
+  if (!basePeriod) {
+    throw new Error(`PERIOD_NOT_FOUND_FOR_UTC_DATE: "${utcDate}"`);
+  }
+
+  const ruleByCode = new Map<string, { readonly cutoffMs: number; readonly isClosed: boolean }>();
+  for (const rule of cutoffRules) {
+    const parsedCutoff = parseUtcInstantMs(rule.cutoffUtc);
+    ruleByCode.set(rule.periodCode, {
+      cutoffMs: parsedCutoff.ms,
+      isClosed: rule.isClosed ?? false,
+    });
+  }
+
+  const baseIdx = regularChronological.findIndex(
+    (p) => p.fiscalYear === basePeriod.fiscalYear && p.code === basePeriod.code,
+  );
+
+  let cursorIdx = baseIdx;
+  let shifted = false;
+
+  while (cursorIdx < regularChronological.length) {
+    const candidate = regularChronological[cursorIdx]!;
+    const rule = ruleByCode.get(candidate.code);
+    const pastCutoff = rule !== undefined && eventMs > rule.cutoffMs;
+    const closed = rule !== undefined && rule.isClosed;
+    if (!pastCutoff && !closed) {
+      return {
+        resolvedPeriod: candidate,
+        shiftedFromPeriodCode: shifted ? basePeriod.code : null,
+        reason: shifted ? 'post_cutoff_rolled_forward' : 'within_cutoff',
+      };
+    }
+    shifted = true;
+    cursorIdx += 1;
+  }
+
+  throw new Error(
+    `CUTOFF_NO_NEXT_OPEN_PERIOD: instant="${eventInstantUtc}" base="${basePeriod.code}"`,
+  );
+}
+
+/**
+ * Format a fiscal period label for display using Unicode CLDR / Intl.DateTimeFormat in UTC (LOC4).
+ * Zero hardcoded English month names or runtime `new Date()` dependencies.
+ */
+export function formatLocalizedPeriodLabel(
+  period: Pick<GeneratedPeriod, 'code' | 'fyLabel' | 'startDate' | 'isAdjustment' | 'label'>,
+  locale = 'en-US',
+): string {
+  const effectiveLocale = locale === 'pseudo' ? 'en-US' : locale;
+  if (period.isAdjustment) {
+    return `${period.code} (${period.fyLabel})`;
+  }
+  const isRegularMonthly = /^P(0[1-9]|1[0-2])$/.test(period.code) && !period.label.startsWith(period.fyLabel);
+  if (isRegularMonthly) {
+    const anchorMs = parseIsoDateUtc(period.startDate) + 12 * 3_600_000;
+    const formatted = new Intl.DateTimeFormat(effectiveLocale, {
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(anchorMs));
+    return `${period.code} (${formatted})`;
+  }
+  return `${period.fyLabel} ${period.code}`;
+}
+

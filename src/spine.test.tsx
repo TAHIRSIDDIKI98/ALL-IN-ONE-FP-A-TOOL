@@ -3,6 +3,13 @@ import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import {
+  I18N_MESSAGES,
+  SPINE_HELP_KEYS,
+  formatLocalizedCurrencyDisplay,
+  getMissingTranslationKeys,
+  getTranslationCoverage,
+} from '../shared/guidance.js';
 import { SPINE_ROUTE_DEFS } from '../shared/spine.js';
 import { App } from './App.js';
 import BoardPackPage, { BoardPackPreview } from './pages/BoardPackPage.js';
@@ -11,9 +18,11 @@ import type {
   ChartAccountPayload,
   ConnectorsOverviewResponse,
   IndustryPackDetail,
+  OnboardingChecklistResponse,
   OnboardingValidationReport,
 } from './api/client.js';
 import { ConnectorsPanel } from './components/ConnectorsPanel.js';
+import { HelpGuidanceDrawer } from './components/HelpGuidanceDrawer.js';
 import { OnboardingPipelinePanel } from './components/OnboardingPipelinePanel.js';
 import CoaMapperPage, { CoaMappingEditor, IndustryPackCatalogPanel } from './pages/CoaMapperPage.js';
 import ImportWizardPage, { ImportWizardContent } from './pages/ImportWizardPage.js';
@@ -658,5 +667,116 @@ describe('7-Screen Spine Inventory, Landmarks & Five-State Honesty (U1–U3, §9
     expect(populatedHtml).not.toContain('<h1>');
     expect(populatedHtml).not.toContain('rounded-full');
   });
+
+  it('covers DOC1 contextual screen help, LOC1-LOC3 i18n/RTL/currency display precision, and DOC3 onboarding checklist states (WI-0043)', () => {
+    const noop = (): void => {};
+    const companyId = '11111111-1111-4111-8111-111111111111';
+
+    // LOC1: 100% translation key parity across en-US, ar-SA, and pseudo
+    expect(getMissingTranslationKeys('en-US')).toEqual([]);
+    expect(getMissingTranslationKeys('ar-SA')).toEqual([]);
+    expect(getMissingTranslationKeys('pseudo')).toEqual([]);
+    const arCov = getTranslationCoverage('ar-SA');
+    expect(arCov.translatedKeys).toBe(arCov.totalKeys);
+    expect(arCov.totalKeys).toBeGreaterThanOrEqual(40);
+
+    // DOC1: every spine route has keyed title, summary, whatToCheck, nextStep in both locales
+    for (const route of SPINE_ROUTE_DEFS) {
+      const key = SPINE_HELP_KEYS[route.id];
+      expect(I18N_MESSAGES['en-US'][`${key}.title`].length).toBeGreaterThan(3);
+      expect(I18N_MESSAGES['ar-SA'][`${key}.title`].length).toBeGreaterThan(3);
+    }
+
+    // LOC2: 0/2/3-decimal currencies via exact string + BigInt formatting (no JS float loss)
+    expect(formatLocalizedCurrencyDisplay('1234567.89', 'JPY', 'en-US')).toBe('JPY 1,234,567');
+    expect(formatLocalizedCurrencyDisplay('1234567.89', 'USD', 'en-US')).toBe('USD 1,234,567.89');
+    expect(formatLocalizedCurrencyDisplay('1234567.891', 'KWD', 'en-US')).toBe('KWD 1,234,567.891');
+    expect(formatLocalizedCurrencyDisplay('1000.5', 'KWD', 'pseudo')).toBe('[~KWD 1,000.500~]');
+
+    // LOC3: App shell toggles dir="rtl" cleanly with ar-SA while keeping 1 skip-link & closed drawer hidden
+    const rtlShell = renderToStaticMarkup(
+      createElement(App, { initialPath: '/setup', initialLocale: 'ar-SA' }),
+    );
+    expect(rtlShell).toContain('dir="rtl"');
+    expect(rtlShell).toContain('data-locale="ar-SA"');
+    expect(rtlShell.match(/href="#main-content"/g)?.length).toBe(1);
+    expect(rtlShell).toContain('المساعدة والدليل');
+    expect(rtlShell).not.toContain('data-help-key=');
+    expect(rtlShell).not.toContain('<aside');
+
+    const readyChecklist: OnboardingChecklistResponse = {
+      companyId,
+      actorRole: 'owner',
+      steps: [
+        { id: 'company_setup', done: true, evidence: '12 fiscal periods active.', actionPath: '/setup' },
+        { id: 'chart_of_accounts', done: true, evidence: '8 postable accounts configured.', actionPath: '/coa-mapper' },
+        { id: 'actuals_import', done: true, evidence: '1 actuals batch committed.', actionPath: '/import' },
+        { id: 'plan_baseline', done: true, evidence: '1 current plan version committed.', actionPath: '/model-grid' },
+        { id: 'owner_signoff', done: false, evidence: 'Awaiting owner sign-off.', actionPath: '/setup' },
+      ],
+      completedCount: 4,
+      totalCount: 5,
+      readyForSignoff: true,
+      isComplete: false,
+      signedOffAt: null,
+      signedOffByName: null,
+    };
+
+    const readyHtml = renderToStaticMarkup(
+      createElement(HelpGuidanceDrawer, {
+        isOpen: true,
+        onClose: noop,
+        currentPath: '/model-grid',
+        company: {
+          id: companyId,
+          name: 'Wire Co',
+          currency: 'USD',
+          calendarKind: '12month',
+          fiscalYear: 2026,
+          calendarYears: [],
+          periodCount: 12,
+        },
+        authToken: 'token-123',
+        displayLocale: 'en-US',
+        displayTimeZone: 'America/New_York',
+        onChangeLocale: noop,
+        onChangeTimeZone: noop,
+        onNavigate: noop,
+        initialChecklist: readyChecklist,
+      }),
+    );
+    expect(readyHtml).toContain('data-help-key="help.screen.model_grid"');
+    expect(readyHtml).toContain('4/5');
+    expect(readyHtml).toContain('Complete Onboarding');
+    expect(readyHtml).not.toContain('<h1>');
+    expect(readyHtml).not.toContain('rounded-full');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(HelpGuidanceDrawer, {
+        isOpen: true,
+        onClose: noop,
+        currentPath: '/sign-in',
+        company: {
+          id: companyId,
+          name: 'Wire Co',
+          currency: 'USD',
+          calendarKind: '12month',
+          fiscalYear: 2026,
+          calendarYears: [],
+          periodCount: 12,
+        },
+        authToken: 'token-123',
+        displayLocale: 'pseudo',
+        displayTimeZone: 'UTC',
+        onChangeLocale: noop,
+        onChangeTimeZone: noop,
+        onNavigate: noop,
+        initialError: { code: 'TENANT_FORBIDDEN', message: 'Forbidden checklist test.' },
+      }),
+    );
+    expect(errorHtml).toContain('TENANT_FORBIDDEN');
+    expect(errorHtml).toContain('[~');
+  });
 });
+
 

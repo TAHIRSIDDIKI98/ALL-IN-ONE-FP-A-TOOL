@@ -1,8 +1,9 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
+import { checkOrWriteUserGuide } from './generate-docs.mjs';
 import { runWorkIntegrityCheck } from './work-integrity.mjs';
 
 const tempDirs: string[] = [];
@@ -443,4 +444,33 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     const cleanRepo = runGate('scripts/work-integrity.mjs', process.cwd());
     expect(cleanRepo.status).toBe(0);
   });
+
+  it('WI-0043 DOC2 docs-sync gate passes on repo and fails red on drifted user guide; TMP1 verifies timestamptz-only migrations', () => {
+    const cleanDocs = checkOrWriteUserGuide(process.cwd(), 'check');
+    expect(cleanDocs.ok).toBe(true);
+    expect(cleanDocs.drifts).toEqual([]);
+
+    const ws = makeTempWorkspace();
+    cpSync(join(process.cwd(), 'SPEC.md'), join(ws, 'SPEC.md'));
+    checkOrWriteUserGuide(ws, 'write');
+    expect(checkOrWriteUserGuide(ws, 'check').ok).toBe(true);
+
+    writeFileSync(join(ws, 'docs', 'user-guide', 'README.md'), '# Drifted manually\n');
+    const redDocs = runGate('scripts/generate-docs.mjs', ws);
+    expect(redDocs.status).toBe(1);
+    expect(redDocs.stderr).toContain('DOCS-SYNC GATE FAILED');
+
+    // TMP1: all SQL migrations must use timestamptz and never WITHOUT TIME ZONE / LOCALTIME / LOCALTIMESTAMP
+    const migrationFiles = readdirSync(join(process.cwd(), 'db', 'migrations')).filter((f) =>
+      f.endsWith('.sql'),
+    );
+    expect(migrationFiles.length).toBeGreaterThanOrEqual(4);
+    for (const mf of migrationFiles) {
+      const sql = readFileSync(join(process.cwd(), 'db', 'migrations', mf), 'utf8');
+      expect(/\bwithout\s+time\s+zone\b/i.test(sql)).toBe(false);
+      expect(/\blocaltime(?:stamp)?\b/i.test(sql)).toBe(false);
+      expect(/\btimestamp\b(?!tz)/i.test(sql)).toBe(false);
+    }
+  });
 });
+

@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  formatLocalizedPeriodLabel,
   generateFiscalYears,
+  resolvePeriodForCutoff,
   resolvePeriodForDate,
   selectMonthlyViewPeriods,
   selectQtdPeriods,
@@ -198,4 +200,54 @@ describe('WI-0005 Fiscal Calendar Kernel & Q2 Class A Oracles (Ports P09, P10 â€
     expect(ttmPartial.periods.length).toBe(5);
     expect(ttmPartial.basisLabel).toContain('Partial TTM (5/12 periods populated');
   });
+
+  it('resolves explicit UTC cutoff boundaries deterministically and formats period labels via Intl (WI-0043 TMP2, LOC4)', () => {
+    const fy = generateFiscalYears({
+      kind: '12month',
+      startYear: 2026,
+      yearCount: 1,
+      startMonth: 1,
+      includeAdjustmentPeriod: true,
+    })[0]!;
+
+    // Boundary instant at or before cutoff remains in P01; strictly post-cutoff rolls forward to P02
+    const within = resolvePeriodForCutoff(fy.periods, '2026-01-31T23:59:59Z', [
+      { periodCode: 'P01', cutoffUtc: '2026-01-31T23:59:59Z' },
+    ]);
+    expect(within.resolvedPeriod.code).toBe('P01');
+    expect(within.reason).toBe('within_cutoff');
+    expect(within.shiftedFromPeriodCode).toBeNull();
+
+    const rolled = resolvePeriodForCutoff(fy.periods, '2026-02-01T00:00:00Z', [
+      { periodCode: 'P02', cutoffUtc: '2026-01-31T23:59:59Z' },
+    ]);
+    expect(rolled.resolvedPeriod.code).toBe('P03');
+    expect(rolled.shiftedFromPeriodCode).toBe('P02');
+    expect(rolled.reason).toBe('post_cutoff_rolled_forward');
+
+    // Closed period also rolls forward to first open regular period
+    const skippedClosed = resolvePeriodForCutoff(fy.periods, '2026-01-15T12:00:00Z', [
+      { periodCode: 'P01', cutoffUtc: '2026-02-05T00:00:00Z', isClosed: true },
+      { periodCode: 'P02', cutoffUtc: '2026-03-05T00:00:00Z', isClosed: false },
+    ]);
+    expect(skippedClosed.resolvedPeriod.code).toBe('P02');
+    expect(skippedClosed.shiftedFromPeriodCode).toBe('P01');
+
+    expect(() =>
+      resolvePeriodForCutoff(fy.periods, '2026-01-15T12:00:00', []),
+    ).toThrow(/INVALID_UTC_INSTANT/);
+    expect(() =>
+      resolvePeriodForCutoff(fy.periods, '2026-12-31T23:59:59Z', [
+        { periodCode: 'P12', cutoffUtc: '2026-12-30T00:00:00Z' },
+      ]),
+    ).toThrow(/CUTOFF_NO_NEXT_OPEN_PERIOD/);
+
+    const enLabel = formatLocalizedPeriodLabel(fy.periods[0]!, 'en-US');
+    const arLabel = formatLocalizedPeriodLabel(fy.periods[0]!, 'ar-SA');
+    expect(enLabel).toContain('P01');
+    expect(enLabel).toContain('Jan');
+    expect(arLabel).toContain('P01');
+    expect(arLabel).not.toBe(enLabel);
+  });
 });
+

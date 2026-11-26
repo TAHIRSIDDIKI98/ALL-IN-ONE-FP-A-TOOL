@@ -140,6 +140,7 @@ import {
 import {
   OnboardingApproveMappingsRequestSchema,
   OnboardingApproveMappingsResponseSchema,
+  OnboardingChecklistResponseSchema,
   OnboardingRehearseRequestSchema,
   OnboardingRehearseResponseSchema,
   OnboardingValidateRequestSchema,
@@ -147,7 +148,9 @@ import {
 } from '../shared/onboarding.js';
 import {
   approveOnboardingMappings,
+  getCompanyOnboardingChecklist,
   rehearseCompanyOnboarding,
+  signOffCompanyOnboardingChecklist,
   validateCompanyOnboarding,
 } from './db/repositories/onboarding.js';
 import {
@@ -1488,6 +1491,47 @@ export function createSpineApp(context: SpineContext) {
           }),
         );
         res.status(201).json(SyncConnectorResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Completable First-Company Onboarding Checklist (§11.16, DOC3, WI-0043):
+   * Tracks real persisted prerequisites and records an audited owner/editor sign-off.
+   */
+  app.get(
+    '/api/companies/:companyId/onboarding/checklist',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const checklist = await getCompanyOnboardingChecklist(db, {
+          companyId,
+          actorId: userId,
+        });
+        res.status(200).json(OnboardingChecklistResponseSchema.parse(checklist));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/onboarding/checklist/signoff',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const checklist = await db.transaction((tx) =>
+          signOffCompanyOnboardingChecklist(tx, {
+            companyId,
+            actorId: userId,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(OnboardingChecklistResponseSchema.parse(checklist));
       } catch (error) {
         next(error);
       }

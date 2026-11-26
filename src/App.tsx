@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
+import { isRtlLocale, translateMessage, type SupportedLocale } from '../shared/guidance.js';
 import { SPINE_ROUTE_DEFS, type SpineRoutePath } from '../shared/spine.js';
+import { HelpGuidanceDrawer } from './components/HelpGuidanceDrawer.js';
 import { LoadingState } from './components/StateFrame.js';
+import { useWorkspaceStore } from './state/workspaceStore.js';
 
 const SignInPage = lazy(() => import('./pages/SignInPage.js'));
 const SetupWizardPage = lazy(() => import('./pages/SetupWizardPage.js'));
@@ -24,7 +27,11 @@ function resolveForcedState(search: string): 'loading' | 'empty' | 'error' | und
   return undefined;
 }
 
-export function App(props: { readonly initialPath?: string; readonly initialSearch?: string }): ReactElement {
+export function App(props: {
+  readonly initialPath?: string;
+  readonly initialSearch?: string;
+  readonly initialLocale?: SupportedLocale;
+}): ReactElement {
   const [currentPath, setCurrentPath] = useState<SpineRoutePath>(() =>
     resolveRoutePath(
       props.initialPath ?? (typeof window !== 'undefined' ? window.location.pathname : '/sign-in'),
@@ -35,6 +42,15 @@ export function App(props: { readonly initialPath?: string; readonly initialSear
       props.initialSearch ?? (typeof window !== 'undefined' ? window.location.search : ''),
     ),
   );
+  const [helpOpen, setHelpOpen] = useState<boolean>(false);
+
+  const authToken = useWorkspaceStore((s) => s.authToken);
+  const company = useWorkspaceStore((s) => s.company);
+  const storeLocale = useWorkspaceStore((s) => s.displayLocale);
+  const displayLocale = props.initialLocale ?? storeLocale;
+  const displayTimeZone = useWorkspaceStore((s) => s.displayTimeZone);
+  const setDisplayLocale = useWorkspaceStore((s) => s.setDisplayLocale);
+  const setDisplayTimeZone = useWorkspaceStore((s) => s.setDisplayTimeZone);
 
   useEffect(() => {
     const onPopState = (): void => {
@@ -77,7 +93,11 @@ export function App(props: { readonly initialPath?: string; readonly initialSear
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+    <div
+      dir={isRtlLocale(displayLocale) ? 'rtl' : 'ltr'}
+      data-locale={displayLocale}
+      className="min-h-screen flex flex-col bg-slate-50 text-slate-900"
+    >
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-slate-900 focus:text-white focus:px-4 focus:py-2 focus:rounded"
@@ -85,15 +105,25 @@ export function App(props: { readonly initialPath?: string; readonly initialSear
         Skip to main content
       </a>
 
-      <header role="banner" className="border-b border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
+      <header role="banner" className="border-b border-slate-200 bg-white px-6 py-4 flex items-center justify-between gap-4">
         <span className="font-semibold tracking-tight text-slate-900">OneFP&amp;A</span>
-        <span className="text-xs font-mono text-slate-500">M0 Spine Shell</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono text-slate-500">M2 Planning Suite Shell</span>
+          <button
+            type="button"
+            aria-expanded={helpOpen}
+            onClick={() => setHelpOpen((prev) => !prev)}
+            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-100"
+          >
+            {translateMessage(displayLocale, 'help.drawer.openButton')}
+          </button>
+        </div>
       </header>
 
       <div className="flex flex-1 flex-col md:flex-row">
         <nav
           aria-label="Primary Spine Navigation"
-          className="border-b md:border-b-0 md:border-r border-slate-200 bg-white px-4 py-4 md:w-56 md:shrink-0"
+          className="border-b md:border-b-0 md:border-e border-slate-200 bg-white px-4 py-4 md:w-56 md:shrink-0"
         >
           <ul className="flex flex-wrap gap-1 md:flex-col">
             {SPINE_ROUTE_DEFS.map((route) => {
@@ -126,11 +156,25 @@ export function App(props: { readonly initialPath?: string; readonly initialSear
             {renderPage()}
           </Suspense>
         </main>
+
+        <HelpGuidanceDrawer
+          isOpen={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          currentPath={currentPath}
+          company={company}
+          authToken={authToken}
+          displayLocale={displayLocale}
+          displayTimeZone={displayTimeZone}
+          onChangeLocale={setDisplayLocale}
+          onChangeTimeZone={setDisplayTimeZone}
+          onNavigate={navigate}
+        />
       </div>
 
       <footer role="contentinfo" className="border-t border-slate-200 bg-white px-6 py-3 text-xs text-slate-500">
-        OneFP&amp;A · Exact 7-Screen M0/M1 Spine
+        OneFP&amp;A · Exact 7-Screen Spine
       </footer>
     </div>
   );
 }
+

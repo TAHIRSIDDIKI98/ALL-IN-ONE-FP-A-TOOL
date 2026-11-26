@@ -221,6 +221,26 @@ Migration `0002_m2_collaboration.sql` also expands `membership.role` from `('own
 - **Fixture Oracles (`CON5`)**: Class A SHA-256 checksummed connector fixtures (`fixtures/oracles/connectors/CHECKSUMS.json`: `google_sheets_gl.json`, `quickbooks_online_je.json`, `xero_manual_journals.json`, `reconciliation_mismatch_je.json`, `connectors_expected.json`) pin canonical normalization, CSV projection, and mismatch verdicts.
 - **API & RBAC (`shared/integrations.ts`, `server/db/repositories/connectors.ts`, `server/app.ts`)**: `GET /api/companies/:companyId/connectors`, `POST /api/companies/:companyId/connectors` (`owner`/`editor`, `409 DUPLICATE_CODE` on duplicate `(sourceSystem, name)`), `GET /api/companies/:companyId/connectors/:connectorId/runs`, and `POST /api/companies/:companyId/connectors/:connectorId/sync` (`owner`/`editor`; source mismatch -> `422 VALIDATION_FAILED`, quarantined reconciliation -> `200` `sync_run(status='quarantined')`).
 
+### 3.14 M2 Customer Onboarding & Data Migration Pipeline (`/core/onboarding`, `§11.12`, `ONB1–ONB3`, `WI-0042`)
+- **Single-Engine Validation & Row Accounting (`analyzeOnboardingValidation`, `ONB2`)**: Reuses `/core/import` and `/core/mapping` (`classifyImport`) inside `validateCompanyOnboarding` so partner CSV exports undergo exact row accounting (`rowsIn === importableCount + quarantinedCount`), balanced-entry & calendar checks, quarantine category histograms, interior fiscal-period gap detection, leading-zero collision detection, and `Decimal` 10x-median outlier flags labeled `"Potential exception — review"`.
+- **Deterministic Assisted CoA Matching (`suggestCoaMappings`, `ONB1`)**: Matches discovered unmapped partner codes against active postable chart accounts via exact code match, unique leading-zero alias, and source-weighted deterministic keyword overlap (`Zero LLM inference at M2`, `ambiguous_leading_zero` never auto-guesses). Every suggestion sets `requiresHumanApproval: true` and never writes to `coa_mapping` until `POST …/onboarding/mappings/approve` commits immutable versioned `coa_mapping` rows + `audit_log` via `planMappingVersions`.
+- **Repeatable Cutover Rehearsal (`rehearseCompanyOnboarding`, `ONB3`)**: `POST …/onboarding/rehearse` supports non-destructive `dry_run` (`200`, `committed: null`, zero GL writes, projected post-cutover trial balance excluding any batch with matching `sourceHash`) and transactional `stage_commit` (`201`, blocked with `422 VALIDATION_FAILED` if `goLiveStatus === 'blocked'`, otherwise runs `commitImport` + chained `onboarding.cutover_rehearsal` `audit_log` entry). Identical datasets + mappings emit identical SHA-256 `rehearsalHash` fingerprints and balanced post-TB totals across dry-runs and repeated atomic replacements.
+- **API & RBAC (`shared/onboarding.ts`, `server/db/repositories/onboarding.ts`, `server/app.ts`)**: `POST /api/companies/:companyId/onboarding/validate`, `POST /api/companies/:companyId/onboarding/mappings/approve`, and `POST /api/companies/:companyId/onboarding/rehearse` enforce `6mb` import ceiling (`5,000,000` bytes `IMPORT_FILE_TOO_LARGE`), `owner`/`editor` RBAC (`403 TENANT_FORBIDDEN` for `viewer`/foreign tenant), and `401 SESSION_REQUIRED` unauthenticated.
+
+### 3.15 M2 End-User Guidance, Temporal & Localization Contracts (`/core/calendar`, `/shared/temporal`, `/shared/guidance`, `WI-0043`)
+- **Temporal Separation & UTC Boundary Rules (`§12.1 TMP1–TMP4`)**:
+  - `db/migrations/*.sql` enforces `timestamptz` across all timestamp columns (`0` `WITHOUT TIME ZONE` / `LOCALTIME` / `LOCALTIMESTAMP` columns).
+  - `/core/calendar#resolvePeriodForCutoff` accepts explicit strict UTC ISO-8601 instants (`Z`-suffixed) and explicit per-period close cutoff rules (never reading implicit local wall-clock `new Date()`), rolling post-cutoff or closed instants forward sequentially to the next open regular period (`CUTOFF_NO_NEXT_OPEN_PERIOD` when exhausted).
+  - `/shared/temporal.ts` isolates `PeriodDateSchema` (`YYYY-MM-DD`) from `UtcInstantSchema` (`YYYY-MM-DDTHH:MM:SSZ`) with branded types so boundary mixing fails validation immediately, and validates IANA display timezones (`DisplayTimeZoneSchema`) for presentation-only formatting (`formatUtcInstantForDisplay`) without altering ledger figures or dates.
+- **Localization & Currency Display Precision (`§12.2 LOC1–LOC4`)**:
+  - `/shared/guidance.ts` maintains 100% key parity across `en-US`, `ar-SA` (RTL), and deterministic `pseudo` (`I18N_MESSAGE_KEYS`), verifiable via `getMissingTranslationKeys` and `getTranslationCoverage`.
+  - `formatLocalizedCurrencyDisplay` formats canonical server decimal strings via exact string decomposition + `BigInt` integer grouping (`Intl.NumberFormat` with ISO decimal precision `0` for JPY/KRW, `2` for USD/EUR, `3` for KWD/BHD/OMR) with zero JS float arithmetic.
+  - `/core/calendar#formatLocalizedPeriodLabel` localizes fiscal month labels through `Intl.DateTimeFormat(..., { timeZone: 'UTC' })` without hardcoded English month arrays (`LOC4`).
+- **Completable First-Company Onboarding Checklist & Doc Sync (`§11.16 DOC1–DOC3`)**:
+  - `GET /api/companies/:companyId/onboarding/checklist` derives real step readiness from persisted `fiscal_period`, active postable `account`, active `actuals` `import_batch`, current `plan_version`, and `audit_log` (`onboarding.checklist_signoff`) rows.
+  - `POST /api/companies/:companyId/onboarding/checklist/signoff` enforces `owner`/`editor` RBAC, blocks sign-off (`422 VALIDATION_FAILED`) while prerequisites remain incomplete, appends a chained `audit_log` entry atomically, and replays idempotently once signed off.
+  - `scripts/generate-docs.mjs` (`--write` / `--check`) derives `/docs/user-guide/{README.md,reference.md,manifest.json}` deterministically from `SPEC.md` with SHA-256 digests and banned-claim enforcement (`DOC2`).
+
 ---
 
 ## 4. Coherent Sample Corpus & Oracles (M0–M2 — Gates C1–C10, TST5)
@@ -236,7 +256,7 @@ Migration `0002_m2_collaboration.sql` also expands `membership.role` from `('own
 Exactly seven screens at M1 exit:
 1. `SignInPage` (`/sign-in`)
 2. `SetupWizardPage` (`/setup`)
-3. `ImportWizardPage` (`/import` — Actuals CSV import, Budget CSV import, and M2 ConnectorsPanel (`Google Sheets`, `QuickBooks Online`, `Xero`) inside one 3-option dataset selector)
+3. `ImportWizardPage` (`/import` — Actuals CSV import, Budget CSV import, M2 ConnectorsPanel (`Google Sheets`, `QuickBooks Online`, `Xero`), and M2 OnboardingPipelinePanel inside one 4-option dataset selector)
 4. `CoaMapperPage` (`/coa-mapper` — CoA mapping, chart import, and M2 Industry Pack Catalog panel inside the screen)
 5. `ModelGridPage` (`/model-grid`)
 6. `StatementsPage` (`/statements` — P&L, BS, CF tabs + BvA + Flux & PVM views)
@@ -265,6 +285,10 @@ The §9.1 seven-screen inventory is unchanged at M2. Planning appears as a **vie
 ### 5.3 Dashboards & KPIs view — inside Statements, not a new screen (WI-0038)
 - `DashboardsPanel` (`src/components/DashboardsPanel.tsx`) mounts as the `Dashboards & KPIs` tab inside `StatementsPage` (`/statements?tab=dashboards`), preserving the §9.1 seven-screen invariant (`DEC-015`) with a single `h1` (“Financial Statements”) and zero browser monetary arithmetic.
 - Renders a 4-card headline KPI strip (`pnl.revenue`, `pnl.ebitda`, `pnl.net_income`, `cf.ending_cash`), an SVG multi-period Revenue/EBITDA/Ending Cash bar trend with accompanying table, a category- and keyword-filterable 18-KPI library table (`All KPIs`, `Profitability`, `Cash & Liquidity`, `Balance Sheet`, `Plan & Variance`), a template-switchable Report Builder citing every block (`100.00% cited`, `0 unlinked`), and explicit loading/empty/error/partial/populated states (no telemetry/cache status exposed in UI).
+
+### 5.4 In-App Contextual Help, RTL Shell & Onboarding Checklist (`WI-0043`)
+- `HelpGuidanceDrawer` (`src/components/HelpGuidanceDrawer.tsx`) toggles from the top banner (`Help & Guide`) inside `src/App.tsx` without adding extra routes (`DEC-015`), omitting `<h1>` elements and returning `null` while closed so every route keeps `1` `h1`, `1` skip link, `4` landmarks, and exact `?state=loading` `[role="status"]` uniqueness.
+- Displays keyed contextual help (`data-help-key="help.screen.<id>"`) for all 7 screens, switches workspace `displayLocale` (`en-US`, `ar-SA` setting `dir="rtl"`, `pseudo`) and `displayTimeZone` (`UTC`, `America/New_York`, `Europe/London`, `Asia/Tokyo`), and binds the live 5-step onboarding checklist with real prerequisite links and owner/editor audited sign-off (`Complete Onboarding`).
 
 ---
 

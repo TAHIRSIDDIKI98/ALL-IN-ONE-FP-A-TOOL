@@ -138,3 +138,34 @@ export const OnboardingRehearseResponseSchema = z.object({
   executedAt: z.string().datetime(),
 });
 export type OnboardingRehearseResponse = z.infer<typeof OnboardingRehearseResponseSchema>;
+
+export const OnboardingChecklistStepIdSchema = z.enum([
+  'company_setup',
+  'chart_of_accounts',
+  'actuals_import',
+  'plan_baseline',
+  'owner_signoff',
+]);
+export type OnboardingChecklistStepId = z.infer<typeof OnboardingChecklistStepIdSchema>;
+
+export const OnboardingChecklistStepSchema = z.object({
+  id: OnboardingChecklistStepIdSchema,
+  done: z.boolean(),
+  evidence: z.string().min(1),
+  actionPath: z.enum(['/setup', '/coa-mapper', '/import', '/model-grid']),
+});
+export type OnboardingChecklistStep = z.infer<typeof OnboardingChecklistStepSchema>;
+
+export const OnboardingChecklistResponseSchema = z.object({
+  companyId: z.string().uuid(),
+  actorRole: z.enum(['owner', 'editor', 'reviewer', 'viewer']),
+  steps: z.array(OnboardingChecklistStepSchema).length(5),
+  completedCount: z.number().int().min(0).max(5),
+  totalCount: z.literal(5),
+  readyForSignoff: z.boolean(),
+  isComplete: z.boolean(),
+  signedOffAt: z.string().datetime().nullable(),
+  signedOffByName: z.string().nullable(),
+});
+export type OnboardingChecklistResponse = z.infer<typeof OnboardingChecklistResponseSchema>;
+

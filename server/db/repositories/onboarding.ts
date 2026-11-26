@@ -12,6 +12,8 @@ import { AppError } from '../../../shared/errors.js';
 import type {
   OnboardingApproveMappingsRequest,
   OnboardingApproveMappingsResponse,
+  OnboardingChecklistResponse,
+  OnboardingChecklistStep,
   OnboardingRehearseRequest,
   OnboardingRehearseResponse,
   OnboardingTrialBalanceSummary,
@@ -78,7 +80,7 @@ async function requireOnboardingEditorRole(
   actorId: string,
 ): Promise<MembershipRole> {
   const res = await db.query<RoleDbRow>(
-    `SELECT role FROM company_member WHERE company_id = $1 AND user_id = $2`,
+    `SELECT role FROM membership WHERE company_id = $1 AND user_id = $2`,
     [companyId, actorId],
   );
   const role = res.rows[0]?.role;
@@ -206,7 +208,10 @@ async function buildValidationBundle(
     quarantineBreakdown: [...analysis.quarantineBreakdown],
     quarantined: [...classification.quarantined],
     anomalies: [...analysis.anomalies],
-    suggestions: [...analysis.suggestions],
+    suggestions: analysis.suggestions.map((suggestion) => ({
+      ...suggestion,
+      sampleValues: [...suggestion.sampleValues],
+    })),
     availableAccounts: accounts
       .filter((acc) => acc.active && acc.is_postable)
       .map((acc) => ({ code: acc.code, name: acc.name })),
@@ -539,3 +544,188 @@ export async function rehearseCompanyOnboarding(
     executedAt: params.occurredAt,
   };
 }
+
+interface CountDbRow extends Record<string, unknown> {
+  cnt: number;
+}
+
+interface SignoffAuditDbRow extends Record<string, unknown> {
+  occurred_at: string | Date;
+  actor_name: string;
+}
+
+export async function getCompanyOnboardingChecklist(
+  db: SqlExecutor,
+  params: { readonly companyId: string; readonly actorId: string },
+): Promise<OnboardingChecklistResponse> {
+  const roleRes = await db.query<RoleDbRow>(
+    `SELECT role FROM membership WHERE company_id = $1 AND user_id = $2`,
+    [params.companyId, params.actorId],
+  );
+  const actorRole = roleRes.rows[0]?.role;
+  if (actorRole === undefined) {
+    throw new AppError('TENANT_FORBIDDEN', {
+      userMessage: 'That company is outside your workspace.',
+    });
+  }
+
+  const [periodRes, accountRes, glBatchRes, planRes, signoffRes] = await Promise.all([
+    db.query<CountDbRow>(
+      `SELECT COUNT(*)::int AS cnt FROM fiscal_period WHERE company_id = $1`,
+      [params.companyId],
+    ),
+    db.query<CountDbRow>(
+      `SELECT COUNT(*)::int AS cnt FROM account WHERE company_id = $1 AND active = true AND is_postable = true`,
+      [params.companyId],
+    ),
+    db.query<CountDbRow>(
+      `SELECT COUNT(*)::int AS cnt
+         FROM import_batch
+        WHERE company_id = $1
+          AND kind = 'actuals'
+          AND status IN ('staged', 'committed')`,
+      [params.companyId],
+    ),
+    db.query<CountDbRow>(
+      `SELECT COUNT(*)::int AS cnt
+         FROM plan_version
+        WHERE company_id = $1
+          AND is_current = true`,
+      [params.companyId],
+    ),
+    db.query<SignoffAuditDbRow>(
+      `SELECT a.occurred_at, u.display_name AS actor_name
+         FROM audit_log a
+         JOIN app_user u ON u.id = a.actor_id
+        WHERE a.company_id = $1
+          AND a.action = 'onboarding.checklist_signoff'
+        ORDER BY a.occurred_at DESC, a.id DESC
+        LIMIT 1`,
+      [params.companyId],
+    ),
+  ]);
+
+  const periodCount = periodRes.rows[0]?.cnt ?? 0;
+  const postableAccountCount = accountRes.rows[0]?.cnt ?? 0;
+  const actualsBatchCount = glBatchRes.rows[0]?.cnt ?? 0;
+  const currentPlanVersionCount = planRes.rows[0]?.cnt ?? 0;
+  const signoffRow = signoffRes.rows[0];
+  const signedOffAt = signoffRow
+    ? (signoffRow.occurred_at instanceof Date
+        ? signoffRow.occurred_at.toISOString()
+        : new Date(signoffRow.occurred_at).toISOString())
+    : null;
+  const signedOffByName = signoffRow?.actor_name ?? null;
+
+  const setupDone = periodCount > 0;
+  const chartDone = postableAccountCount > 0;
+  const actualsDone = actualsBatchCount > 0;
+  const planDone = currentPlanVersionCount > 0;
+  const signoffDone = signedOffAt !== null;
+
+  const steps: readonly OnboardingChecklistStep[] = [
+    {
+      id: 'company_setup',
+      done: setupDone,
+      evidence: setupDone
+        ? `${periodCount} fiscal period(s) active.`
+        : 'No fiscal periods found for company.',
+      actionPath: '/setup',
+    },
+    {
+      id: 'chart_of_accounts',
+      done: chartDone,
+      evidence: chartDone
+        ? `${postableAccountCount} active postable account(s) configured.`
+        : 'No active postable accounts imported or applied yet.',
+      actionPath: '/coa-mapper',
+    },
+    {
+      id: 'actuals_import',
+      done: actualsDone,
+      evidence: actualsDone
+        ? `${actualsBatchCount} active actuals import batch(es) committed.`
+        : 'No actuals GL batch committed yet.',
+      actionPath: '/import',
+    },
+    {
+      id: 'plan_baseline',
+      done: planDone,
+      evidence: planDone
+        ? `${currentPlanVersionCount} active current plan version(s) committed.`
+        : 'No budget, driver, or workforce plan version committed yet.',
+      actionPath: '/model-grid',
+    },
+    {
+      id: 'owner_signoff',
+      done: signoffDone,
+      evidence:
+        signedOffAt !== null
+          ? `Signed off by ${signedOffByName ?? 'owner'} at ${signedOffAt}.`
+          : 'Awaiting owner or editor sign-off after prerequisites finish.',
+      actionPath: '/setup',
+    },
+  ];
+
+  const completedCount = steps.filter((s) => s.done).length;
+  const readyForSignoff = setupDone && chartDone && actualsDone && planDone;
+  const isComplete = readyForSignoff && signoffDone;
+
+  return {
+    companyId: params.companyId,
+    actorRole,
+    steps: [...steps],
+    completedCount,
+    totalCount: 5,
+    readyForSignoff,
+    isComplete,
+    signedOffAt,
+    signedOffByName,
+  };
+}
+
+export async function signOffCompanyOnboardingChecklist(
+  tx: SqlExecutor,
+  params: { readonly companyId: string; readonly actorId: string; readonly occurredAt: string },
+): Promise<OnboardingChecklistResponse> {
+  await requireOnboardingEditorRole(tx, params.companyId, params.actorId);
+  const current = await getCompanyOnboardingChecklist(tx, {
+    companyId: params.companyId,
+    actorId: params.actorId,
+  });
+
+  if (!current.readyForSignoff) {
+    const missing = current.steps
+      .filter((step) => step.id !== 'owner_signoff' && !step.done)
+      .map((step) => step.id);
+    throw new AppError('VALIDATION_FAILED', {
+      userMessage: `Onboarding checklist cannot be signed off until prerequisite step(s) complete: ${missing.join(', ')}.`,
+      details: { incompleteSteps: missing },
+    });
+  }
+
+  if (current.isComplete) {
+    return current;
+  }
+
+  await appendAuditLog(tx, {
+    companyId: params.companyId,
+    actorId: params.actorId,
+    action: 'onboarding.checklist_signoff',
+    targetTable: 'company',
+    targetId: params.companyId,
+    oldPayload: null,
+    newPayload: {
+      companyId: params.companyId,
+      checklistVersion: 1,
+      completedSteps: current.steps.map((s) => s.id),
+    },
+    occurredAt: params.occurredAt,
+  });
+
+  return getCompanyOnboardingChecklist(tx, {
+    companyId: params.companyId,
+    actorId: params.actorId,
+  });
+}
+

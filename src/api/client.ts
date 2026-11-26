@@ -66,7 +66,9 @@ import type {
 import type {
   OnboardingApproveMappingsRequest,
   OnboardingApproveMappingsResponse,
+  OnboardingChecklistResponse,
   OnboardingMappingSuggestionDto,
+  OnboardingRehearseMode,
   OnboardingRehearseRequest,
   OnboardingRehearseResponse,
   OnboardingValidateRequest,
@@ -84,7 +86,9 @@ export type {
   NormalizedJournalEntry,
   OnboardingApproveMappingsRequest,
   OnboardingApproveMappingsResponse,
+  OnboardingChecklistResponse,
   OnboardingMappingSuggestionDto,
+  OnboardingRehearseMode,
   OnboardingRehearseRequest,
   OnboardingRehearseResponse,
   OnboardingValidateRequest,
@@ -346,6 +350,8 @@ export interface ApiClient {
     companyId: string,
     request: OnboardingRehearseRequest,
   ): Promise<OnboardingRehearseResponse>;
+  getOnboardingChecklist(companyId: string): Promise<OnboardingChecklistResponse>;
+  signOffOnboardingChecklist(companyId: string): Promise<OnboardingChecklistResponse>;
 }
 
 function boardPackQuery(period: string, fiscalYear?: number | null): string {
@@ -760,6 +766,17 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         'POST',
         `/api/companies/${encodeURIComponent(companyId)}/onboarding/rehearse`,
         body,
+      ),
+    getOnboardingChecklist: (companyId) =>
+      request<OnboardingChecklistResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/onboarding/checklist`,
+      ),
+    signOffOnboardingChecklist: (companyId) =>
+      request<OnboardingChecklistResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/onboarding/checklist/signoff`,
+        {},
       ),
   };
 }
