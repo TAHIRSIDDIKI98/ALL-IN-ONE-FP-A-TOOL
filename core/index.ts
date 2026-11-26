@@ -8,3 +8,4 @@ export * from './import/index.js';
 export * from './planning/index.js';
 export * from './workforce/index.js';
 export * from './metrics/index.js';
+export * from './packs/index.js';

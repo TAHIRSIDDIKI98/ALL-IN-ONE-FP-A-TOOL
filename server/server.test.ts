@@ -2915,4 +2915,174 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect((await fetch(`${baseUrl}/api/companies/${companyId}/dashboards?period=P02`, { headers: bearer(INTRUDER) })).status).toBe(403);
     expect((await fetch(`${baseUrl}/api/companies/${companyId}/dashboards?period=P02`)).status).toBe(401);
   }, 60_000);
+
+  it('WI-0039: lists verified data-only industry packs, applies SaaS CoA atomically & idempotently, and enforces RBAC', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:pack-owner@onefpa.test',
+      email: 'pack-owner@onefpa.test',
+      displayName: 'Pack Owner',
+    };
+    const viewer: VerifiedIdentity = {
+      firebaseUid: 'sandbox:pack-viewer@onefpa.test',
+      email: 'pack-viewer@onefpa.test',
+      displayName: 'Pack Viewer',
+    };
+
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Pack Ready SaaS Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'HQ',
+        entityName: 'HQ',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    // Add viewer member to test RBAC rejection on apply
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            email: viewer.email,
+            displayName: viewer.displayName,
+            role: 'viewer',
+          }),
+        })
+      ).status,
+    ).toBe(201);
+
+    // 1. List verified M2 packs
+    const catalogRes = await fetch(`${baseUrl}/api/companies/${companyId}/packs`, {
+      headers: bearer(owner),
+    });
+    expect(catalogRes.status).toBe(200);
+    const catalog = (await catalogRes.json()) as {
+      companyId: string;
+      packs: readonly {
+        key: string;
+        name: string;
+        version: string;
+        dataOnly: boolean;
+        accounts: readonly { code: string; statementLineKey: string }[];
+        kpis: readonly { key: string }[];
+        drivers: readonly { key: string }[];
+      }[];
+    };
+    expect(catalog.companyId).toBe(companyId);
+    expect(catalog.packs.map((p) => p.key)).toEqual(['saas', 'retail', 'manufacturing']);
+    expect(catalog.packs.every((p) => p.dataOnly)).toBe(true);
+    expect(catalog.packs[0]?.accounts.length).toBe(7);
+    expect(catalog.packs[1]?.accounts.length).toBe(7);
+    expect(catalog.packs[2]?.accounts.length).toBe(8);
+
+    // 2. Apply SaaS pack atomically
+    const applyRes = await fetch(`${baseUrl}/api/companies/${companyId}/packs/saas/apply`, {
+      method: 'POST',
+      headers: bearer(owner),
+    });
+    expect(applyRes.status).toBe(201);
+    const applied = (await applyRes.json()) as {
+      packKey: string;
+      packVersion: string;
+      inserted: number;
+      updated: number;
+      accounts: readonly { code: string; version: number; statementLineKey: string }[];
+    };
+    expect(applied.packKey).toBe('saas');
+    expect(applied.packVersion).toBe('2.1.1');
+    expect(applied.inserted).toBe(7);
+    expect(applied.updated).toBe(0);
+    expect(applied.accounts.length).toBe(7);
+    expect(applied.accounts.every((a) => a.version === 1)).toBe(true);
+
+    // 3. Re-applying is idempotent (updates in place, bumps version to 2, no duplicates)
+    const reapplyRes = await fetch(`${baseUrl}/api/companies/${companyId}/packs/saas/apply`, {
+      method: 'POST',
+      headers: bearer(owner),
+    });
+    expect(reapplyRes.status).toBe(201);
+    const reapplied = (await reapplyRes.json()) as {
+      inserted: number;
+      updated: number;
+      accounts: readonly { code: string; version: number }[];
+    };
+    expect(reapplied.inserted).toBe(0);
+    expect(reapplied.updated).toBe(7);
+    expect(reapplied.accounts.length).toBe(7);
+    expect(reapplied.accounts.every((a) => a.version === 2)).toBe(true);
+
+    // 4. Actuals post cleanly onto applied SaaS pack accounts and statements articulate A1-A5
+    const actualsCsv = [
+      'entry_ref,posting_date,account_code,description,debit,credit',
+      'J-SAAS-1,2026-01-15,1200,Annual subscription AR,1500.00,0.00',
+      'J-SAAS-1,2026-01-15,4000,Subscription revenue Jan,0.00,1000.00',
+      'J-SAAS-1,2026-01-15,2300,Deferred revenue Jan,0.00,500.00',
+      'J-SAAS-2,2026-01-20,5000,R&D engineering cloud,300.00,0.00',
+      'J-SAAS-2,2026-01-20,1200,AR credit offset,0.00,300.00',
+    ].join('\n');
+    const importRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'saas-actuals.csv',
+        csvText: actualsCsv,
+      }),
+    });
+    expect(importRes.status).toBe(201);
+    const committed = (await importRes.json()) as { importedCount: number; quarantinedCount: number };
+    expect(committed.importedCount).toBe(5);
+    expect(committed.quarantinedCount).toBe(0);
+
+    const stmRes = await fetch(`${baseUrl}/api/companies/${companyId}/statements?period=P01`, {
+      headers: bearer(owner),
+    });
+    expect(stmRes.status).toBe(200);
+    const stm = (await stmRes.json()) as {
+      pnl: { revenue: string; opex: string; netIncome: string };
+      articulation: { valid: boolean };
+    };
+    expect(stm.pnl.revenue).toBe('1000.00');
+    expect(stm.pnl.opex).toBe('300.00');
+    expect(stm.pnl.netIncome).toBe('700.00');
+    expect(stm.articulation.valid).toBe(true);
+
+    // 5. Audit log chain includes pack.apply and remains intact
+    const auditChain = await verifyCompanyAuditLog(db, companyId);
+    expect(auditChain.valid).toBe(true);
+    expect(auditChain.checkedCount).toBeGreaterThanOrEqual(4);
+
+    // 6. Negative RBAC / cut-line / auth cases
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/packs/retail/apply`, {
+          method: 'POST',
+          headers: bearer(viewer),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/packs/ecommerce/apply`, {
+          method: 'POST',
+          headers: bearer(owner),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/packs`, {
+          headers: bearer(INTRUDER),
+        })
+      ).status,
+    ).toBe(403);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/packs`)).status).toBe(401);
+  }, 60_000);
 });

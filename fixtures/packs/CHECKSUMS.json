@@ -1,0 +1,31 @@
+{
+  "source": "https://github.com/TAHIRSIDDIKI98/fpa/tree/6f6f72f5b681573414c6da74bce7dc538c79e565/packs",
+  "commit": "6f6f72f5b681573414c6da74bce7dc538c79e565",
+  "portClass": "A",
+  "approvedDate": "2026-11-26",
+  "note": "M2 §6.6 phase-gated Class A port: pack schema + first 3 data-only industry packs (saas, retail, manufacturing). Remaining 9 packs deferred to M4.",
+  "files": {
+    "schema/pack.schema.json": "b1a7ff5a29488fa0af84f1313a123e4bcd32472920f483aebfd025daf70ff5d5",
+    "saas/pack.json": "9ede90d983c958786abd34f44da97249ecb2ce1dc5e2087833c033a5c9ada29e",
+    "saas/coa.json": "b3941e049302798748a477d0611e275d65a83eabdbfaf81fedefa8906a279641",
+    "saas/drivers.json": "6c25d43803a7a6d8fb2d6f14792a763524b40630618fad5563faaf9185569b32",
+    "saas/gl_template.json": "f5be1321ac06fa21549920b9a719e969ed09999c88a298ac12ccfb7a4cc9226a",
+    "saas/kpis.json": "d21ea0ac5ca79ca55c7cb0fc545292598cb3e5b5044203419de1811a0f1fa5b1",
+    "saas/layouts.json": "2f104594d822b340b3fe23995a8c7185ac6dcaf1a658cd597d8c19838a815490",
+    "saas/rollup.json": "2db91484116e504be394ca21734f85d9fc7ff15b1351e8fc1b47ac82c45bc7ba",
+    "retail/pack.json": "e74ccef0d056beab44c2993c68210b78bb5d6693165a8aae986836e7c91f0390",
+    "retail/coa.json": "b796f577e01ee35a7454281d47d287c04b339c5d7ea7c1e802fff11f4a2b7b63",
+    "retail/drivers.json": "93641c52ab0676e3bbefe72f674396a6c5ff042d9a2898246dd502d01ca78eb5",
+    "retail/gl_template.json": "f5be1321ac06fa21549920b9a719e969ed09999c88a298ac12ccfb7a4cc9226a",
+    "retail/kpis.json": "90a0bdaa1d717818fd82df4fdf0b27379e6fe148a06c0830fc33532485e6421c",
+    "retail/layouts.json": "652b731f2312967afe953541500ad00b6eccddb907986d28c3e6887889c41da5",
+    "retail/rollup.json": "2db91484116e504be394ca21734f85d9fc7ff15b1351e8fc1b47ac82c45bc7ba",
+    "manufacturing/pack.json": "76677ed98ff849095bc44dacd07ea95eb77ab19734457e873d2bebd88f47105b",
+    "manufacturing/coa.json": "2d72439231edd6f1041073695b7a4a63a750c955f68b9f1a15813772dba2200b",
+    "manufacturing/drivers.json": "d8a59c40eb7af3ad412b9784beaec3aca21922c57ba3b8e5bc22d70d89b34295",
+    "manufacturing/gl_template.json": "f5be1321ac06fa21549920b9a719e969ed09999c88a298ac12ccfb7a4cc9226a",
+    "manufacturing/kpis.json": "56f04f6d0713813ec51d680c3c8b559851e15409435e717a10144824278aa9c4",
+    "manufacturing/layouts.json": "85e67173451854c011792e0919ae339847de072a37e6c6fc8e6b763f3af49fa7",
+    "manufacturing/rollup.json": "2db91484116e504be394ca21734f85d9fc7ff15b1351e8fc1b47ac82c45bc7ba"
+  }
+}

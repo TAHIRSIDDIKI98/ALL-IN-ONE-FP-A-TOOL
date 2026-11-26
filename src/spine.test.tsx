@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { SPINE_ROUTE_DEFS } from '../shared/spine.js';
 import { App } from './App.js';
 import BoardPackPage, { BoardPackPreview } from './pages/BoardPackPage.js';
-import type { BoardPackReportPayload, ChartAccountPayload } from './api/client.js';
-import CoaMapperPage, { CoaMappingEditor } from './pages/CoaMapperPage.js';
+import type { BoardPackReportPayload, ChartAccountPayload, IndustryPackDetail } from './api/client.js';
+import CoaMapperPage, { CoaMappingEditor, IndustryPackCatalogPanel } from './pages/CoaMapperPage.js';
 import ImportWizardPage from './pages/ImportWizardPage.js';
 import ModelGridPage from './pages/ModelGridPage.js';
 import SetupWizardPage from './pages/SetupWizardPage.js';
@@ -291,6 +291,98 @@ describe('7-Screen Spine Inventory, Landmarks & Five-State Honesty (U1–U3, §9
     expect(html).toContain('Partial workspace data');
     expect(html).toContain('A3 fail 1.00');
     expect(html).not.toContain('—%');
+  });
+
+  it('renders M2 data-only industry packs inside CoaMapperPage without inventing metrics (WI-0039)', () => {
+    const noop = (): void => {};
+    const packs: readonly IndustryPackDetail[] = [
+      {
+        key: 'saas',
+        name: 'SaaS / Tech',
+        version: '2.1.1',
+        description: 'SaaS revenue and unit economics baseline.',
+        defaultCalendar: '12month',
+        defaultCurrencyHint: 'USD',
+        localeHint: 'en-US',
+        dataOnly: true,
+        sha256ManifestHash: 'a'.repeat(64),
+        accounts: [
+          {
+            code: '4000',
+            name: 'Subscription Revenue',
+            packType: 'revenue',
+            section: 'Revenue',
+            type: 'revenue',
+            normalSide: 'credit',
+            statementLineKey: 'pl.revenue.product',
+            isControl: true,
+            isPostable: true,
+          },
+        ],
+        drivers: [
+          {
+            key: 'arpu',
+            name: 'ARPU',
+            type: 'manual',
+            unit: 'money',
+            low: '0',
+            high: '1000000000',
+            defaultMethod: 'manual',
+            links: ['revenue'],
+          },
+        ],
+        kpis: [
+          {
+            key: 'nrr',
+            name: 'Net Revenue Retention %',
+            unit: 'nrr_pct',
+            formula: '100 - churn * 100',
+            targetValue: '115',
+            targetDirection: 'gte',
+            definition: 'Net Revenue Retention %',
+            goodThreshold: '110',
+            watchThreshold: '100',
+          },
+        ],
+        layouts: [],
+      },
+    ];
+
+    const populatedHtml = renderToStaticMarkup(
+      createElement(IndustryPackCatalogPanel, {
+        packs,
+        selectedKey: 'saas',
+        appliedResult: {
+          companyId: '11111111-1111-4111-8111-111111111111',
+          packKey: 'saas',
+          packVersion: '2.1.1',
+          inserted: 7,
+          updated: 0,
+          accounts: [],
+        },
+        onSelect: noop,
+        onApply: noop,
+      }),
+    );
+
+    expect(populatedHtml).toContain('Data-only industry pack templates (M2)');
+    expect(populatedHtml).toContain('SaaS / Tech');
+    expect(populatedHtml).toContain('DATA-ONLY');
+    expect(populatedHtml).toContain('Apply SaaS / Tech chart');
+    expect(populatedHtml).toContain('Applied saas v2.1.1: 7 created, 0 updated.');
+    expect(populatedHtml).toContain('pl.revenue.product');
+    expect(populatedHtml).toContain('Net Revenue Retention %');
+
+    const emptyHtml = renderToStaticMarkup(
+      createElement(IndustryPackCatalogPanel, {
+        packs: [],
+        selectedKey: null,
+        appliedResult: null,
+        onSelect: noop,
+        onApply: noop,
+      }),
+    );
+    expect(emptyHtml).toContain('No verified industry packs were loaded for this workspace.');
   });
 
 });

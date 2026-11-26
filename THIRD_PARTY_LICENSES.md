@@ -1,7 +1,7 @@
 # Third-Party Dependency Licenses
 
 > Generated deterministically from `package-lock.json` (`MASTER_PROMPT §12.16 LIC2`).
-> Packages: **574** · Manifest Digest: `039804f67445aaf3`
+> Packages: **574** · Manifest Digest: `e22b670ea8922ad5`
 
 | Package | Version | License |
 |---|---|---|
@@ -558,7 +558,7 @@
 | `web-vitals` | `4.2.4` | `Apache-2.0` |
 | `webidl-conversions` | `3.0.1` | `BSD-2-Clause` |
 | `websocket-driver` | `0.8.0` | `Apache-2.0` |
-| `websocket-extensions` | `0.2.0` | `Apache-2.0` |
+| `websocket-extensions` | `0.3.0` | `Apache-2.0` |
 | `whatwg-url` | `5.0.0` | `MIT` |
 | `which-boxed-primitive` | `1.1.1` | `MIT` |
 | `which-builtin-type` | `1.2.1` | `MIT` |

@@ -1452,4 +1452,56 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(summary.kpis[0]?.formattedValue).toBe('1200.00');
     expect(summary.reportBuilder.citationCoveragePct).toBe('100.00%');
   });
+
+  it('lists and applies M2 data-only industry packs via relative endpoints', async () => {
+    const companyId = String(COMPANY['companyId']);
+    const { fetchImpl, calls } = fakeFetch((call) => {
+      if (call.method === 'GET') {
+        return {
+          status: 200,
+          body: {
+            companyId,
+            packs: [
+              {
+                key: 'saas',
+                name: 'SaaS / Tech',
+                version: '2.1.1',
+                description: 'SaaS revenue and unit economics template.',
+                defaultCalendar: '12month',
+                defaultCurrencyHint: 'USD',
+                localeHint: 'en-US',
+                dataOnly: true,
+                sha256ManifestHash: 'a'.repeat(64),
+                accounts: [],
+                drivers: [],
+                kpis: [],
+                layouts: [],
+              },
+            ],
+          },
+        };
+      }
+      return {
+        status: 201,
+        body: {
+          companyId,
+          packKey: 'saas',
+          packVersion: '2.1.1',
+          inserted: 7,
+          updated: 0,
+          accounts: [],
+        },
+      };
+    });
+
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+    const catalog = await client.listIndustryPacks(companyId);
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/packs`);
+    expect(catalog.packs[0]?.dataOnly).toBe(true);
+
+    const applied = await client.applyIndustryPack(companyId, 'saas');
+    expect(calls[1]?.method).toBe('POST');
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/packs/saas/apply`);
+    expect(applied.inserted).toBe(7);
+  });
 });

@@ -118,6 +118,12 @@ import {
 } from '../shared/dashboards.js';
 import { getDashboardSummary } from './db/repositories/dashboards.js';
 import {
+  ApplyIndustryPackResponseSchema,
+  IndustryPackCatalogResponseSchema,
+  IndustryPackKeySchema,
+} from '../shared/packs.js';
+import { applyIndustryPackToCompany, listIndustryPacks } from './db/repositories/packs.js';
+import {
   createCompanyWorkspace,
   findAppUserByFirebaseUid,
   getCompanyWorkspace,
@@ -1231,6 +1237,53 @@ export function createSpineApp(context: SpineContext) {
           templateId: parsedTemplate.data,
         });
         res.status(200).json(DashboardSummaryResponseSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Data-Only Industry Packs (§2.6, §6.6, WI-0039):
+   * Read verified Class A pack catalog and atomically apply a pack's CoA baseline to the company.
+   */
+  app.get(
+    '/api/companies/:companyId/packs',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const packs = listIndustryPacks();
+        res.status(200).json(IndustryPackCatalogResponseSchema.parse({ companyId, packs }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/packs/:packKey/apply',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const rawKey = req.params['packKey'];
+        const keyStr = Array.isArray(rawKey) ? (rawKey[0] ?? '') : (rawKey ?? '');
+        const parsedKey = IndustryPackKeySchema.safeParse(keyStr);
+        if (!parsedKey.success) {
+          throw new AppError('NOT_FOUND', {
+            userMessage: `Industry pack "${keyStr}" does not exist or is deferred past M2.`,
+          });
+        }
+        const result = await db.transaction((tx) =>
+          applyIndustryPackToCompany(tx, {
+            companyId,
+            actorId: userId,
+            packKey: parsedKey.data,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(ApplyIndustryPackResponseSchema.parse(result));
       } catch (error) {
         next(error);
       }

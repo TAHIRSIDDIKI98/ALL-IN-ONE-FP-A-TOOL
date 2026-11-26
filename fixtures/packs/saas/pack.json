@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "pack": {
+    "key": "saas",
+    "name": "SaaS / Tech",
+    "version": "2.1.1",
+    "description": "ARR, net revenue retention, CAC payback, burn multiple \u2014 SaaS revenue and unit economics.",
+    "default_calendar": "12month",
+    "default_currency_hint": "USD",
+    "locale_hint": "en-US"
+  },
+  "coa_template": "coa.json",
+  "kpi_definitions": "kpis.json",
+  "driver_templates": "drivers.json",
+  "report_layouts": "layouts.json",
+  "gl_template": "gl_template.json",
+  "group_rollup_maps": "rollup.json"
+}

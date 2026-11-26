@@ -45,8 +45,14 @@ import type {
   DashboardReportTemplateId,
   DashboardSummaryResponse,
 } from '../../shared/dashboards.js';
+import type {
+  ApplyIndustryPackResponse,
+  IndustryPackCatalogResponse,
+  IndustryPackDetail,
+  IndustryPackKey,
+} from '../../shared/packs.js';
 import type { BoardPackExportFormat } from '../../shared/boardPack.js';
-export type { BoardPackExportFormat };
+export type { BoardPackExportFormat, IndustryPackDetail, IndustryPackKey };
 
 export interface ApiErrorEnvelope {
   readonly code: string;
@@ -271,6 +277,11 @@ export interface ApiClient {
       readonly template?: DashboardReportTemplateId | null;
     },
   ): Promise<DashboardSummaryResponse>;
+  listIndustryPacks(companyId: string): Promise<IndustryPackCatalogResponse>;
+  applyIndustryPack(
+    companyId: string,
+    packKey: IndustryPackKey,
+  ): Promise<ApplyIndustryPackResponse>;
 }
 
 function boardPackQuery(period: string, fiscalYear?: number | null): string {
@@ -635,6 +646,17 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         `/api/companies/${encodeURIComponent(companyId)}/dashboards?${params.toString()}`,
       );
     },
+    listIndustryPacks: (companyId) =>
+      request<IndustryPackCatalogResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/packs`,
+      ),
+    applyIndustryPack: (companyId, packKey) =>
+      request<ApplyIndustryPackResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/packs/${encodeURIComponent(packKey)}/apply`,
+        {},
+      ),
   };
 }
 
