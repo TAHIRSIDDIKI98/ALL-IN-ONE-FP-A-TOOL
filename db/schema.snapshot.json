@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "0003_m2_workforce",
-  "migration": "db/migrations/0003_m2_workforce.sql",
-  "tableCount": 23,
+  "schemaVersion": "0004_m2_connectors",
+  "migration": "db/migrations/0004_m2_connectors.sql",
+  "tableCount": 25,
   "tables": [
     "account",
     "app_user",
@@ -10,6 +10,7 @@
     "coa_mapping",
     "comment",
     "company",
+    "connector_config",
     "department",
     "entity",
     "fiscal_calendar",
@@ -25,6 +26,7 @@
     "plan_version",
     "scenario",
     "statement_line",
+    "sync_run",
     "workforce_position"
   ],
   "moneyColumns": [
@@ -51,6 +53,16 @@
     {
       "table": "plan_line",
       "column": "amount",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "sync_run",
+      "column": "total_debits",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "sync_run",
+      "column": "total_credits",
       "type": "NUMERIC(28,6)"
     },
     {
@@ -608,6 +620,90 @@
     {
       "table": "company",
       "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "connector_config",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "connector_config",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "connector_config",
+      "column": "source_system",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "connector_config",
+      "column": "name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "connector_config",
+      "column": "external_ref",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "connector_config",
+      "column": "credential_ref",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "connector_config",
+      "column": "sync_cursor",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "connector_config",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": "'active'::text"
+    },
+    {
+      "table": "connector_config",
+      "column": "last_synced_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "connector_config",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "connector_config",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "connector_config",
+      "column": "updated_at",
       "type": "timestamp with time zone",
       "nullable": false,
       "default": "now()"
@@ -1570,6 +1666,146 @@
       "type": "timestamp with time zone",
       "nullable": false,
       "default": "now()"
+    },
+    {
+      "table": "sync_run",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "sync_run",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "connector_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "mode",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "cursor_before",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "cursor_after",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "source_hash",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "rows_pulled",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "rows_imported",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "rows_quarantined",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "total_debits",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "total_credits",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "reconciliation_status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "reconciliation_reason",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "import_batch_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "replaced_run_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "triggered_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sync_run",
+      "column": "started_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "sync_run",
+      "column": "completed_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
     },
     {
       "table": "workforce_position",
@@ -2632,6 +2868,160 @@
         "id"
       ],
       "references": "company.id"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.company_id"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.created_at"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_created_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.created_by"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_credential_ref_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.credential_ref"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_credential_ref_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.credential_ref"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_external_ref_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.external_ref"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_external_ref_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.external_ref"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.id"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_name_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.name"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_name_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.name"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_source_system_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.source_system"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_source_system_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.source_system"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.status"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.status"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_updated_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "connector_config.updated_at"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "connector_config.id"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "connector_config.id"
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_company_id_source_system_name_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "source_system",
+        "name"
+      ],
+      "references": "connector_config.company_id"
     },
     {
       "table": "department",
@@ -4571,6 +4961,242 @@
       "references": "statement_line.statement"
     },
     {
+      "table": "sync_run",
+      "name": "sync_run_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.import_batch_id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.company_id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_connector_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.connector_id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_mode_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.mode"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_mode_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.mode"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_reconciliation_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.reconciliation_status"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_reconciliation_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.reconciliation_status"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_rows_imported_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.rows_imported"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_rows_imported_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.rows_imported"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_rows_pulled_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.rows_pulled"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_rows_pulled_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.rows_pulled"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_rows_quarantined_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.rows_quarantined"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_rows_quarantined_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.rows_quarantined"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_source_hash_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.source_hash"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_source_hash_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.source_hash"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_started_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.started_at"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.status"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.status"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_total_credits_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.total_credits"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_total_credits_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.total_credits"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_total_debits_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.total_debits"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_total_debits_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.total_debits"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_triggered_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "sync_run.triggered_by"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_company_id_connector_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "connector_id"
+      ],
+      "references": "connector_config.id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_company_id_import_batch_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "import_batch_id"
+      ],
+      "references": "import_batch.id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_company_id_replaced_run_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "replaced_run_id"
+      ],
+      "references": "sync_run.id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_company_id_triggered_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "triggered_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "sync_run.id"
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "sync_run.id"
+    },
+    {
       "table": "workforce_position",
       "name": "workforce_position_account_id_not_null",
       "type": "CHECK",
@@ -5000,6 +5626,43 @@
       ]
     },
     {
+      "table": "connector_config",
+      "name": "connector_config_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_company_id_source_system_name_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "source_system",
+        "name"
+      ]
+    },
+    {
+      "table": "connector_config",
+      "name": "connector_config_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "connector_config",
+      "name": "idx_connector_config_company",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "source_system",
+        "status"
+      ]
+    },
+    {
       "table": "department",
       "name": "department_company_id_code_key",
       "unique": true,
@@ -5412,6 +6075,33 @@
       "columns": [
         "statement",
         "sort_order"
+      ]
+    },
+    {
+      "table": "sync_run",
+      "name": "idx_sync_run_connector_started",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "connector_id",
+        "started_at"
+      ]
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "sync_run",
+      "name": "sync_run_pkey",
+      "unique": true,
+      "columns": [
+        "id"
       ]
     },
     {

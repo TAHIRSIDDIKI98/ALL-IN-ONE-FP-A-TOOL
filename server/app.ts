@@ -124,6 +124,33 @@ import {
 } from '../shared/packs.js';
 import { applyIndustryPackToCompany, listIndustryPacks } from './db/repositories/packs.js';
 import {
+  ConnectorConfigSummarySchema,
+  ConnectorRunsResponseSchema,
+  ConnectorsOverviewResponseSchema,
+  CreateConnectorRequestSchema,
+  SyncConnectorRequestSchema,
+  SyncConnectorResponseSchema,
+} from '../shared/integrations.js';
+import {
+  createConnectorConfig,
+  listConnectorRuns,
+  listConnectorsOverview,
+  syncConnector,
+} from './db/repositories/connectors.js';
+import {
+  OnboardingApproveMappingsRequestSchema,
+  OnboardingApproveMappingsResponseSchema,
+  OnboardingRehearseRequestSchema,
+  OnboardingRehearseResponseSchema,
+  OnboardingValidateRequestSchema,
+  OnboardingValidationReportSchema,
+} from '../shared/onboarding.js';
+import {
+  approveOnboardingMappings,
+  rehearseCompanyOnboarding,
+  validateCompanyOnboarding,
+} from './db/repositories/onboarding.js';
+import {
   createCompanyWorkspace,
   findAppUserByFirebaseUid,
   getCompanyWorkspace,
@@ -294,6 +321,104 @@ export function createSpineApp(context: SpineContext) {
           ...(body.asOfDate === undefined ? {} : { asOfDate: body.asOfDate }),
         });
         res.status(200).json(ImportPreviewReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Customer Onboarding & Data Migration Pipeline (MASTER_PROMPT §11.12, ONB1–ONB3):
+   * deterministic assisted CoA matching, exact row-accounting validation, period-gap/anomaly
+   * inspection, explicit human CoA approval, and repeatable dry-run / stage-commit rehearsal.
+   */
+  app.post(
+    '/api/companies/:companyId/onboarding/validate',
+    requireAuth,
+    importBody,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(OnboardingValidateRequestSchema, req.body);
+        const bytes = Buffer.byteLength(body.csvText, 'utf8');
+        if (bytes > MAX_IMPORT_BYTES) {
+          throw new AppError('IMPORT_FILE_TOO_LARGE', {
+            details: { bytes, maxBytes: MAX_IMPORT_BYTES },
+          });
+        }
+        const report = await validateCompanyOnboarding(db, {
+          companyId,
+          actorId: userId,
+          request: body,
+          defaultAsOfDate: new Date().toISOString().slice(0, 10),
+        });
+        res.status(200).json(OnboardingValidationReportSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/onboarding/mappings/approve',
+    requireAuth,
+    importBody,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(OnboardingApproveMappingsRequestSchema, req.body);
+        const bytes = Buffer.byteLength(body.csvText, 'utf8');
+        if (bytes > MAX_IMPORT_BYTES) {
+          throw new AppError('IMPORT_FILE_TOO_LARGE', {
+            details: { bytes, maxBytes: MAX_IMPORT_BYTES },
+          });
+        }
+        const result = await db.transaction((tx) =>
+          approveOnboardingMappings(tx, {
+            companyId,
+            actorId: userId,
+            request: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(OnboardingApproveMappingsResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/onboarding/rehearse',
+    requireAuth,
+    importBody,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(OnboardingRehearseRequestSchema, req.body);
+        const bytes = Buffer.byteLength(body.csvText, 'utf8');
+        if (bytes > MAX_IMPORT_BYTES) {
+          throw new AppError('IMPORT_FILE_TOO_LARGE', {
+            details: { bytes, maxBytes: MAX_IMPORT_BYTES },
+          });
+        }
+        const result =
+          body.mode === 'dry_run'
+            ? await rehearseCompanyOnboarding(db, {
+                companyId,
+                actorId: userId,
+                request: body,
+                occurredAt: new Date().toISOString(),
+              })
+            : await db.transaction((tx) =>
+                rehearseCompanyOnboarding(tx, {
+                  companyId,
+                  actorId: userId,
+                  request: body,
+                  occurredAt: new Date().toISOString(),
+                }),
+              );
+        res.status(body.mode === 'dry_run' ? 200 : 201).json(OnboardingRehearseResponseSchema.parse(result));
       } catch (error) {
         next(error);
       }
@@ -1284,6 +1409,85 @@ export function createSpineApp(context: SpineContext) {
           }),
         );
         res.status(201).json(ApplyIndustryPackResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Connectors Framework + Google Sheets, QBO, and Xero Adapters (§11.1, CON1–CON5, WI-0040):
+   * Credentials stay write-only server-side; matched normalized entries feed ONE commitImport path.
+   */
+  app.get(
+    '/api/companies/:companyId/connectors',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const overview = await listConnectorsOverview(db, companyId);
+        res.status(200).json(ConnectorsOverviewResponseSchema.parse(overview));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/connectors',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(CreateConnectorRequestSchema, req.body);
+        const created = await db.transaction((tx) =>
+          createConnectorConfig(tx, {
+            companyId,
+            actorId: userId,
+            request: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(ConnectorConfigSummarySchema.parse(created));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    '/api/companies/:companyId/connectors/:connectorId/runs',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const connectorId = readEntityUuidParam(req.params['connectorId'], 'connectorId');
+        const runs = await listConnectorRuns(db, { companyId, connectorId });
+        res.status(200).json(ConnectorRunsResponseSchema.parse(runs));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/connectors/:connectorId/sync',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const connectorId = readEntityUuidParam(req.params['connectorId'], 'connectorId');
+        const body = parseBody(SyncConnectorRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          syncConnector(tx, {
+            companyId,
+            connectorId,
+            actorId: userId,
+            request: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(SyncConnectorResponseSchema.parse(result));
       } catch (error) {
         next(error);
       }

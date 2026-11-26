@@ -1,0 +1,11 @@
+{
+  "portClass": "A",
+  "generatedAt": "2026-11-26",
+  "files": {
+    "google_sheets_gl.json": "94cc07d590c14c558b2113f8e8d6915998d68e8de9e64912fb5c79f2f5bbdcce",
+    "quickbooks_online_je.json": "187a29e1e929a9072e2ca3f682db1d6cc5dc20066c265a48dc3ff7957feb3efe",
+    "xero_manual_journals.json": "b8fc7f4ee7a220bc5e25f9214574be3d7c5dfb355d6290b97328c7317fc08476",
+    "reconciliation_mismatch_je.json": "211034ebdcded29e0262361931d6c2527367fd412647fbeeed6589d82a4fd133",
+    "connectors_expected.json": "18c9300806ccdd03447a05f14c35c6561b6e0cd1012f1c85a554f085d36b81f4"
+  }
+}

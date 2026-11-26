@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compare, money, negate, serialize, sum } from '../../../core/money/index.js';
+import type { DriverDefinition } from '../../../core/planning/index.js';
 import type { CoaSeedAccount } from '../../../shared/import.js';
 import type { CompanySetupRequest } from '../../../shared/setup.js';
 import type { DatabaseHandle } from '../client.js';
@@ -218,4 +219,231 @@ export async function importCorpus(
       occurredAt: params.occurredAt ?? OCCURRED_AT,
     }),
   );
+}
+
+export interface M2CorpusFile {
+  readonly tenantB: {
+    readonly company: {
+      readonly id: string;
+      readonly name: string;
+      readonly calendarKind: '454';
+      readonly entityCode: string;
+      readonly entityName: string;
+      readonly currency: string;
+    };
+    readonly coa: readonly CorpusAccount[];
+    readonly glEntries: readonly CorpusGlEntry[];
+    readonly glLines: readonly CorpusGlLine[];
+    readonly openingBalanceSheet: Readonly<Record<string, string>>;
+  };
+  readonly rollingForecastCorpus: {
+    readonly cutoffPeriod: string;
+    readonly scenarioName: string;
+    readonly periods: readonly string[];
+    readonly forecastDrivers: readonly DriverDefinition[];
+    readonly summaryCheck: {
+      readonly totalActual: string;
+      readonly totalForecast: string;
+      readonly totalFullHorizon: string;
+      readonly totalMissingCells: number;
+    };
+  };
+  readonly scenarioCorpus: {
+    readonly periods: readonly string[];
+    readonly scenarios: {
+      readonly base: { readonly name: string; readonly drivers: readonly DriverDefinition[]; readonly grandTotal: string };
+      readonly upside: { readonly name: string; readonly drivers: readonly DriverDefinition[]; readonly grandTotal: string };
+      readonly downside: { readonly name: string; readonly drivers: readonly DriverDefinition[]; readonly grandTotal: string };
+    };
+    readonly comparisonCheck: {
+      readonly baseVsUpsideTotalDelta: string;
+      readonly baseVsDownsideTotalDelta: string;
+    };
+  };
+  readonly workforceCorpus: {
+    readonly periods: readonly string[];
+    readonly positions: readonly {
+      readonly positionCode: string;
+      readonly title: string;
+      readonly departmentName: string;
+      readonly accountCode: string;
+      readonly startPeriodCode: string;
+      readonly endPeriodCode: string | null;
+      readonly fte: string;
+      readonly annualSalary: string;
+      readonly burdenRate: string;
+      readonly bonusRate: string;
+      readonly rampFirstPeriodPct: string;
+      readonly meritPeriodCode: string | null;
+      readonly meritIncreasePct: string;
+      readonly status: 'active' | 'inactive';
+    }[];
+  };
+}
+
+export const M2_CORPUS: M2CorpusFile = JSON.parse(
+  readFileSync(join(process.cwd(), 'fixtures', 'corpus', 'm2_corpus.json'), 'utf8'),
+) as M2CorpusFile;
+
+export const M2_CORPUS_ORACLE: {
+  readonly tenantB: CorpusOracle;
+  readonly rollingForecast: {
+    readonly cutoffPeriod: string;
+    readonly totalActual: string;
+    readonly totalForecast: string;
+    readonly totalFullHorizon: string;
+    readonly totalMissingCells: number;
+  };
+  readonly scenarios: {
+    readonly baseGrandTotal: string;
+    readonly upsideGrandTotal: string;
+    readonly downsideGrandTotal: string;
+    readonly baseVsUpsideTotalDelta: string;
+    readonly baseVsDownsideTotalDelta: string;
+  };
+  readonly workforce: {
+    readonly activePositionCount: number;
+    readonly inactiveExcludedCount: number;
+    readonly grandTotalCost: string;
+    readonly grandTotalFteMonths: string;
+  };
+} = JSON.parse(
+  readFileSync(join(process.cwd(), 'fixtures', 'oracles', 'expected', 'm2_corpus_expected.json'), 'utf8'),
+) as {
+  readonly tenantB: CorpusOracle;
+  readonly rollingForecast: {
+    readonly cutoffPeriod: string;
+    readonly totalActual: string;
+    readonly totalForecast: string;
+    readonly totalFullHorizon: string;
+    readonly totalMissingCells: number;
+  };
+  readonly scenarios: {
+    readonly baseGrandTotal: string;
+    readonly upsideGrandTotal: string;
+    readonly downsideGrandTotal: string;
+    readonly baseVsUpsideTotalDelta: string;
+    readonly baseVsDownsideTotalDelta: string;
+  };
+  readonly workforce: {
+    readonly activePositionCount: number;
+    readonly inactiveExcludedCount: number;
+    readonly grandTotalCost: string;
+    readonly grandTotalFteMonths: string;
+  };
+};
+
+export function tenantBCsv(): string {
+  const entryById = new Map(M2_CORPUS.tenantB.glEntries.map((entry) => [entry.entryId, entry]));
+  const rows = ['entry_ref,date,account_code,description,debit,credit'];
+  for (const line of M2_CORPUS.tenantB.glLines) {
+    const entry = entryById.get(line.entryId);
+    if (entry === undefined) {
+      throw new Error(`Tenant B corpus line references unknown entry ${line.entryId}`);
+    }
+    const account = M2_CORPUS.tenantB.coa.find((c) => c.code === line.accountCode);
+    const description = (account?.name ?? 'Tenant B posting').replace(/[,"\n]/g, ' ');
+    rows.push([entry.entryRef, entry.postingDate, line.accountCode, description, line.debit, line.credit].join(','));
+  }
+  return `${rows.join('\n')}\n`;
+}
+
+export function tenantBOpeningBalanceCsv(postingDate = '2025-12-31'): string {
+  const rows = ['entry_ref,date,account_code,description,debit,credit'];
+  const debits: ReturnType<typeof money>[] = [];
+  const credits: ReturnType<typeof money>[] = [];
+  for (const [lineKey, amount] of Object.entries(M2_CORPUS.tenantB.openingBalanceSheet)) {
+    const account = M2_CORPUS.tenantB.coa.find((c) => c.statementLineKey === lineKey);
+    if (account === undefined) {
+      throw new Error(`Tenant B opening key ${lineKey} has no account`);
+    }
+    const contribution = money(amount);
+    if (contribution.isZero()) continue;
+    const debitNormalSheet = account.type === 'asset' || account.type === 'expense';
+    let debit = money('0');
+    let credit = money('0');
+    if (debitNormalSheet) {
+      if (contribution.isNegative()) credit = negate(contribution);
+      else debit = contribution;
+    } else if (contribution.isNegative()) {
+      debit = negate(contribution);
+    } else {
+      credit = contribution;
+    }
+    debits.push(debit);
+    credits.push(credit);
+    const description = account.name.replace(/[,"\n]/g, ' ');
+    rows.push(['NM-OPEN', postingDate, account.code, description, serialize(debit, 2), serialize(credit, 2)].join(','));
+  }
+  const debitTotal = sum(debits);
+  const creditTotal = sum(credits);
+  if (compare(debitTotal, creditTotal) !== 0) {
+    throw new Error(`Tenant B opening BS unbalanced: ${serialize(debitTotal)} != ${serialize(creditTotal)}`);
+  }
+  return `${rows.join('\n')}\n`;
+}
+
+export async function seedTenantBCompany(
+  db: DatabaseHandle,
+): Promise<{ companyId: string; actorId: string }> {
+  const actor: AppUserIdentity = {
+    firebaseUid: 'uid-tenant-b-owner',
+    email: 'owner-b@northstar.test',
+    displayName: 'Northstar Owner B',
+  };
+  const request: CompanySetupRequest = {
+    companyName: M2_CORPUS.tenantB.company.name,
+    baseCurrency: M2_CORPUS.tenantB.company.currency,
+    calendarKind: M2_CORPUS.tenantB.company.calendarKind,
+    fiscalYear: 2025,
+    yearCount: 2,
+    entityCode: M2_CORPUS.tenantB.company.entityCode,
+    entityName: M2_CORPUS.tenantB.company.entityName,
+  };
+  return db.transaction(async (tx) => {
+    const workspace = await createCompanyWorkspace(tx, { actor, request, occurredAt: OCCURRED_AT });
+    const actorId = await ensureAppUser(tx, actor);
+    const coa: CoaSeedAccount[] = M2_CORPUS.tenantB.coa.map((a) => ({
+      code: a.code,
+      name: a.name,
+      type: a.type,
+      normalSide: a.normalSide,
+      parentCode: a.parentCode,
+      isPostable: true,
+      statementLineKey: a.statementLineKey,
+      active: a.active,
+    }));
+    await seedChartOfAccounts(tx, { companyId: workspace.companyId, accounts: coa });
+    return { companyId: workspace.companyId, actorId };
+  });
+}
+
+export async function seedTenantBWithOpeningAndActuals(
+  db: DatabaseHandle,
+): Promise<{ companyId: string; actorId: string }> {
+  const seeded = await seedTenantBCompany(db);
+
+  await db.transaction((tx) =>
+    commitImport(tx, {
+      companyId: seeded.companyId,
+      actorId: seeded.actorId,
+      kind: 'actuals',
+      sourceFilename: 'tenant_b_opening.csv',
+      csvText: tenantBOpeningBalanceCsv(),
+      occurredAt: OCCURRED_AT,
+    }),
+  );
+
+  await db.transaction((tx) =>
+    commitImport(tx, {
+      companyId: seeded.companyId,
+      actorId: seeded.actorId,
+      kind: 'actuals',
+      sourceFilename: 'tenant_b_gl.csv',
+      csvText: tenantBCsv(),
+      occurredAt: OCCURRED_AT,
+    }),
+  );
+
+  return seeded;
 }

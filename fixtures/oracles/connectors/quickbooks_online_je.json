@@ -1,0 +1,91 @@
+{
+  "sourceSystem": "quickbooks_online",
+  "currency": "USD",
+  "expectedRowCount": 4,
+  "journalEntries": [
+    {
+      "Id": "QBO-JE-101",
+      "DocNumber": "QBO-101",
+      "TxnDate": "2026-04-08",
+      "Period": "P04",
+      "CurrencyRef": {
+        "value": "USD"
+      },
+      "PrivateNote": "QBO April SaaS invoicing",
+      "Line": [
+        {
+          "Description": "AR Customer Invoicing",
+          "Amount": "2400.00",
+          "DetailType": "JournalEntryLineDetail",
+          "JournalEntryLineDetail": {
+            "PostingType": "Debit",
+            "AccountRef": {
+              "value": "1100",
+              "name": "Accounts Receivable"
+            },
+            "DepartmentRef": {
+              "name": "REVOPS"
+            }
+          }
+        },
+        {
+          "Description": "Product Revenue Recognition",
+          "Amount": "2400.00",
+          "DetailType": "JournalEntryLineDetail",
+          "JournalEntryLineDetail": {
+            "PostingType": "Credit",
+            "AccountRef": {
+              "value": "4000",
+              "name": "Product Revenue"
+            },
+            "DepartmentRef": {
+              "name": "REVOPS"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "Id": "QBO-JE-102",
+      "DocNumber": "QBO-102",
+      "TxnDate": "2026-04-18",
+      "Period": "P04",
+      "CurrencyRef": {
+        "value": "USD"
+      },
+      "PrivateNote": "QBO cloud vendor accrual",
+      "Line": [
+        {
+          "Description": "Cloud Hosting COGS",
+          "Amount": "600.00",
+          "DetailType": "JournalEntryLineDetail",
+          "JournalEntryLineDetail": {
+            "PostingType": "Debit",
+            "AccountRef": {
+              "value": "5000",
+              "name": "Cost of Goods Sold"
+            },
+            "DepartmentRef": {
+              "name": "INFRA"
+            }
+          }
+        },
+        {
+          "Description": "AP Cloud Vendor Accrual",
+          "Amount": "600.00",
+          "DetailType": "JournalEntryLineDetail",
+          "JournalEntryLineDetail": {
+            "PostingType": "Credit",
+            "AccountRef": {
+              "value": "2000",
+              "name": "Accounts Payable"
+            },
+            "DepartmentRef": {
+              "name": "INFRA"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

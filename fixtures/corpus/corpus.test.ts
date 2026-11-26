@@ -187,3 +187,204 @@ describe('Coherent Sample Corpus v1 & Independent BigInt Oracles (C1–C4, C8–
     expect(artCheck.valid).toBe(true);
   });
 });
+
+import {
+  DEFAULT_M2_CORPUS_CONFIG,
+  DEFAULT_M2_CORPUS_SEED,
+  generateM2Corpus,
+  type GeneratedM2Corpus,
+} from './m2_generator.js';
+import {
+  buildRollingForecast,
+  compareScenarios,
+  computeDriverPlan,
+} from '../../core/planning/index.js';
+import { compileWorkforceModuleToDrivers } from '../../core/workforce/index.js';
+import { computeIndependentM2CorpusOracle } from '../../scripts/generate-independent-oracles.js';
+
+function readCommittedM2Corpus(): { raw: string; parsed: GeneratedM2Corpus } {
+  const raw = readFileSync(join(process.cwd(), 'fixtures/corpus/m2_corpus.json'), 'utf8');
+  return { raw, parsed: JSON.parse(raw) as GeneratedM2Corpus };
+}
+
+describe('M2 Coherent Corpus v2 — Tenant B, Rolling Forecast, Scenarios & Workforce (§7.8, C1–C4, C8–C9)', () => {
+  it('C1 (M2): satisfies byte-reproducible determinism for committed m2_corpus.json and m2_answer_key.json', () => {
+    const { raw: committedRaw, parsed: committed } = readCommittedM2Corpus();
+    const regenerated = generateM2Corpus(DEFAULT_M2_CORPUS_SEED, DEFAULT_M2_CORPUS_CONFIG);
+    const regeneratedJson = `${JSON.stringify(regenerated, null, 2)}\n`;
+
+    expect(regeneratedJson).toBe(committedRaw);
+    expect(committed.tenantB.company.name).toBe('Northstar Manufacturing — DEMO — SYNTHETIC DATA');
+    expect(committed.tenantB.company.calendarKind).toBe('454');
+    // Distinct CoA preserving leading zeros ("001400" alongside "1400")
+    expect(committed.tenantB.coa.some((a) => a.code === '001400')).toBe(true);
+    expect(committed.tenantB.coa.some((a) => a.code === '1400')).toBe(true);
+    expect(committed.workforceCorpus.positions).toHaveLength(6);
+  });
+
+  it('C2 & C8 (M2): proves zero unregistered Tenant B noise and full M2 answer_key recall across scenarios & workforce', () => {
+    const { parsed: corpus } = readCommittedM2Corpus();
+    const answerKeyFile = JSON.parse(
+      readFileSync(join(process.cwd(), 'fixtures/corpus/m2_answer_key.json'), 'utf8'),
+    ) as { items: GeneratedM2Corpus['answerKey'] };
+
+    expect(answerKeyFile.items).toEqual(corpus.answerKey);
+
+    const registeredByGrain = new Map<string, ReturnType<typeof money>>();
+    for (const d of corpus.tenantB.deviations) {
+      const key = `${d.grain.account_code}::${d.grain.period}`;
+      const prev = registeredByGrain.get(key) ?? money('0');
+      registeredByGrain.set(key, add(prev, money(d.amount)));
+    }
+
+    const validCodes = new Set(corpus.tenantB.coa.map((a) => a.code));
+    for (const line of corpus.tenantB.actuals) {
+      const grainKey = `${line.accountCode}::${line.periodCode}`;
+      const actualDiff = sub(money(line.actualAmount), money(line.budgetAmount));
+      const expectedDiff = registeredByGrain.get(grainKey) ?? money('0');
+      expect(actualDiff.eq(expectedDiff), `Unregistered Tenant B variance at ${grainKey}`).toBe(true);
+    }
+
+    for (const item of corpus.answerKey) {
+      expect(validCodes.has(item.grain.account_code)).toBe(true);
+      expect(item.statement_line_key.length).toBeGreaterThan(0);
+    }
+
+    // Required M2 answer key domains: Tenant B variance, rolling forecast, scenarios, ramp, attrition, inactive, isolation
+    const domains = new Set(corpus.answerKey.map((i) => i.domain));
+    expect(domains).toEqual(
+      new Set([
+        'tenant_b_variance',
+        'rolling_forecast',
+        'scenario_delta',
+        'workforce_ramp',
+        'workforce_attrition',
+        'workforce_inactive_excluded',
+        'tenant_isolation',
+      ]),
+    );
+  });
+
+  it('C3 & C4 (M2): ties Tenant B A1–A5 statements, rolling forecast, scenario comparison & workforce payroll to independent BigInt oracle', () => {
+    const { parsed: corpus } = readCommittedM2Corpus();
+    const oracleExpected = JSON.parse(
+      readFileSync(join(process.cwd(), 'fixtures/oracles/expected/m2_corpus_expected.json'), 'utf8'),
+    ) as ReturnType<typeof computeIndependentM2CorpusOracle>;
+
+    const recomputedOracle = computeIndependentM2CorpusOracle(corpus);
+    expect(recomputedOracle).toEqual(oracleExpected);
+
+    // 1. Tenant B statements & A1-A5 tie-out
+    const openingMap = new Map<string, ReturnType<typeof money>>();
+    for (const [key, cents] of Object.entries(corpus.tenantB.openingBalanceSheetMinor)) {
+      openingMap.set(key, fromMinorUnits(cents, 2));
+    }
+    const acctByCode = new Map(corpus.tenantB.coa.map((a) => [a.code, a]));
+    const tbBundle = buildArticulatingStatements({
+      accounts: corpus.tenantB.coa,
+      openingBalancesByKey: openingMap,
+      periodGlLines: corpus.tenantB.glLines.map((l) => ({
+        entryId: l.entryId,
+        accountId: acctByCode.get(l.accountCode)!.id,
+        periodId: l.periodCode,
+        debit: fromMinorUnits(l.debitMinor, 2),
+        credit: fromMinorUnits(l.creditMinor, 2),
+      })),
+    });
+
+    expect(tbBundle.articulation.valid).toBe(true);
+    expect(serialize(tbBundle.trialBalance.totalDebit, 2)).toBe(oracleExpected.tenantB.trialBalance.totalDebits);
+    expect(serialize(tbBundle.trialBalance.totalCredit, 2)).toBe(oracleExpected.tenantB.trialBalance.totalCredits);
+    expect(serialize(tbBundle.pnl.netIncome, 2)).toBe(oracleExpected.tenantB.pnl.netIncome);
+    expect(serialize(tbBundle.balanceSheet.totalAssets, 2)).toBe(oracleExpected.tenantB.balanceSheet.totalAssets);
+    expect(serialize(tbBundle.cashFlow.endingCash, 2)).toBe(oracleExpected.tenantB.cashFlow.endingCash);
+
+    // 2. Rolling forecast & scenario comparison tie-out
+    const basePlan = computeDriverPlan({
+      periods: corpus.scenarioCorpus.periods,
+      drivers: corpus.scenarioCorpus.scenarios.base.drivers,
+      currencyScale: 2,
+    });
+    const upsidePlan = computeDriverPlan({
+      periods: corpus.scenarioCorpus.periods,
+      drivers: corpus.scenarioCorpus.scenarios.upside.drivers,
+      currencyScale: 2,
+    });
+    const downsidePlan = computeDriverPlan({
+      periods: corpus.scenarioCorpus.periods,
+      drivers: corpus.scenarioCorpus.scenarios.downside.drivers,
+      currencyScale: 2,
+    });
+    expect(basePlan.ok && upsidePlan.ok && downsidePlan.ok).toBe(true);
+    if (!basePlan.ok || !upsidePlan.ok || !downsidePlan.ok) return;
+
+    expect(basePlan.grandTotal).toBe(oracleExpected.scenarios.baseGrandTotal);
+    expect(upsidePlan.grandTotal).toBe(oracleExpected.scenarios.upsideGrandTotal);
+    expect(downsidePlan.grandTotal).toBe(oracleExpected.scenarios.downsideGrandTotal);
+
+    const rf = buildRollingForecast({
+      periods: corpus.rollingForecastCorpus.periods,
+      cutoffPeriod: corpus.rollingForecastCorpus.cutoffPeriod,
+      actuals: corpus.rollingForecastCorpus.actualFacts,
+      forecast: upsidePlan.lines.map((l) => ({
+        accountCode: l.accountCode,
+        periodCode: l.periodCode,
+        amount: l.amount,
+      })),
+      currencyScale: 2,
+    });
+    expect(rf.ok).toBe(true);
+    if (!rf.ok) return;
+    expect(rf.totalActual).toBe(oracleExpected.rollingForecast.totalActual);
+    expect(rf.totalForecast).toBe(oracleExpected.rollingForecast.totalForecast);
+    expect(rf.totalFullHorizon).toBe(oracleExpected.rollingForecast.totalFullHorizon);
+    expect(rf.totalMissingCells).toBe(oracleExpected.rollingForecast.totalMissingCells);
+
+    const cmpUpside = compareScenarios({
+      baseScenarioName: 'Base Budget',
+      targetScenarioName: 'Upside Forecast',
+      baseLines: basePlan.lines,
+      targetLines: upsidePlan.lines,
+      currencyScale: 2,
+    });
+    const cmpDownside = compareScenarios({
+      baseScenarioName: 'Base Budget',
+      targetScenarioName: 'Downside Case',
+      baseLines: basePlan.lines,
+      targetLines: downsidePlan.lines,
+      currencyScale: 2,
+    });
+    expect(cmpUpside.totalDelta).toBe(oracleExpected.scenarios.baseVsUpsideTotalDelta);
+    expect(cmpDownside.totalDelta).toBe(oracleExpected.scenarios.baseVsDownsideTotalDelta);
+    expect(cmpUpside.rows.find((r) => r.accountCode === '4200')?.deltaPctStatus).toBe('nm');
+    expect(cmpUpside.rows.find((r) => r.accountCode === '4900')?.deltaPctStatus).toBe('zero');
+    expect(cmpDownside.rows.find((r) => r.accountCode === '6400')?.baseTotal).toBeNull();
+
+    // 3. Workforce corpus (ramp, merit, attrition, inactive excluded) tie-out
+    const wf = compileWorkforceModuleToDrivers({
+      periods: corpus.workforceCorpus.periods,
+      positions: corpus.workforceCorpus.positions,
+      currencyScale: 2,
+      periodsInYear: 12,
+    });
+    expect(wf.ok).toBe(true);
+    if (!wf.ok) return;
+    expect(wf.grandTotalFteMonths).toBe(oracleExpected.workforce.grandTotalFteMonths);
+    expect(wf.grandTotalCost).toBe(oracleExpected.workforce.grandTotalCost);
+    expect(wf.positionSummaries).toHaveLength(oracleExpected.workforce.activePositionCount);
+    expect(
+      wf.positionPeriodRows.find((r) => r.positionCode === 'WF-CSM-03' && r.periodCode === 'P04')?.totalCost,
+    ).toBe(oracleExpected.workforce.rampP04Cost);
+    expect(
+      wf.positionPeriodRows.find((r) => r.positionCode === 'WF-FIN-05' && r.periodCode === 'P06')?.totalCost,
+    ).toBe(oracleExpected.workforce.attritionP06Cost);
+    for (const expPos of oracleExpected.workforce.positionSummaries) {
+      const actualPos = wf.positionSummaries.find((p) => p.positionCode === expPos.positionCode);
+      expect(actualPos?.fteMonths).toBe(expPos.fteMonths);
+      expect(actualPos?.totalBasePay).toBe(expPos.totalBasePay);
+      expect(actualPos?.totalBenefits).toBe(expPos.totalBenefits);
+      expect(actualPos?.totalBonus).toBe(expPos.totalBonus);
+      expect(actualPos?.totalCost).toBe(expPos.totalCost);
+    }
+  });
+});

@@ -51,8 +51,49 @@ import type {
   IndustryPackDetail,
   IndustryPackKey,
 } from '../../shared/packs.js';
+import type {
+  ConnectorConfigSummary,
+  ConnectorRunsResponse,
+  ConnectorSourceSystem,
+  ConnectorsOverviewResponse,
+  CreateConnectorRequest,
+  NormalizedJournalEntry,
+  SyncConnectorRequest,
+  SyncConnectorResponse,
+  SyncMode,
+  SyncRunSummary,
+} from '../../shared/integrations.js';
+import type {
+  OnboardingApproveMappingsRequest,
+  OnboardingApproveMappingsResponse,
+  OnboardingMappingSuggestionDto,
+  OnboardingRehearseRequest,
+  OnboardingRehearseResponse,
+  OnboardingValidateRequest,
+  OnboardingValidationReport,
+} from '../../shared/onboarding.js';
 import type { BoardPackExportFormat } from '../../shared/boardPack.js';
-export type { BoardPackExportFormat, IndustryPackDetail, IndustryPackKey };
+export type {
+  BoardPackExportFormat,
+  ConnectorConfigSummary,
+  ConnectorSourceSystem,
+  ConnectorsOverviewResponse,
+  CreateConnectorRequest,
+  IndustryPackDetail,
+  IndustryPackKey,
+  NormalizedJournalEntry,
+  OnboardingApproveMappingsRequest,
+  OnboardingApproveMappingsResponse,
+  OnboardingMappingSuggestionDto,
+  OnboardingRehearseRequest,
+  OnboardingRehearseResponse,
+  OnboardingValidateRequest,
+  OnboardingValidationReport,
+  SyncConnectorRequest,
+  SyncConnectorResponse,
+  SyncMode,
+  SyncRunSummary,
+};
 
 export interface ApiErrorEnvelope {
   readonly code: string;
@@ -282,6 +323,29 @@ export interface ApiClient {
     companyId: string,
     packKey: IndustryPackKey,
   ): Promise<ApplyIndustryPackResponse>;
+  listConnectors(companyId: string): Promise<ConnectorsOverviewResponse>;
+  createConnector(
+    companyId: string,
+    request: CreateConnectorRequest,
+  ): Promise<ConnectorConfigSummary>;
+  listConnectorRuns(companyId: string, connectorId: string): Promise<ConnectorRunsResponse>;
+  syncConnector(
+    companyId: string,
+    connectorId: string,
+    request: SyncConnectorRequest,
+  ): Promise<SyncConnectorResponse>;
+  validateOnboarding(
+    companyId: string,
+    request: OnboardingValidateRequest,
+  ): Promise<OnboardingValidationReport>;
+  approveOnboardingMappings(
+    companyId: string,
+    request: OnboardingApproveMappingsRequest,
+  ): Promise<OnboardingApproveMappingsResponse>;
+  rehearseOnboarding(
+    companyId: string,
+    request: OnboardingRehearseRequest,
+  ): Promise<OnboardingRehearseResponse>;
 }
 
 function boardPackQuery(period: string, fiscalYear?: number | null): string {
@@ -656,6 +720,46 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         'POST',
         `/api/companies/${encodeURIComponent(companyId)}/packs/${encodeURIComponent(packKey)}/apply`,
         {},
+      ),
+    listConnectors: (companyId) =>
+      request<ConnectorsOverviewResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/connectors`,
+      ),
+    createConnector: (companyId, body) =>
+      request<ConnectorConfigSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/connectors`,
+        body,
+      ),
+    listConnectorRuns: (companyId, connectorId) =>
+      request<ConnectorRunsResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/connectors/${encodeURIComponent(connectorId)}/runs`,
+      ),
+    syncConnector: (companyId, connectorId, body) =>
+      request<SyncConnectorResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/connectors/${encodeURIComponent(connectorId)}/sync`,
+        body,
+      ),
+    validateOnboarding: (companyId, body) =>
+      request<OnboardingValidationReport>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/onboarding/validate`,
+        body,
+      ),
+    approveOnboardingMappings: (companyId, body) =>
+      request<OnboardingApproveMappingsResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/onboarding/mappings/approve`,
+        body,
+      ),
+    rehearseOnboarding: (companyId, body) =>
+      request<OnboardingRehearseResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/onboarding/rehearse`,
+        body,
       ),
   };
 }

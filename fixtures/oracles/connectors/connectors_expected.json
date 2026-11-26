@@ -1,0 +1,87 @@
+{
+  "derivationMethod": "hand-computed-connector-normalization-oracle",
+  "approvedDate": "2026-11-26",
+  "adapters": {
+    "google_sheets": {
+      "entryCount": 2,
+      "lineCount": 4,
+      "totalDebits": "1950.25",
+      "totalCredits": "1950.25",
+      "reconciliationStatus": "matched",
+      "leadingZeroAccountPreserved": "001200",
+      "entries": [
+        {
+          "entry_ref": "GS-2026-001",
+          "entry_date": "2026-04-05",
+          "period": "P04",
+          "currency": "USD",
+          "lineCount": 2
+        },
+        {
+          "entry_ref": "GS-2026-002",
+          "entry_date": "2026-04-12",
+          "period": "P04",
+          "currency": "USD",
+          "lineCount": 2
+        }
+      ]
+    },
+    "quickbooks_online": {
+      "entryCount": 2,
+      "lineCount": 4,
+      "totalDebits": "3000.00",
+      "totalCredits": "3000.00",
+      "reconciliationStatus": "matched",
+      "entries": [
+        {
+          "entry_ref": "QBO-101",
+          "entry_date": "2026-04-08",
+          "period": "P04",
+          "currency": "USD",
+          "lineCount": 2
+        },
+        {
+          "entry_ref": "QBO-102",
+          "entry_date": "2026-04-18",
+          "period": "P04",
+          "currency": "USD",
+          "lineCount": 2
+        }
+      ]
+    },
+    "xero": {
+      "entryCount": 2,
+      "lineCount": 4,
+      "totalDebits": "1235.50",
+      "totalCredits": "1235.50",
+      "reconciliationStatus": "matched",
+      "leadingZeroAccountPreserved": "001200",
+      "entries": [
+        {
+          "entry_ref": "XERO-MJ-201",
+          "entry_date": "2026-04-10",
+          "period": "P04",
+          "currency": "USD",
+          "lineCount": 2
+        },
+        {
+          "entry_ref": "XERO-MJ-202",
+          "entry_date": "2026-04-20",
+          "period": "P04",
+          "currency": "USD",
+          "lineCount": 2
+        }
+      ]
+    }
+  },
+  "mismatchCase": {
+    "reconciliationStatus": "mismatch_quarantined",
+    "totalDebits": "500.00",
+    "totalCredits": "450.00",
+    "lineCount": 2,
+    "expectedReasons": [
+      "ROW_COUNT_MISMATCH:expected=3:got=2",
+      "RECONCILIATION_IMBALANCE:ref=QBO-BAD:debit=500.00:credit=450.00"
+    ]
+  }
+}

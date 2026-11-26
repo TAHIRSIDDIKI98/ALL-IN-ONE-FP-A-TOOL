@@ -43,10 +43,17 @@ export const APPROVED_M2_WORKFORCE_TABLES = [
   'workforce_position',
 ];
 
+/** Opened in M2 under DEC-020 (§11.1 Connectors Framework: Google Sheets, QBO, Xero). */
+export const APPROVED_M2_CONNECTOR_TABLES = [
+  'connector_config',
+  'sync_run',
+];
+
 const APPROVED_SET = new Set([
   ...APPROVED_M1_TABLES,
   ...APPROVED_M2_COLLABORATION_TABLES,
   ...APPROVED_M2_WORKFORCE_TABLES,
+  ...APPROVED_M2_CONNECTOR_TABLES,
 ]);
 
 export function checkSchemaScope(rootDir = process.cwd(), { requireComplete = false } = {}) {

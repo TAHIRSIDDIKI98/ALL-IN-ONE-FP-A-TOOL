@@ -1,0 +1,59 @@
+{
+  "sourceSystem": "google_sheets",
+  "currency": "USD",
+  "expectedRowCount": 4,
+  "rows": [
+    {
+      "entryRef": "GS-2026-001",
+      "date": "2026-04-05",
+      "period": "P04",
+      "accountCode": "001200",
+      "description": "Customer cash receipts batch 1",
+      "debit": "$1,500.00",
+      "credit": "",
+      "dims": {
+        "entity": "001",
+        "department": "SALES"
+      }
+    },
+    {
+      "entryRef": "GS-2026-001",
+      "date": "2026-04-05",
+      "period": "P04",
+      "accountCode": "4000",
+      "description": "Subscription revenue batch 1",
+      "debit": "",
+      "credit": "1,500.00",
+      "dims": {
+        "entity": "001",
+        "department": "SALES"
+      }
+    },
+    {
+      "entryRef": "GS-2026-002",
+      "date": "2026-04-12",
+      "period": "P04",
+      "accountCode": "6000",
+      "description": "Payroll run April",
+      "debit": "450.25",
+      "credit": "",
+      "dims": {
+        "entity": "001",
+        "department": "ENG"
+      }
+    },
+    {
+      "entryRef": "GS-2026-002",
+      "date": "2026-04-12",
+      "period": "P04",
+      "accountCode": "001200",
+      "description": "Payroll cash disbursement",
+      "debit": "",
+      "credit": "450.25",
+      "dims": {
+        "entity": "001",
+        "department": "ENG"
+      }
+    }
+  ]
+}

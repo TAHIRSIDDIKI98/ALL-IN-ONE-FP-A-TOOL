@@ -190,7 +190,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
     const actualTables = tablesRes.rows.map((r) => r.tablename);
     const expectedTables = [...schemaSnapshot.tables].sort();
     expect(actualTables).toEqual(expectedTables);
-    expect(actualTables).toHaveLength(23);
+    expect(actualTables).toHaveLength(25);
 
     // Idempotent second run applies 0 new files
     const secondRun = await applyMigrations(db);
@@ -647,5 +647,88 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
         [s.companyA, s.revAcctA, s.userId],
       ),
     ).rejects.toThrow();
+  });
+
+  it('WI-0040 M2 Connectors: enforces connector_config & sync_run tenant FKs, source allow-list, hashed credential_ref, and quarantine check', async () => {
+    const s = await seedBaseTenants(db, 'conn');
+
+    const bOnlyRes = await db.query<{ id: string }>(
+      `INSERT INTO app_user (firebase_uid, email, display_name) VALUES ('uid-conn-bonly', 'conn-bonly@example.com', 'B Only') RETURNING id`,
+    );
+    const bOnlyUserId = bOnlyRes.rows[0]!.id;
+    await db.query(`INSERT INTO membership (company_id, user_id, role) VALUES ($1, $2, 'editor')`, [
+      s.companyB,
+      bOnlyUserId,
+    ]);
+
+    const credHash = `vault:sha256:${'c'.repeat(64)}`;
+    const connRes = await db.query<{ id: string }>(
+      `INSERT INTO connector_config (company_id, source_system, name, external_ref, credential_ref, created_by)
+       VALUES ($1, 'quickbooks_online', 'QBO Sandbox Primary', 'realm-913035', $2, $3)
+       RETURNING id`,
+      [s.companyA, credHash, s.userId],
+    );
+    const connIdA = connRes.rows[0]!.id;
+
+    // Negative: unapproved M3+ source_system ('netsuite') blocked by CHECK
+    await expect(
+      db.query(
+        `INSERT INTO connector_config (company_id, source_system, name, external_ref, credential_ref, created_by)
+         VALUES ($1, 'netsuite', 'NetSuite M3', 'ns-1', $2, $3)`,
+        [s.companyA, credHash, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative: raw credential instead of hashed vault:sha256:<64-hex> rejected by CHECK (CON4)
+    await expect(
+      db.query(
+        `INSERT INTO connector_config (company_id, source_system, name, external_ref, credential_ref, created_by)
+         VALUES ($1, 'xero', 'Xero Bad Cred', 'tenant-1', 'plaintext-secret', $2)`,
+        [s.companyA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative: duplicate (company_id, source_system, name) rejected
+    await expect(
+      db.query(
+        `INSERT INTO connector_config (company_id, source_system, name, external_ref, credential_ref, created_by)
+         VALUES ($1, 'quickbooks_online', 'QBO Sandbox Primary', 'realm-other', $2, $3)`,
+        [s.companyA, credHash, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative cross-tenant FK: sync_run in Company B referencing Company A connector_id rejected
+    await expect(
+      db.query(
+        `INSERT INTO sync_run (
+           company_id, connector_id, mode, status, source_hash,
+           rows_pulled, rows_imported, rows_quarantined, total_debits, total_credits,
+           reconciliation_status, triggered_by
+         ) VALUES ($1, $2, 'incremental', 'completed', $3, 2, 2, 0, '100.00', '100.00', 'matched', $4)`,
+        [s.companyB, connIdA, 'd'.repeat(64), bOnlyUserId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative CON3 check: mismatch_quarantined with non-null import_batch_id rejected
+    await expect(
+      db.query(
+        `INSERT INTO sync_run (
+           company_id, connector_id, mode, status, source_hash,
+           rows_pulled, rows_imported, rows_quarantined, total_debits, total_credits,
+           reconciliation_status, reconciliation_reason, import_batch_id, triggered_by
+         ) VALUES ($1, $2, 'incremental', 'quarantined', $3, 2, 0, 2, '100.00', '90.00', 'mismatch_quarantined', 'RECONCILIATION_IMBALANCE', $4, $5)`,
+        [s.companyA, connIdA, 'e'.repeat(64), s.batchA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Positive: completed sync_run referencing same-company connector + import_batch commits cleanly
+    await db.query(
+      `INSERT INTO sync_run (
+         company_id, connector_id, mode, status, source_hash,
+         rows_pulled, rows_imported, rows_quarantined, total_debits, total_credits,
+         reconciliation_status, import_batch_id, triggered_by, completed_at
+       ) VALUES ($1, $2, 'incremental', 'completed', $3, 2, 2, 0, '1000.000000', '1000.000000', 'matched', $4, $5, now())`,
+      [s.companyA, connIdA, 'f'.repeat(64), s.batchA, s.userId],
+    );
   });
 });

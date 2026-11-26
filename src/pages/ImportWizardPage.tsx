@@ -7,8 +7,10 @@ import {
   type ImportPreviewPayload,
 } from '../api/client.js';
 import { BudgetImportPanel } from '../components/BudgetImportPanel.js';
+import { ConnectorsPanel } from '../components/ConnectorsPanel.js';
+import { OnboardingPipelinePanel } from '../components/OnboardingPipelinePanel.js';
 import { EmptyState, ErrorState, LoadingState, PartialBanner } from '../components/StateFrame.js';
-import { useWorkspaceStore } from '../state/workspaceStore.js';
+import { useWorkspaceStore, type WorkspaceCompany } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
 type ImportAction = 'preview' | 'commit';
@@ -30,6 +32,14 @@ function toFailure(error: unknown, action: ImportAction): ImportFailure {
   };
 }
 
+export interface ImportWizardContentProps {
+  readonly company: WorkspaceCompany | null;
+  readonly authToken: string | null;
+  readonly onNavigate: (path: SpineRoutePath) => void;
+  readonly forcedState?: SpinePageProps['forcedState'];
+  readonly initialDataset?: 'actuals' | 'budget' | 'connectors' | 'onboarding';
+}
+
 /**
  * GL Import Wizard (MASTER_PROMPT §9.3.3; Spine Gates G1/G2).
  *
@@ -41,9 +51,28 @@ function toFailure(error: unknown, action: ImportAction): ImportFailure {
  */
 export default function ImportWizardPage({ onNavigate, forcedState }: SpinePageProps): ReactElement {
   const { company, authToken } = useWorkspaceStore();
+  return (
+    <ImportWizardContent
+      company={company}
+      authToken={authToken}
+      onNavigate={onNavigate}
+      forcedState={forcedState}
+    />
+  );
+}
+
+export function ImportWizardContent({
+  company,
+  authToken,
+  onNavigate,
+  forcedState,
+  initialDataset = 'actuals',
+}: ImportWizardContentProps): ReactElement {
   const companyId = company?.id ?? null;
 
-  const [dataset, setDataset] = useState<'actuals' | 'budget'>('actuals');
+  const [dataset, setDataset] = useState<'actuals' | 'budget' | 'connectors' | 'onboarding'>(
+    initialDataset,
+  );
   const [csvDraft, setCsvDraft] = useState('');
   const [sourceFilename, setSourceFilename] = useState('gl-export.csv');
   const [preview, setPreview] = useState<ImportPreviewPayload | null>(null);
@@ -214,10 +243,32 @@ export default function ImportWizardPage({ onNavigate, forcedState }: SpinePageP
             />
             Budget — account × period plan CSV
           </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="radio"
+              name="import-dataset"
+              value="connectors"
+              checked={dataset === 'connectors'}
+              onChange={() => setDataset('connectors')}
+              className="h-4 w-4"
+            />
+            Connectors — Google Sheets, QBO &amp; Xero sync
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="radio"
+              name="import-dataset"
+              value="onboarding"
+              checked={dataset === 'onboarding'}
+              onChange={() => setDataset('onboarding')}
+              className="h-4 w-4"
+            />
+            Onboarding — CoA match, validation &amp; cutover rehearsal
+          </label>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          A budget never posts to the general ledger: it is stored as a plan version so actuals and
-          plan can be compared without inflating either.
+          Budgets never post to the general ledger; external connectors and onboarding cutovers
+          normalize into the single GL import pipeline with exact row accounting and audit trails.
         </p>
       </fieldset>
 
@@ -225,6 +276,22 @@ export default function ImportWizardPage({ onNavigate, forcedState }: SpinePageP
         <BudgetImportPanel
           companyId={companyId}
           fiscalYear={company.fiscalYear}
+          authToken={authToken}
+          onNavigate={navigate}
+        />
+      )}
+
+      {dataset === 'connectors' && (
+        <ConnectorsPanel
+          companyId={companyId}
+          authToken={authToken}
+          onNavigate={navigate}
+        />
+      )}
+
+      {dataset === 'onboarding' && (
+        <OnboardingPipelinePanel
+          companyId={companyId}
           authToken={authToken}
           onNavigate={navigate}
         />

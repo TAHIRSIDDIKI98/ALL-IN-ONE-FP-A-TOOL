@@ -1,0 +1,208 @@
+{
+  "generatorVersion": "2.0.0",
+  "seed": 202602,
+  "demoLabel": "Northstar Manufacturing — DEMO — SYNTHETIC DATA",
+  "items": [
+    {
+      "id": "M2-TB-DEV-001",
+      "domain": "tenant_b_variance",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "4000",
+        "period": "P02",
+        "entity": "ENT-MW-PLANT"
+      },
+      "amount": "18500.00",
+      "statement_line_key": "pl.revenue.product",
+      "expected_finding_key": "bva:price_variance:4000:P02",
+      "expected_severity": "info",
+      "cause": "Tier-1 OEM surcharge recovered on precision turbine housings"
+    },
+    {
+      "id": "M2-TB-DEV-002",
+      "domain": "tenant_b_variance",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "5000",
+        "period": "P05",
+        "entity": "ENT-MW-PLANT"
+      },
+      "amount": "9200.00",
+      "statement_line_key": "pl.cogs.direct",
+      "expected_finding_key": "bva:volume_variance:5000:P05",
+      "expected_severity": "warn",
+      "cause": "Alloy spot market spike during May replenishment"
+    },
+    {
+      "id": "M2-TB-DEV-003A",
+      "domain": "tenant_b_variance",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "6300",
+        "period": "P04",
+        "entity": "ENT-MW-PLANT"
+      },
+      "amount": "-6000.00",
+      "statement_line_key": "pl.opex.sm",
+      "expected_finding_key": "bva:timing_shift:6300:P04",
+      "expected_severity": "info",
+      "cause": "IMTS booth deposit deferred from P04 to P05"
+    },
+    {
+      "id": "M2-TB-DEV-003B",
+      "domain": "tenant_b_variance",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "6300",
+        "period": "P05",
+        "entity": "ENT-MW-PLANT"
+      },
+      "amount": "6000.00",
+      "statement_line_key": "pl.opex.sm",
+      "expected_finding_key": "bva:timing_shift:6300:P05",
+      "expected_severity": "warn",
+      "cause": "IMTS booth deposit posted in P05"
+    },
+    {
+      "id": "M2-TB-DEV-004",
+      "domain": "tenant_b_variance",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "4200",
+        "period": "P09",
+        "entity": "ENT-MW-PLANT"
+      },
+      "amount": "4400.00",
+      "statement_line_key": "pl.revenue.other",
+      "expected_finding_key": "bva:zero_plan_nm:4200:P09",
+      "expected_severity": "info",
+      "cause": "Unbudgeted expedited freight recovery billed to distributor"
+    },
+    {
+      "id": "M2-TB-DEV-005",
+      "domain": "tenant_b_variance",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "4090",
+        "period": "P08",
+        "entity": "ENT-MW-PLANT"
+      },
+      "amount": "1000.00",
+      "statement_line_key": "pl.revenue.other",
+      "expected_finding_key": "bva:negative_plan:4090:P08",
+      "expected_severity": "info",
+      "cause": "Lower warranty claims (-1,500.00 actual vs -2,500.00 negative plan)"
+    },
+    {
+      "id": "M2-RF-001",
+      "domain": "rolling_forecast",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "4000",
+        "period": "P06",
+        "entity": "ENT-MW-PLANT",
+        "scenario": "Upside Forecast"
+      },
+      "amount": "4134741.31",
+      "statement_line_key": "pl.revenue.product",
+      "expected_finding_key": "planning:rolling_forecast:cutoff:P06",
+      "expected_severity": "info",
+      "cause": "P01..P06 immutable actuals stitched with P07..P12 driver forecast including P11 contract override and null disclosures for missing actual accounts"
+    },
+    {
+      "id": "M2-SCN-001",
+      "domain": "scenario_delta",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "4200",
+        "period": "P12",
+        "entity": "ENT-MW-PLANT",
+        "scenario": "Upside Forecast"
+      },
+      "amount": "36000.00",
+      "statement_line_key": "pl.revenue.other",
+      "expected_finding_key": "planning:scenario_delta:nm:4200",
+      "expected_severity": "info",
+      "cause": "Base Budget plans 0.00 on 4200 while Upside Forecast models 36,000.00 full-year -> deltaPctStatus nm (n/m)"
+    },
+    {
+      "id": "M2-SCN-002",
+      "domain": "scenario_delta",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "6400",
+        "period": "P12",
+        "entity": "ENT-MW-PLANT",
+        "scenario": "Downside Case"
+      },
+      "amount": "66000.00",
+      "statement_line_key": "pl.opex.rd",
+      "expected_finding_key": "planning:scenario_delta:target_only:6400",
+      "expected_severity": "warn",
+      "cause": "Target-only account 6400 absent from Base Budget preserves baseAmount = null (Null Law)"
+    },
+    {
+      "id": "M2-WF-RAMP-001",
+      "domain": "workforce_ramp",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "6000",
+        "period": "P04",
+        "entity": "ENT-MW-PLANT",
+        "position_code": "WF-CSM-03"
+      },
+      "amount": "4305.00",
+      "statement_line_key": "pl.opex.payroll",
+      "expected_finding_key": "workforce:ramp:WF-CSM-03:P04",
+      "expected_severity": "info",
+      "cause": "50% first-period onboarding ramp applied to WF-CSM-03 in P04"
+    },
+    {
+      "id": "M2-WF-ATTR-001",
+      "domain": "workforce_attrition",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "6000",
+        "period": "P06",
+        "entity": "ENT-MW-PLANT",
+        "position_code": "WF-FIN-05"
+      },
+      "amount": "0.00",
+      "statement_line_key": "pl.opex.payroll",
+      "expected_finding_key": "workforce:attrition:WF-FIN-05:P05",
+      "expected_severity": "info",
+      "cause": "WF-FIN-05 terminates after P05 leaving 0.00 cost and 0.00 FTE from P06..P12"
+    },
+    {
+      "id": "M2-WF-INACT-001",
+      "domain": "workforce_inactive_excluded",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "6000",
+        "period": "P10",
+        "entity": "ENT-MW-PLANT",
+        "position_code": "WF-TMP-06"
+      },
+      "amount": "0.00",
+      "statement_line_key": "pl.opex.payroll",
+      "expected_finding_key": "workforce:inactive_excluded:WF-TMP-06",
+      "expected_severity": "info",
+      "cause": "Inactive requisition WF-TMP-06 excluded cleanly from compiled fixed payroll drivers"
+    },
+    {
+      "id": "M2-ISO-001",
+      "domain": "tenant_isolation",
+      "grain": {
+        "company_id": "cmp_tenant_b_202602",
+        "account_code": "001400",
+        "period": "P12",
+        "entity": "ENT-MW-PLANT"
+      },
+      "amount": "2633959.60",
+      "statement_line_key": "bs.asset.inventory",
+      "expected_finding_key": "tenancy:isolation:tenant_b:001400",
+      "expected_severity": "critical",
+      "cause": "Tenant B leading-zero account 001400 and all M2 planning/workforce/connector rows stay strictly isolated from Tenant A (TST5)"
+    }
+  ]
+}

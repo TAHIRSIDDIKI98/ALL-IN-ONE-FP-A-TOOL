@@ -1504,4 +1504,264 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(calls[1]?.url).toBe(`/api/companies/${companyId}/packs/saas/apply`);
     expect(applied.inserted).toBe(7);
   });
+
+  it('calls M2 Connectors endpoints with relative URLs, write-only secrets, and string decimal totals (WI-0040)', async () => {
+    const companyId = String(COMPANY['companyId']);
+    const connectorId = '77777777-7777-4777-8777-777777777777';
+    const runId = '88888888-8888-4888-8888-888888888888';
+    const connectorSummary = {
+      id: connectorId,
+      companyId,
+      sourceSystem: 'google_sheets' as const,
+      name: 'Sheets Primary GL',
+      externalRef: 'sheet-abc-123',
+      syncCursor: null,
+      status: 'active' as const,
+      lastSyncedAt: null,
+      createdAt: '2026-11-26T00:00:00.000Z',
+      updatedAt: '2026-11-26T00:00:00.000Z',
+    };
+    const runSummary = {
+      id: runId,
+      companyId,
+      connectorId,
+      sourceSystem: 'google_sheets' as const,
+      connectorName: 'Sheets Primary GL',
+      mode: 'incremental' as const,
+      status: 'completed' as const,
+      cursorBefore: null,
+      cursorAfter: '2026-04-30',
+      sourceHash: 'e'.repeat(64),
+      rowsPulled: 2,
+      rowsImported: 2,
+      rowsQuarantined: 0,
+      totalDebits: '1500.00',
+      totalCredits: '1500.00',
+      reconciliationStatus: 'matched' as const,
+      reconciliationReason: null,
+      importBatchId: '99999999-9999-4999-8999-999999999999',
+      replacedRunId: null,
+      startedAt: '2026-11-26T00:01:00.000Z',
+      completedAt: '2026-11-26T00:01:01.000Z',
+    };
+
+    const { fetchImpl, calls } = fakeFetch((call) => {
+      if (call.url.endsWith('/connectors') && call.method === 'GET') {
+        return {
+          status: 200,
+          body: {
+            companyId,
+            baseCurrency: 'USD',
+            connectors: [connectorSummary],
+            recentRuns: [runSummary],
+          },
+        };
+      }
+      if (call.url.endsWith('/connectors') && call.method === 'POST') {
+        return { status: 201, body: connectorSummary };
+      }
+      if (call.url.endsWith(`/connectors/${connectorId}/runs`)) {
+        return { status: 200, body: { companyId, connector: connectorSummary, runs: [runSummary] } };
+      }
+      if (call.url.endsWith(`/connectors/${connectorId}/sync`)) {
+        return {
+          status: 201,
+          body: {
+            companyId,
+            connector: { ...connectorSummary, syncCursor: '2026-04-30' },
+            run: runSummary,
+            normalizedEntries: [],
+            importResult: null,
+          },
+        };
+      }
+      return {
+        status: 403,
+        body: {
+          error: {
+            code: 'TENANT_FORBIDDEN',
+            userMessage: 'Only workspace owners or editors may configure or run external connectors.',
+            httpStatus: 403,
+            details: {},
+          },
+        },
+      };
+    });
+
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const overview = await client.listConnectors(companyId);
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/connectors`);
+    expect(overview.recentRuns[0]?.totalDebits).toBe('1500.00');
+    expect(typeof overview.recentRuns[0]?.totalDebits).toBe('string');
+
+    const created = await client.createConnector(companyId, {
+      sourceSystem: 'google_sheets',
+      name: 'Sheets Primary GL',
+      externalRef: 'sheet-abc-123',
+      credentialSecret: 'sandbox-oauth-token-sheets-001',
+    });
+    expect(calls[1]?.method).toBe('POST');
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/connectors`);
+    expect(JSON.stringify(created)).not.toContain('sandbox-oauth-token-sheets-001');
+    expect(JSON.stringify(created)).not.toContain('credential_ref');
+
+    const runs = await client.listConnectorRuns(companyId, connectorId);
+    expect(calls[2]?.url).toBe(`/api/companies/${companyId}/connectors/${connectorId}/runs`);
+    expect(runs.runs).toHaveLength(1);
+
+    const synced = await client.syncConnector(companyId, connectorId, {
+      mode: 'incremental',
+      cursor: '2026-04-30',
+      payload: {
+        sourceSystem: 'google_sheets',
+        rows: [
+          {
+            entryRef: 'GS-1',
+            date: '2026-04-05',
+            period: 'P04',
+            accountCode: '001200',
+            description: 'Cash receipt',
+            debit: '1500.00',
+            credit: '',
+            dims: {},
+          },
+          {
+            entryRef: 'GS-1',
+            date: '2026-04-05',
+            period: 'P04',
+            accountCode: '4000',
+            description: 'Revenue',
+            debit: '',
+            credit: '1500.00',
+            dims: {},
+          },
+        ],
+      },
+    });
+    expect(calls[3]?.method).toBe('POST');
+    expect(calls[3]?.url).toBe(`/api/companies/${companyId}/connectors/${connectorId}/sync`);
+    expect(synced.run.status).toBe('completed');
+
+    await expect(client.listConnectorRuns(companyId, 'forbidden-connector')).rejects.toMatchObject({
+      code: 'TENANT_FORBIDDEN',
+      httpStatus: 403,
+    });
+  });
+
+  it('calls M2 Onboarding pipeline endpoints with relative URLs and string money (WI-0042)', async () => {
+    const companyId = String(COMPANY['companyId']);
+    const sampleValidation = {
+      companyId,
+      sourceHash: 'f'.repeat(64),
+      asOfDate: '2026-11-26',
+      rowsIn: 10,
+      importableCount: 8,
+      quarantinedCount: 2,
+      rowAccountingTies: true,
+      duplicatesDetected: 0,
+      entryCount: 4,
+      totalDebits: '58000.00',
+      totalCredits: '58000.00',
+      coveredPeriods: ['FY2026 P01', 'FY2026 P02', 'FY2026 P04'],
+      missingInteriorPeriods: ['FY2026 P03'],
+      leadingZeroCollisions: [],
+      quarantineBreakdown: [
+        { category: 'BLANK_ROW', count: 1 },
+        { category: 'SUMMARY_TOTAL_ROW', count: 1 },
+      ],
+      quarantined: [
+        { rowNo: 10, reason: 'BLANK_ROW' },
+        { rowNo: 11, reason: 'SUMMARY_TOTAL_ROW' },
+      ],
+      anomalies: [],
+      suggestions: [
+        {
+          sourceCode: 'OPS-CASH',
+          rowCount: 3,
+          sampleValues: ['Customer collection'],
+          currentStatus: 'unmapped' as const,
+          currentAccountCode: null,
+          suggestedAccountCode: '1000',
+          suggestedAccountName: 'Operating Cash',
+          matchRule: 'token_name_match' as const,
+          confidenceScore: 74,
+          reason: 'Deterministic keyword match with 1000 — Operating Cash',
+          requiresHumanApproval: true as const,
+        },
+      ],
+      availableAccounts: [{ code: '1000', name: 'Operating Cash' }],
+      goLiveStatus: 'ready_with_warnings' as const,
+      blockers: [],
+      warnings: ['Potential exception — review: missing P03'],
+    };
+
+    const { fetchImpl, calls } = fakeFetch((call) => {
+      if (call.url.endsWith('/onboarding/validate')) {
+        return { status: 200, body: sampleValidation };
+      }
+      if (call.url.endsWith('/onboarding/mappings/approve')) {
+        return {
+          status: 201,
+          body: {
+            companyId,
+            effectiveFrom: '2026-11-26',
+            written: 1,
+            unchanged: 0,
+            validation: sampleValidation,
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          companyId,
+          mode: 'dry_run',
+          rehearsalHash: 'c'.repeat(64),
+          sourceHash: 'f'.repeat(64),
+          validation: sampleValidation,
+          committed: null,
+          trialBalanceAfter: {
+            isBalanced: true,
+            totalDebit: '58000.00',
+            totalCredit: '58000.00',
+            accountCount: 4,
+          },
+          executedAt: '2026-11-26T05:30:00.000Z',
+        },
+      };
+    });
+
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const validated = await client.validateOnboarding(companyId, {
+      csvText: 'entry_ref,date,account_code,description,debit,credit\n',
+    });
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/onboarding/validate`);
+    expect(validated.rowAccountingTies).toBe(true);
+    expect(typeof validated.totalDebits).toBe('string');
+
+    const approved = await client.approveOnboardingMappings(companyId, {
+      csvText: 'entry_ref,date,account_code,description,debit,credit\n',
+      entries: [
+        {
+          sourceCode: 'OPS-CASH',
+          status: 'mapped',
+          accountCode: '1000',
+          quarantineReason: null,
+        },
+      ],
+    });
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/onboarding/mappings/approve`);
+    expect(approved.written).toBe(1);
+
+    const rehearsed = await client.rehearseOnboarding(companyId, {
+      mode: 'dry_run',
+      sourceFilename: 'partner.csv',
+      csvText: 'entry_ref,date,account_code,description,debit,credit\n',
+    });
+    expect(calls[2]?.url).toBe(`/api/companies/${companyId}/onboarding/rehearse`);
+    expect(rehearsed.trialBalanceAfter.totalDebit).toBe('58000.00');
+  });
 });
+

@@ -1,0 +1,41 @@
+{
+  "sourceSystem": "quickbooks_online",
+  "currency": "USD",
+  "expectedRowCount": 3,
+  "journalEntries": [
+    {
+      "Id": "QBO-JE-BAD",
+      "DocNumber": "QBO-BAD",
+      "TxnDate": "2026-04-22",
+      "Period": "P04",
+      "CurrencyRef": {
+        "value": "USD"
+      },
+      "PrivateNote": "Out-of-balance vendor entry",
+      "Line": [
+        {
+          "Description": "Expense debit",
+          "Amount": "500.00",
+          "DetailType": "JournalEntryLineDetail",
+          "JournalEntryLineDetail": {
+            "PostingType": "Debit",
+            "AccountRef": {
+              "value": "6000"
+            }
+          }
+        },
+        {
+          "Description": "Short credit",
+          "Amount": "450.00",
+          "DetailType": "JournalEntryLineDetail",
+          "JournalEntryLineDetail": {
+            "PostingType": "Credit",
+            "AccountRef": {
+              "value": "2000"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

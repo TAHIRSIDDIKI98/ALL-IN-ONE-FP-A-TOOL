@@ -23,6 +23,12 @@ import {
 } from './db/repositories/dashboards.js';
 import workforceOracle from '../fixtures/oracles/workforce/workforce_oracle.json' with { type: 'json' };
 import fluxPvmOracle from '../fixtures/oracles/variance/flux_pvm_oracle.json' with { type: 'json' };
+import googleSheetsFixture from '../fixtures/oracles/connectors/google_sheets_gl.json' with { type: 'json' };
+import qboFixture from '../fixtures/oracles/connectors/quickbooks_online_je.json' with { type: 'json' };
+import xeroFixture from '../fixtures/oracles/connectors/xero_manual_journals.json' with { type: 'json' };
+import mismatchFixture from '../fixtures/oracles/connectors/reconciliation_mismatch_je.json' with { type: 'json' };
+import { NormalizedJournalEntrySchema } from '../shared/integrations.js';
+import { buildSyntheticPartnerDataset } from '../core/onboarding/index.js';
 
 const SECRET = 'server-test-sandbox-secret-long-enough';
 
@@ -3085,4 +3091,613 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     ).toBe(403);
     expect((await fetch(`${baseUrl}/api/companies/${companyId}/packs`)).status).toBe(401);
   }, 60_000);
+
+  it('WI-0040 CON1–CON5: normalizes Sheets/QBO/Xero into single GL pipeline, enforces mismatch quarantine, atomic replace, write-only secrets, and RBAC', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:conn-owner@onefpa.test',
+      email: 'conn-owner@onefpa.test',
+      displayName: 'Connector Owner',
+    };
+    const viewer: VerifiedIdentity = {
+      firebaseUid: 'sandbox:conn-viewer@onefpa.test',
+      email: 'conn-viewer@onefpa.test',
+      displayName: 'Connector Viewer',
+    };
+
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Connector Sync Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'HQ',
+        entityName: 'HQ',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    // Add viewer for RBAC checks + CoA matching accounts used across all 3 connector fixtures (preserving leading-zero 001200)
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            email: viewer.email,
+            displayName: viewer.displayName,
+            role: 'viewer',
+          }),
+        })
+      ).status,
+    ).toBe(201);
+
+    const chartCsv = [
+      'code,name,type,normal_side,statement_line_key',
+      '001200,Operating Bank Zero-Padded,asset,debit,bs.asset.cash',
+      '1100,Accounts Receivable,asset,debit,bs.asset.ar',
+      '2000,Accounts Payable,liability,credit,bs.liability.ap',
+      '4000,Product & Service Revenue,revenue,credit,pl.revenue.product',
+      '5000,Cloud Hosting COGS,expense,debit,pl.cogs.direct',
+      '6000,Operating & G&A Expense,expense,debit,pl.opex.other',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ csvText: chartCsv }),
+        })
+      ).status,
+    ).toBe(201);
+
+    // 1. Configure Google Sheets, QBO, and Xero connectors with synthetic write-only secrets
+    const rawSecrets = [
+      'sandbox-oauth-token-sheets-001',
+      'sandbox-oauth-token-qbo-002',
+      'sandbox-oauth-token-xero-003',
+    ];
+    const createConn = async (
+      sourceSystem: 'google_sheets' | 'quickbooks_online' | 'xero',
+      name: string,
+      externalRef: string,
+      secret: string,
+    ): Promise<{ id: string }> => {
+      const res = await fetch(`${baseUrl}/api/companies/${companyId}/connectors`, {
+        method: 'POST',
+        headers: bearer(owner),
+        body: JSON.stringify({ sourceSystem, name, externalRef, credentialSecret: secret }),
+      });
+      expect(res.status).toBe(201);
+      const bodyText = await res.text();
+      expect(bodyText).not.toContain(secret);
+      expect(bodyText).not.toContain('credential_ref');
+      return JSON.parse(bodyText) as { id: string };
+    };
+
+    const sheetsConn = await createConn('google_sheets', 'Sheets GL Feed', 'sheet-p04-ops', rawSecrets[0]!);
+    const qboConn = await createConn('quickbooks_online', 'QBO Main Sandbox', 'realm-913035', rawSecrets[1]!);
+    const xeroConn = await createConn('xero', 'Xero AU Entity', 'tenant-xero-01', rawSecrets[2]!);
+
+    // Duplicate connector name returns 409 DUPLICATE_CODE
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/connectors`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            sourceSystem: 'google_sheets',
+            name: 'Sheets GL Feed',
+            externalRef: 'other',
+            credentialSecret: 'another-synthetic-secret',
+          }),
+        })
+      ).status,
+    ).toBe(409);
+
+    // Wrong sourceSystem payload vs configured connector rejected with 422 VALIDATION_FAILED
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/connectors/${sheetsConn.id}/sync`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ mode: 'incremental', payload: qboFixture }),
+        })
+      ).status,
+    ).toBe(422);
+
+    // 2. CON1/CON5: Sync all 3 connectors and validate canonical normalizedEntries + single GL commit path
+    const syncAdapter = async (
+      connectorId: string,
+      cursor: string,
+      payload: unknown,
+    ): Promise<{
+      run: { id: string; status: string; totalDebits: string; totalCredits: string; importBatchId: string | null };
+      normalizedEntries: unknown[];
+      importResult: { importedCount: number; batchId: string } | null;
+    }> => {
+      const res = await fetch(`${baseUrl}/api/companies/${companyId}/connectors/${connectorId}/sync`, {
+        method: 'POST',
+        headers: bearer(owner),
+        body: JSON.stringify({ mode: 'incremental', cursor, payload }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        run: { id: string; status: string; totalDebits: string; totalCredits: string; importBatchId: string | null };
+        normalizedEntries: unknown[];
+        importResult: { importedCount: number; batchId: string } | null;
+      };
+      for (const entry of body.normalizedEntries) {
+        expect(() => NormalizedJournalEntrySchema.parse(entry)).not.toThrow();
+      }
+      return body;
+    };
+
+    const sheetsSync = await syncAdapter(sheetsConn.id, '2026-04-12', googleSheetsFixture);
+    expect(sheetsSync.run.status).toBe('completed');
+    expect(sheetsSync.run.totalDebits).toBe('1950.25');
+    expect(sheetsSync.run.importBatchId).toBe(sheetsSync.importResult?.batchId);
+    expect(sheetsSync.importResult?.importedCount).toBe(4);
+
+    const qboSync = await syncAdapter(qboConn.id, '2026-04-18', qboFixture);
+    expect(qboSync.run.totalDebits).toBe('3000.00');
+    expect(qboSync.importResult?.importedCount).toBe(4);
+
+    const xeroSync = await syncAdapter(xeroConn.id, '2026-04-20', xeroFixture);
+    expect(xeroSync.run.totalDebits).toBe('1235.50');
+    expect(xeroSync.importResult?.importedCount).toBe(4);
+
+    // Combined TB, Statements, and 001200 drill-to-source across all 3 connector syncs
+    const tbRes = await fetch(`${baseUrl}/api/companies/${companyId}/trial-balance?period=P04`, {
+      headers: bearer(owner),
+    });
+    expect(tbRes.status).toBe(200);
+    const tb = (await tbRes.json()) as {
+      totalDebit: string;
+      totalCredit: string;
+      isBalanced: boolean;
+      sources: readonly { sourceFilename: string }[];
+    };
+    expect(tb.totalDebit).toBe('6185.75');
+    expect(tb.totalCredit).toBe('6185.75');
+    expect(tb.isBalanced).toBe(true);
+    expect(tb.sources).toHaveLength(3);
+
+    const stmRes = await fetch(`${baseUrl}/api/companies/${companyId}/statements?period=P04`, {
+      headers: bearer(owner),
+    });
+    expect(stmRes.status).toBe(200);
+    const stm = (await stmRes.json()) as {
+      pnl: { revenue: string; cogs: string; opex: string; netIncome: string };
+      balanceSheet: { totalAssets: string; isBalanced: boolean };
+      articulation: { valid: boolean };
+    };
+    expect(stm.pnl.revenue).toBe('4825.50');
+    expect(stm.pnl.cogs).toBe('600.00');
+    expect(stm.pnl.opex).toBe('760.25');
+    expect(stm.pnl.netIncome).toBe('3465.25');
+    expect(stm.balanceSheet.totalAssets).toBe('4375.25');
+    expect(stm.balanceSheet.isBalanced).toBe(true);
+    expect(stm.articulation.valid).toBe(true);
+
+    const drillRes = await fetch(`${baseUrl}/api/companies/${companyId}/accounts/001200/drill?period=P04`, {
+      headers: bearer(owner),
+    });
+    expect(drillRes.status).toBe(200);
+    const drill = (await drillRes.json()) as {
+      accountCode: string;
+      naturalActivity: string;
+      rows: readonly { sourceFilename: string; sourceRef: string }[];
+    };
+    expect(drill.accountCode).toBe('001200');
+    expect(drill.naturalActivity).toBe('1975.25');
+    expect(drill.rows.map((r) => r.sourceRef)).toContain('GS-2026-001');
+    expect(drill.rows.map((r) => r.sourceRef)).toContain('XERO-MJ-201');
+
+    // 3. CON3: Reconciliation mismatch fixture quarantines with importBatchId = null and leaves TB untouched
+    const mismatchRes = await fetch(`${baseUrl}/api/companies/${companyId}/connectors/${qboConn.id}/sync`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({ mode: 'incremental', cursor: '2026-04-22', payload: mismatchFixture }),
+    });
+    expect(mismatchRes.status).toBe(201);
+    const mismatch = (await mismatchRes.json()) as {
+      run: {
+        status: string;
+        reconciliationStatus: string;
+        reconciliationReason: string;
+        importBatchId: string | null;
+        rowsPulled: number;
+        rowsQuarantined: number;
+      };
+      importResult: unknown;
+    };
+    expect(mismatch.run.status).toBe('quarantined');
+    expect(mismatch.run.reconciliationStatus).toBe('mismatch_quarantined');
+    expect(mismatch.run.reconciliationReason).toContain('ROW_COUNT_MISMATCH:expected=3:got=2');
+    expect(mismatch.run.reconciliationReason).toContain('RECONCILIATION_IMBALANCE');
+    expect(mismatch.run.importBatchId).toBeNull();
+    expect(mismatch.importResult).toBeNull();
+
+    const tbAfterMismatchRes = await fetch(`${baseUrl}/api/companies/${companyId}/trial-balance?period=P04`, {
+      headers: bearer(owner),
+    });
+    const tbAfterMismatch = (await tbAfterMismatchRes.json()) as { totalDebit: string };
+    expect(tbAfterMismatch.totalDebit).toBe('6185.75');
+
+    // 4. CON2: Idempotent incremental re-sync & full_repull atomic replacement without double-counting
+    const dupRes = await fetch(`${baseUrl}/api/companies/${companyId}/connectors/${xeroConn.id}/sync`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({ mode: 'incremental', cursor: '2026-04-20', payload: xeroFixture }),
+    });
+    expect(dupRes.status).toBe(201);
+    const dupBody = (await dupRes.json()) as {
+      run: { replacedRunId: string | null };
+      importResult: { replacedBatchId: string | null } | null;
+    };
+    expect(dupBody.run.replacedRunId).toBe(xeroSync.run.id);
+    expect(dupBody.importResult?.replacedBatchId).toBe(xeroSync.importResult?.batchId);
+
+    const repullRes = await fetch(`${baseUrl}/api/companies/${companyId}/connectors/${sheetsConn.id}/sync`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        mode: 'full_repull',
+        cursor: '2026-04-30',
+        payload: {
+          sourceSystem: 'google_sheets',
+          currency: 'USD',
+          expectedRowCount: 2,
+          rows: [
+            {
+              entryRef: 'GS-2026-099',
+              date: '2026-04-25',
+              period: 'P04',
+              accountCode: '001200',
+              description: 'Replacement cash receipt',
+              debit: '200.00',
+              credit: '',
+              dims: {},
+            },
+            {
+              entryRef: 'GS-2026-099',
+              date: '2026-04-25',
+              period: 'P04',
+              accountCode: '4000',
+              description: 'Replacement revenue',
+              debit: '',
+              credit: '200.00',
+              dims: {},
+            },
+          ],
+        },
+      }),
+    });
+    expect(repullRes.status).toBe(201);
+    const repullBody = (await repullRes.json()) as {
+      run: { replacedRunId: string | null; totalDebits: string };
+    };
+    expect(repullBody.run.replacedRunId).toBe(sheetsSync.run.id);
+    expect(repullBody.run.totalDebits).toBe('200.00');
+
+    // TB after replacing Google Sheets (1950.25 -> 200.00): 3000.00 + 1235.50 + 200.00 = 4435.50
+    const tbAfterRepullRes = await fetch(`${baseUrl}/api/companies/${companyId}/trial-balance?period=P04`, {
+      headers: bearer(owner),
+    });
+    const tbAfterRepull = (await tbAfterRepullRes.json()) as { totalDebit: string; isBalanced: boolean };
+    expect(tbAfterRepull.totalDebit).toBe('4435.50');
+    expect(tbAfterRepull.isBalanced).toBe(true);
+
+    // 5. Run history + CON4 zero secrets anywhere in overview, runs, or audit_log
+    const [overviewRes, runsRes] = await Promise.all([
+      fetch(`${baseUrl}/api/companies/${companyId}/connectors`, { headers: bearer(owner) }),
+      fetch(`${baseUrl}/api/companies/${companyId}/connectors/${sheetsConn.id}/runs`, { headers: bearer(owner) }),
+    ]);
+    expect(overviewRes.status).toBe(200);
+    expect(runsRes.status).toBe(200);
+    const overviewText = await overviewRes.text();
+    const runsText = await runsRes.text();
+    const runsJson = JSON.parse(runsText) as { runs: readonly { status: string }[] };
+    expect(runsJson.runs.map((r) => r.status)).toEqual(['completed', 'replaced']);
+
+    const auditRows = await db.query<{ action: string; old_payload: unknown; new_payload: unknown }>(
+      `SELECT action, old_payload, new_payload FROM audit_log WHERE company_id = $1`,
+      [companyId],
+    );
+    const serializedAudit = JSON.stringify(auditRows.rows);
+    for (const secret of rawSecrets) {
+      expect(overviewText).not.toContain(secret);
+      expect(runsText).not.toContain(secret);
+      expect(serializedAudit).not.toContain(secret);
+    }
+    expect(overviewText).not.toContain('credential_ref');
+    expect(runsText).not.toContain('vault:sha256:');
+    expect(serializedAudit).not.toContain('vault:sha256:');
+
+    const auditVerification = await verifyCompanyAuditLog(db, companyId);
+    expect(auditVerification.valid).toBe(true);
+    expect(auditVerification.checkedCount).toBeGreaterThanOrEqual(8);
+
+    // 6. RBAC / tenant / auth negative guards
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/connectors`, {
+          method: 'POST',
+          headers: bearer(viewer),
+          body: JSON.stringify({
+            sourceSystem: 'xero',
+            name: 'Viewer Denied',
+            externalRef: 'x',
+            credentialSecret: 'viewer-cannot-create-secret',
+          }),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/connectors/${sheetsConn.id}/sync`, {
+          method: 'POST',
+          headers: bearer(viewer),
+          body: JSON.stringify({ mode: 'incremental', payload: googleSheetsFixture }),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/connectors`, {
+          headers: bearer(INTRUDER),
+        })
+      ).status,
+    ).toBe(403);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/connectors`)).status).toBe(401);
+  }, 60_000);
+
+  it('WI-0042 M2 Customer Onboarding & Data Migration Pipeline (ONB1–ONB3): deterministic CoA assist, exact row accounting, repeatable cutover rehearsal, and RBAC guards', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:onb-owner@onefpa.test',
+      email: 'onb-owner@onefpa.test',
+      displayName: 'Onboarding Owner',
+    };
+    const viewer: VerifiedIdentity = {
+      firebaseUid: 'sandbox:onb-viewer@onefpa.test',
+      email: 'onb-viewer@onefpa.test',
+      displayName: 'Onboarding Viewer',
+    };
+
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Apex Partner Onboarding Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'HQ',
+        entityName: 'HQ',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    const chartCsv = [
+      'code,name,type,normal_side,statement_line_key',
+      '1000,Operating Cash,asset,debit,bs.asset.cash',
+      '1100,Accounts Receivable,asset,debit,bs.asset.ar',
+      '4000,Subscription Revenue,revenue,credit,pl.revenue.product',
+      '6000,Payroll Expense,expense,debit,pl.opex.payroll',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ csvText: chartCsv }),
+        })
+      ).status,
+    ).toBe(201);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            email: viewer.email,
+            displayName: viewer.displayName,
+            role: 'viewer',
+          }),
+        })
+      ).status,
+    ).toBe(201);
+
+    const partner = buildSyntheticPartnerDataset();
+
+    // 1. Validate unmapped synthetic partner export: exact row accounting + deterministic CoA suggestions
+    const valRes1 = await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/validate`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({ csvText: partner.csvText }),
+    });
+    expect(valRes1.status).toBe(200);
+    const val1 = (await valRes1.json()) as {
+      rowsIn: number;
+      importableCount: number;
+      quarantinedCount: number;
+      rowAccountingTies: boolean;
+      goLiveStatus: string;
+      suggestions: {
+        sourceCode: string;
+        suggestedAccountCode: string | null;
+        requiresHumanApproval: boolean;
+      }[];
+    };
+    expect(val1.rowsIn).toBe(10);
+    expect(val1.rowAccountingTies).toBe(true);
+    expect(val1.importableCount + val1.quarantinedCount).toBe(val1.rowsIn);
+    expect(val1.goLiveStatus).toBe('blocked');
+    expect(val1.suggestions.every((s) => s.requiresHumanApproval)).toBe(true);
+    const sugByCode = new Map(val1.suggestions.map((s) => [s.sourceCode, s.suggestedAccountCode]));
+    expect(sugByCode.get('OPS-CASH')).toBe('1000');
+    expect(sugByCode.get('CUST-AR')).toBe('1100');
+    expect(sugByCode.get('SAAS-REV')).toBe('4000');
+    expect(sugByCode.get('SAL-PAYROLL')).toBe('6000');
+
+    // Stage-commit rehearsal is blocked while unmapped codes remain (422)
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/rehearse`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            mode: 'stage_commit',
+            sourceFilename: partner.sourceFilename,
+            csvText: partner.csvText,
+          }),
+        })
+      ).status,
+    ).toBe(422);
+
+    // 2. Explicit human approval writes immutable coa_mapping rows and clears mapping blockers
+    const approveRes = await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/mappings/approve`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        csvText: partner.csvText,
+        entries: val1.suggestions.map((s) => ({
+          sourceCode: s.sourceCode,
+          status: 'mapped',
+          accountCode: s.suggestedAccountCode,
+          quarantineReason: null,
+        })),
+      }),
+    });
+    expect(approveRes.status).toBe(201);
+    const approved = (await approveRes.json()) as {
+      written: number;
+      validation: {
+        rowsIn: number;
+        importableCount: number;
+        quarantinedCount: number;
+        rowAccountingTies: boolean;
+        goLiveStatus: string;
+        missingInteriorPeriods: string[];
+        totalDebits: string;
+        totalCredits: string;
+      };
+    };
+    expect(approved.written).toBe(4);
+    expect(approved.validation.rowsIn).toBe(10);
+    expect(approved.validation.importableCount).toBe(8);
+    expect(approved.validation.quarantinedCount).toBe(2);
+    expect(approved.validation.rowAccountingTies).toBe(true);
+    expect(approved.validation.goLiveStatus).toBe('ready_with_warnings');
+    expect(approved.validation.missingInteriorPeriods).toEqual(['FY2026 P03']);
+    expect(approved.validation.totalDebits).toBe('58000.00');
+    expect(approved.validation.totalCredits).toBe('58000.00');
+
+    // 3. Dry-run rehearsal computes projected TB & fingerprint with ZERO GL writes
+    const dryRes = await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/rehearse`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        mode: 'dry_run',
+        sourceFilename: partner.sourceFilename,
+        csvText: partner.csvText,
+      }),
+    });
+    expect(dryRes.status).toBe(200);
+    const dryRun = (await dryRes.json()) as {
+      mode: string;
+      rehearsalHash: string;
+      committed: null;
+      trialBalanceAfter: { isBalanced: boolean; totalDebit: string; totalCredit: string; accountCount: number };
+    };
+    expect(dryRun.mode).toBe('dry_run');
+    expect(dryRun.committed).toBeNull();
+    expect(dryRun.trialBalanceAfter.isBalanced).toBe(true);
+    expect(dryRun.trialBalanceAfter.totalDebit).toBe('58000.00');
+
+    const batchCountBeforeCommit = await db.query<{ cnt: string }>(
+      `SELECT COUNT(*)::text AS cnt FROM import_batch WHERE company_id = $1`,
+      [companyId],
+    );
+    expect(Number(batchCountBeforeCommit.rows[0]?.cnt ?? '0')).toBe(0);
+
+    // 4. First stage_commit + repeat stage_commit produce identical rehearsalHash & TB with atomic replacement (ONB3)
+    const commit1Res = await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/rehearse`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        mode: 'stage_commit',
+        sourceFilename: partner.sourceFilename,
+        csvText: partner.csvText,
+      }),
+    });
+    expect(commit1Res.status).toBe(201);
+    const commit1 = (await commit1Res.json()) as {
+      rehearsalHash: string;
+      committed: { batchId: string; replacedBatchId: string | null; importedCount: number; quarantinedCount: number };
+      trialBalanceAfter: { totalDebit: string; totalCredit: string; isBalanced: boolean };
+    };
+    expect(commit1.rehearsalHash).toBe(dryRun.rehearsalHash);
+    expect(commit1.committed.replacedBatchId).toBeNull();
+    expect(commit1.committed.importedCount).toBe(8);
+    expect(commit1.committed.quarantinedCount).toBe(2);
+    expect(commit1.trialBalanceAfter.totalDebit).toBe('58000.00');
+
+    const commit2Res = await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/rehearse`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        mode: 'stage_commit',
+        sourceFilename: partner.sourceFilename,
+        csvText: partner.csvText,
+      }),
+    });
+    expect(commit2Res.status).toBe(201);
+    const commit2 = (await commit2Res.json()) as {
+      rehearsalHash: string;
+      committed: { batchId: string; replacedBatchId: string | null };
+      trialBalanceAfter: { totalDebit: string; totalCredit: string };
+    };
+    expect(commit2.rehearsalHash).toBe(dryRun.rehearsalHash);
+    expect(commit2.committed.replacedBatchId).toBe(commit1.committed.batchId);
+    expect(commit2.trialBalanceAfter.totalDebit).toBe('58000.00');
+
+    // 5. Negative RBAC, cross-tenant, and unauthenticated checks
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/validate`, {
+          method: 'POST',
+          headers: bearer(viewer),
+          body: JSON.stringify({ csvText: partner.csvText }),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/validate`, {
+          method: 'POST',
+          headers: bearer(INTRUDER),
+          body: JSON.stringify({ csvText: partner.csvText }),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/onboarding/validate`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ csvText: partner.csvText }),
+        })
+      ).status,
+    ).toBe(401);
+
+    const auditVerification = await verifyCompanyAuditLog(db, companyId);
+    expect(auditVerification.valid).toBe(true);
+  }, 60_000);
 });
+

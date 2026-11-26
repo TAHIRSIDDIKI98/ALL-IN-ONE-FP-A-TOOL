@@ -8,12 +8,23 @@ import { getAccountDrilldown, getFinancialStatements, getTrialBalance } from './
 import {
   CORPUS,
   CORPUS_ORACLE,
+  M2_CORPUS,
+  M2_CORPUS_ORACLE,
+  OCCURRED_AT,
   corpusCsv,
   importCorpus,
   seedCorpusCompany,
   seedCorpusWithOpeningBalances,
+  seedTenantBCompany,
+  tenantBCsv,
+  tenantBOpeningBalanceCsv,
 } from '../testing/corpus-fixtures.js';
+import { createConnectorConfig, listConnectorsOverview } from './connectors.js';
+import { getDashboardSummary } from './dashboards.js';
 import { commitImport } from './import.js';
+import { commitDriverPlan, getScenarioComparison, listScenarios } from './planning.js';
+import { createApprovalTask, listWorkflowOverview } from './workflow.js';
+import { commitWorkforcePlan, getWorkforceWorkspace } from './workforce.js';
 
 let db: DatabaseHandle;
 let companyId: string;
@@ -314,3 +325,175 @@ describe('WI-0018 articulating statements read model (G3, A1–A5)', () => {
     expect(priorYear.isBalanced).toBe(true);
   }, 180_000);
 });
+
+describe('WI-0041 M2 Coherent Corpus v2 — Tenant B DB tie-out & cross-tenant isolation (C3, C4, D2, TST5)', () => {
+  it('ties Tenant B NRF 454 statements, scenarios, and workforce DB outputs to independent oracle with zero cross-tenant leakage into Tenant A', async () => {
+    const tenantB = await seedTenantBCompany(db);
+
+    await db.transaction((tx) =>
+      commitImport(tx, {
+        companyId: tenantB.companyId,
+        actorId: tenantB.actorId,
+        kind: 'actuals',
+        sourceFilename: 'tenant_b_gl.csv',
+        csvText: tenantBCsv(),
+        occurredAt: OCCURRED_AT,
+      }),
+    );
+
+    const tenantBTb = await getTrialBalance(db, { companyId: tenantB.companyId });
+    expect(tenantBTb.isBalanced).toBe(true);
+    expect(tenantBTb.totalDebit).toBe(M2_CORPUS_ORACLE.tenantB.trialBalance.totalDebits);
+    expect(tenantBTb.totalCredit).toBe(M2_CORPUS_ORACLE.tenantB.trialBalance.totalCredits);
+    expect(tenantBTb.rows.some((r) => r.code === '001400')).toBe(true);
+    expect(tenantBTb.rows.some((r) => r.code === '1400')).toBe(true);
+
+    await db.transaction((tx) =>
+      commitImport(tx, {
+        companyId: tenantB.companyId,
+        actorId: tenantB.actorId,
+        kind: 'actuals',
+        sourceFilename: 'tenant_b_opening.csv',
+        csvText: tenantBOpeningBalanceCsv(),
+        occurredAt: OCCURRED_AT,
+      }),
+    );
+
+    const tenantBStatements = await getFinancialStatements(db, {
+      companyId: tenantB.companyId,
+      throughPeriodCode: 'P12',
+      fiscalYear: 2026,
+    });
+    expect(() => FinancialStatementsSchema.parse(tenantBStatements)).not.toThrow();
+    expect(tenantBStatements.pnl.revenue).toBe(M2_CORPUS_ORACLE.tenantB.pnl.revenue);
+    expect(tenantBStatements.pnl.netIncome).toBe(M2_CORPUS_ORACLE.tenantB.pnl.netIncome);
+    expect(tenantBStatements.balanceSheet.totalAssets).toBe(M2_CORPUS_ORACLE.tenantB.balanceSheet.totalAssets);
+    expect(tenantBStatements.balanceSheet.cashBalance).toBe(M2_CORPUS_ORACLE.tenantB.balanceSheet.cashBalance);
+    expect(tenantBStatements.cashFlow.endingCash).toBe(M2_CORPUS_ORACLE.tenantB.cashFlow.endingCash);
+    expect(tenantBStatements.retainedEarnings.closingTotal).toBe(
+      M2_CORPUS_ORACLE.tenantB.retainedEarnings.closingTotal,
+    );
+    expect(tenantBStatements.articulation.valid).toBe(true);
+
+    // Seed Tenant B planning scenarios, workforce roster, approval task, and connector
+    const baseCommit = await db.transaction((tx) =>
+      commitDriverPlan(tx, {
+        companyId: tenantB.companyId,
+        actorId: tenantB.actorId,
+        input: {
+          fiscalYear: 2026,
+          scenarioName: M2_CORPUS.scenarioCorpus.scenarios.base.name,
+          scenarioKind: 'budget',
+          periods: [...M2_CORPUS.scenarioCorpus.periods],
+          drivers: [...M2_CORPUS.scenarioCorpus.scenarios.base.drivers],
+        },
+        occurredAt: OCCURRED_AT,
+      }),
+    );
+    expect(baseCommit.grandTotal).toBe(M2_CORPUS_ORACLE.scenarios.baseGrandTotal);
+
+    const upsideCommit = await db.transaction((tx) =>
+      commitDriverPlan(tx, {
+        companyId: tenantB.companyId,
+        actorId: tenantB.actorId,
+        input: {
+          fiscalYear: 2026,
+          scenarioName: M2_CORPUS.scenarioCorpus.scenarios.upside.name,
+          scenarioKind: 'forecast',
+          periods: [...M2_CORPUS.scenarioCorpus.periods],
+          drivers: [...M2_CORPUS.scenarioCorpus.scenarios.upside.drivers],
+        },
+        occurredAt: OCCURRED_AT,
+      }),
+    );
+    expect(upsideCommit.grandTotal).toBe(M2_CORPUS_ORACLE.scenarios.upsideGrandTotal);
+
+    const scenarioCmp = await getScenarioComparison(db, {
+      companyId: tenantB.companyId,
+      fiscalYear: 2026,
+      baseScenarioName: M2_CORPUS.scenarioCorpus.scenarios.base.name,
+      targetScenarioName: M2_CORPUS.scenarioCorpus.scenarios.upside.name,
+    });
+    expect(scenarioCmp.totalDelta).toBe(M2_CORPUS_ORACLE.scenarios.baseVsUpsideTotalDelta);
+
+    const wfCommit = await db.transaction((tx) =>
+      commitWorkforcePlan(tx, {
+        companyId: tenantB.companyId,
+        actorId: tenantB.actorId,
+        request: {
+          fiscalYear: 2026,
+          scenarioName: 'Tenant B Workforce Plan',
+          scenarioKind: 'forecast',
+          saveRoster: true,
+          periods: [...M2_CORPUS.workforceCorpus.periods],
+          positions: M2_CORPUS.workforceCorpus.positions.map((p) => ({ ...p })),
+        },
+        occurredAt: OCCURRED_AT,
+      }),
+    );
+    expect(wfCommit.preview.grandTotalFteMonths).toBe(M2_CORPUS_ORACLE.workforce.grandTotalFteMonths);
+    expect(wfCommit.preview.grandTotalCost).toBe(M2_CORPUS_ORACLE.workforce.grandTotalCost);
+    expect(wfCommit.commit.grandTotal).toBe(M2_CORPUS_ORACLE.workforce.grandTotalCost);
+
+    await db.transaction((tx) =>
+      createApprovalTask(tx, {
+        companyId: tenantB.companyId,
+        actorId: tenantB.actorId,
+        request: {
+          planVersionId: upsideCommit.planVersionId,
+          title: 'Tenant B Upside Approval',
+        },
+        occurredAt: OCCURRED_AT,
+      }),
+    );
+
+    await db.transaction((tx) =>
+      createConnectorConfig(tx, {
+        companyId: tenantB.companyId,
+        actorId: tenantB.actorId,
+        request: {
+          sourceSystem: 'google_sheets',
+          name: 'Tenant B Plant Feed',
+          externalRef: 'sheet-tenant-b-01',
+          credentialSecret: 'synthetic-tenant-b-secret',
+        },
+        occurredAt: OCCURRED_AT,
+      }),
+    );
+
+    // TST5 / D2: Verify zero leakage into Tenant A (`companyId`, `actorId` from Reports Co)
+    const tenantATb = await getTrialBalance(db, { companyId });
+    expect(tenantATb.totalDebit).toBe(CORPUS_ORACLE.trialBalance.totalDebits);
+    expect(tenantATb.rows.some((r) => r.code === '001400')).toBe(false);
+
+    const tenantAScenarios = await listScenarios(db, companyId);
+    expect(tenantAScenarios.scenarios.some((s) => s.name === 'Upside Forecast')).toBe(false);
+    expect(tenantAScenarios.scenarios.some((s) => s.name === 'Tenant B Workforce Plan')).toBe(false);
+
+    const tenantAWorkflow = await listWorkflowOverview(db, { companyId, actorId });
+    expect(tenantAWorkflow.tasks.some((t) => t.title === 'Tenant B Upside Approval')).toBe(false);
+
+    const tenantAConnectors = await listConnectorsOverview(db, companyId);
+    expect(tenantAConnectors.connectors.some((c) => c.name === 'Tenant B Plant Feed')).toBe(false);
+
+    const tenantAWorkforce = await getWorkforceWorkspace(db, { companyId, actorId, fiscalYear: 2026 });
+    expect(tenantAWorkforce.positions.some((p) => p.positionCode === 'WF-ENG-01')).toBe(false);
+
+    const tenantADashboard = await getDashboardSummary(db, {
+      companyId,
+      throughPeriodCode: 'P12',
+      fiscalYear: 2026,
+    });
+    expect(tenantADashboard.companyId).toBe(companyId);
+    expect(tenantADashboard.companyName).toBe('Reports Co');
+
+    // Cross-tenant RBAC refusal: Tenant A actor cannot access Tenant B workflow or workforce
+    await expect(
+      listWorkflowOverview(db, { companyId: tenantB.companyId, actorId }),
+    ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN', httpStatus: 403 });
+    await expect(
+      getWorkforceWorkspace(db, { companyId: tenantB.companyId, actorId }),
+    ).rejects.toMatchObject({ code: 'TENANT_FORBIDDEN', httpStatus: 403 });
+  }, 180_000);
+});
+

@@ -9,3 +9,6 @@ export * from './planning/index.js';
 export * from './workforce/index.js';
 export * from './metrics/index.js';
 export * from './packs/index.js';
+export * from './integrations/index.js';
+export * from './onboarding/index.js';
+

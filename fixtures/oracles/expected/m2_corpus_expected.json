@@ -1,0 +1,149 @@
+{
+  "derivationMethod": "Independent JS BigInt minor-unit integer arithmetic with zero /core imports (M2 Corpus v2)",
+  "approvedDate": "2026-11-26",
+  "generatorVersion": "2.0.0",
+  "seed": 202602,
+  "tenantBCompanyId": "cmp_tenant_b_202602",
+  "tenantBCompanyName": "Northstar Manufacturing — DEMO — SYNTHETIC DATA",
+  "tenantB": {
+    "derivationMethod": "Independent JS BigInt minor-unit integer summation with zero /core imports",
+    "approvedDate": "2026-11-24",
+    "generatorVersion": "2.0.0",
+    "seed": 202602,
+    "trialBalance": {
+      "totalDebits": "7431361.00",
+      "totalCredits": "7431361.00",
+      "balanced": true
+    },
+    "pnl": {
+      "revenue": "2210202.00",
+      "cogs": "1209792.00",
+      "grossProfit": "1000410.00",
+      "opex": "690283.00",
+      "ebitda": "310127.00",
+      "depreciation": "113464.00",
+      "ebit": "196663.00",
+      "nonOperatingNet": "0.00",
+      "ebt": "196663.00",
+      "tax": "50620.00",
+      "netIncome": "146043.00"
+    },
+    "balanceSheet": {
+      "currentAssets": "1897423.60",
+      "nonCurrentAssets": "736536.00",
+      "totalAssets": "2633959.60",
+      "currentLiabilities": "472916.60",
+      "nonCurrentLiabilities": "550000.00",
+      "totalLiabilities": "1022916.60",
+      "totalEquity": "1611043.00",
+      "totalLiabilitiesAndEquity": "2633959.60",
+      "cashBalance": "819523.90",
+      "balanced": true
+    },
+    "cashFlow": {
+      "beginningCash": "620000.00",
+      "operatingCashFlow": "254523.90",
+      "investingCashFlow": "-120000.00",
+      "financingCashFlow": "65000.00",
+      "endingCash": "819523.90",
+      "tiesToBsCash": true
+    },
+    "retainedEarnings": {
+      "opening": "650000.00",
+      "netIncome": "146043.00",
+      "distributions": "35000.00",
+      "closingTotal": "761043.00",
+      "rollForwardValid": true
+    }
+  },
+  "rollingForecast": {
+    "cutoffPeriod": "P06",
+    "totalActual": "1769688.00",
+    "totalForecast": "2365053.31",
+    "totalFullHorizon": "4134741.31",
+    "totalMissingCells": 18
+  },
+  "scenarios": {
+    "baseGrandTotal": "3751846.64",
+    "upsideGrandTotal": "4307307.19",
+    "downsideGrandTotal": "3206582.94",
+    "baseVsUpsideTotalDelta": "555460.55",
+    "baseVsDownsideTotalDelta": "-545263.70",
+    "baseAccountTotals": {
+      "4000": "2414176.16",
+      "4200": "0.00",
+      "4900": "0.00",
+      "5000": "965670.48",
+      "6000": "372000.00"
+    },
+    "upsideAccountTotals": {
+      "4000": "2729932.75",
+      "4200": "36000.00",
+      "4900": "0.00",
+      "5000": "1037374.44",
+      "6000": "414000.00",
+      "6300": "90000.00"
+    },
+    "downsideAccountTotals": {
+      "4000": "1935127.04",
+      "5000": "851455.90",
+      "6000": "354000.00",
+      "6400": "66000.00"
+    }
+  },
+  "workforce": {
+    "activePositionCount": 5,
+    "inactiveExcludedCount": 1,
+    "grandTotalFteMonths": "49.50",
+    "grandTotalCost": "556355.40",
+    "rampP04Cost": "4305.00",
+    "attritionP06Cost": "0.00",
+    "positionSummaries": [
+      {
+        "positionCode": "WF-CSM-03",
+        "accountCode": "6000",
+        "fteMonths": "8.50",
+        "totalBasePay": "59500.00",
+        "totalBenefits": "8925.00",
+        "totalBonus": "4760.00",
+        "totalCost": "73185.00"
+      },
+      {
+        "positionCode": "WF-ENG-01",
+        "accountCode": "6000",
+        "fteMonths": "12.00",
+        "totalBasePay": "144000.00",
+        "totalBenefits": "25920.00",
+        "totalBonus": "14400.00",
+        "totalCost": "184320.00"
+      },
+      {
+        "positionCode": "WF-FIN-05",
+        "accountCode": "6000",
+        "fteMonths": "5.00",
+        "totalBasePay": "37500.00",
+        "totalBenefits": "6750.00",
+        "totalBonus": "0.00",
+        "totalCost": "44250.00"
+      },
+      {
+        "positionCode": "WF-MFG-02",
+        "accountCode": "5100",
+        "fteMonths": "12.00",
+        "totalBasePay": "96000.00",
+        "totalBenefits": "19200.00",
+        "totalBonus": "4800.00",
+        "totalCost": "120000.00"
+      },
+      {
+        "positionCode": "WF-OPS-04",
+        "accountCode": "5100",
+        "fteMonths": "12.00",
+        "totalBasePay": "111240.00",
+        "totalBenefits": "17798.40",
+        "totalBonus": "5562.00",
+        "totalCost": "134600.40"
+      }
+    ]
+  }
+}

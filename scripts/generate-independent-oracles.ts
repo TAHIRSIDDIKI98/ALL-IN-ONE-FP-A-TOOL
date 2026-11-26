@@ -256,7 +256,371 @@ export function writeIndependentOracle(rootDir = process.cwd()): string {
   return outPath;
 }
 
+interface RawDriverDef {
+  readonly kind: 'fixed' | 'growth_rate' | 'percent_of_account' | 'price_times_volume';
+  readonly driverKey: string;
+  readonly accountCode: string;
+  readonly amount?: string;
+  readonly baseAmount?: string;
+  readonly ratePerPeriod?: string;
+  readonly sourceAccountCode?: string;
+  readonly ratio?: string;
+  readonly unitPriceByPeriod?: Readonly<Record<string, string>>;
+  readonly volumeByPeriod?: Readonly<Record<string, string>>;
+  readonly periodOverrides?: Readonly<Record<string, string>>;
+}
+
+interface RawWorkforcePosition {
+  readonly positionCode: string;
+  readonly title: string;
+  readonly departmentName: string;
+  readonly accountCode: string;
+  readonly startPeriodCode: string;
+  readonly endPeriodCode: string | null;
+  readonly fte: string;
+  readonly annualSalary: string;
+  readonly burdenRate: string;
+  readonly bonusRate: string;
+  readonly rampFirstPeriodPct: string;
+  readonly meritPeriodCode: string | null;
+  readonly meritIncreasePct: string;
+  readonly status: 'active' | 'inactive';
+}
+
+interface RawM2Corpus {
+  readonly meta: {
+    readonly generatorVersion: string;
+    readonly seed: number;
+    readonly demoLabel: string;
+  };
+  readonly tenantB: {
+    readonly company: {
+      readonly id: string;
+      readonly name: string;
+      readonly calendarKind: string;
+      readonly entityCode: string;
+      readonly currency: string;
+    };
+    readonly coa: readonly RawCorpusAccount[];
+    readonly openingBalanceSheetMinor: Readonly<Record<string, number>>;
+    readonly glLines: readonly RawCorpusGlLine[];
+  };
+  readonly rollingForecastCorpus: {
+    readonly cutoffPeriod: string;
+    readonly periods: readonly string[];
+    readonly forecastDrivers: readonly RawDriverDef[];
+    readonly actualFacts: readonly { readonly accountCode: string; readonly periodCode: string; readonly amount: string }[];
+  };
+  readonly scenarioCorpus: {
+    readonly periods: readonly string[];
+    readonly scenarios: {
+      readonly base: { readonly name: string; readonly drivers: readonly RawDriverDef[] };
+      readonly upside: { readonly name: string; readonly drivers: readonly RawDriverDef[] };
+      readonly downside: { readonly name: string; readonly drivers: readonly RawDriverDef[] };
+    };
+  };
+  readonly workforceCorpus: {
+    readonly periods: readonly string[];
+    readonly positions: readonly RawWorkforcePosition[];
+  };
+}
+
+function parseScaledBigInt(raw: string, scale: number): bigint {
+  const trimmed = raw.trim();
+  const neg = trimmed.startsWith('-');
+  const unsigned = neg || trimmed.startsWith('+') ? trimmed.slice(1) : trimmed;
+  const parts = unsigned.split('.');
+  const wholePart = parts[0] ?? '0';
+  const fracPart = (parts[1] ?? '').padEnd(scale, '0').slice(0, scale);
+  const val = BigInt(wholePart) * 10n ** BigInt(scale) + (scale > 0 ? BigInt(fracPart) : 0n);
+  return neg ? -val : val;
+}
+
+function divRoundHalfUp(num: bigint, den: bigint): bigint {
+  if (den <= 0n) {
+    throw new Error('ORACLE_NON_POSITIVE_DENOMINATOR');
+  }
+  const neg = num < 0n;
+  const absNum = neg ? -num : num;
+  const q = absNum / den;
+  const r = absNum % den;
+  const rounded = r * 2n >= den ? q + 1n : q;
+  return neg ? -rounded : rounded;
+}
+
+function evalDriversBigInt(
+  periods: readonly string[],
+  drivers: readonly RawDriverDef[],
+): {
+  readonly lines: Map<string, Map<string, bigint>>;
+  readonly accountTotals: Record<string, string>;
+  readonly grandTotalCents: bigint;
+} {
+  // Kahn topological order without /core imports
+  const byAccount = new Map<string, RawDriverDef>(drivers.map((d) => [d.accountCode.trim(), d]));
+  const inDegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+  for (const code of byAccount.keys()) {
+    inDegree.set(code, 0);
+    dependents.set(code, []);
+  }
+  for (const [code, drv] of byAccount.entries()) {
+    if (drv.kind === 'percent_of_account' && drv.sourceAccountCode) {
+      const src = drv.sourceAccountCode.trim();
+      inDegree.set(code, (inDegree.get(code) ?? 0) + 1);
+      dependents.get(src)?.push(code);
+    }
+  }
+  const queue = [...inDegree.entries()].filter(([, d]) => d === 0).map(([c]) => c).sort();
+  const ordered: RawDriverDef[] = [];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    ordered.push(byAccount.get(cur)!);
+    for (const dep of dependents.get(cur) ?? []) {
+      const next = (inDegree.get(dep) ?? 1) - 1;
+      inDegree.set(dep, next);
+      if (next === 0) {
+        queue.push(dep);
+        queue.sort();
+      }
+    }
+  }
+
+  const linesCents = new Map<string, Map<string, bigint>>();
+  for (const drv of ordered) {
+    const accountMap = new Map<string, bigint>();
+    linesCents.set(drv.accountCode.trim(), accountMap);
+    let runningStorageMicro = 0n;
+    let hasRunning = false;
+
+    for (let i = 0; i < periods.length; i += 1) {
+      const periodCode = periods[i]!;
+      const override = drv.periodOverrides?.[periodCode];
+      let rawMicro = 0n;
+
+      if (override !== undefined) {
+        rawMicro = parseScaledBigInt(override, 6);
+        if (drv.kind === 'growth_rate') {
+          runningStorageMicro = rawMicro;
+          hasRunning = true;
+        }
+      } else if (drv.kind === 'fixed') {
+        rawMicro = parseScaledBigInt(drv.amount ?? '0', 6);
+      } else if (drv.kind === 'growth_rate') {
+        if (i === 0 || !hasRunning) {
+          rawMicro = parseScaledBigInt(drv.baseAmount ?? '0', 6);
+        } else {
+          const factorMicro = 1_000_000n + parseScaledBigInt(drv.ratePerPeriod ?? '0', 6);
+          rawMicro = divRoundHalfUp(runningStorageMicro * factorMicro, 1_000_000n);
+        }
+        runningStorageMicro = rawMicro;
+        hasRunning = true;
+      } else if (drv.kind === 'percent_of_account') {
+        const srcCents = linesCents.get((drv.sourceAccountCode ?? '').trim())?.get(periodCode) ?? 0n;
+        const srcMicro = srcCents * 10_000n;
+        const ratioMicro = parseScaledBigInt(drv.ratio ?? '0', 6);
+        rawMicro = divRoundHalfUp(srcMicro * ratioMicro, 1_000_000n);
+      } else {
+        const priceMicro = parseScaledBigInt(drv.unitPriceByPeriod?.[periodCode] ?? '0', 6);
+        const volMicro = parseScaledBigInt(drv.volumeByPeriod?.[periodCode] ?? '0', 6);
+        rawMicro = divRoundHalfUp(priceMicro * volMicro, 1_000_000n);
+      }
+
+      const cellCents = divRoundHalfUp(rawMicro, 10_000n);
+      accountMap.set(periodCode, cellCents);
+    }
+  }
+
+  let grandTotalCents = 0n;
+  const accountTotals: Record<string, string> = {};
+  for (const [code, pMap] of [...linesCents.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    let accSum = 0n;
+    for (const p of periods) {
+      accSum += pMap.get(p) ?? 0n;
+    }
+    accountTotals[code] = formatCents(accSum);
+    grandTotalCents += accSum;
+  }
+
+  return { lines: linesCents, accountTotals, grandTotalCents };
+}
+
+export function computeIndependentM2CorpusOracle(corpus: RawM2Corpus) {
+  const tenantB = computeIndependentCorpusOracle({
+    meta: {
+      generatorVersion: corpus.meta.generatorVersion,
+      seed: corpus.meta.seed,
+      demoLabel: corpus.tenantB.company.name,
+    },
+    coa: corpus.tenantB.coa,
+    openingBalanceSheetMinor: corpus.tenantB.openingBalanceSheetMinor,
+    glLines: corpus.tenantB.glLines,
+  });
+
+  // Scenario BigInt evaluation
+  const baseEval = evalDriversBigInt(corpus.scenarioCorpus.periods, corpus.scenarioCorpus.scenarios.base.drivers);
+  const upsideEval = evalDriversBigInt(corpus.scenarioCorpus.periods, corpus.scenarioCorpus.scenarios.upside.drivers);
+  const downsideEval = evalDriversBigInt(corpus.scenarioCorpus.periods, corpus.scenarioCorpus.scenarios.downside.drivers);
+
+  // Rolling Forecast BigInt verification (actual P01..cutoff + upside forecast > cutoff)
+  const rfPeriods = corpus.rollingForecastCorpus.periods;
+  const cutoffIdx = rfPeriods.indexOf(corpus.rollingForecastCorpus.cutoffPeriod);
+  const actualByKey = new Map<string, bigint>();
+  const rollingAccounts = new Set<string>();
+  for (const a of corpus.rollingForecastCorpus.actualFacts) {
+    actualByKey.set(`${a.accountCode}::${a.periodCode}`, parseScaledBigInt(a.amount, 2));
+    rollingAccounts.add(a.accountCode);
+  }
+  for (const code of upsideEval.lines.keys()) {
+    rollingAccounts.add(code);
+  }
+  let rfTotalActualCents = 0n;
+  let rfTotalForecastCents = 0n;
+  let rfMissingCells = 0;
+  for (const code of [...rollingAccounts].sort()) {
+    for (let idx = 0; idx < rfPeriods.length; idx += 1) {
+      const pCode = rfPeriods[idx]!;
+      if (idx <= cutoffIdx) {
+        const v = actualByKey.get(`${code}::${pCode}`);
+        if (v === undefined) rfMissingCells += 1;
+        else rfTotalActualCents += v;
+      } else {
+        const v = upsideEval.lines.get(code)?.get(pCode);
+        if (v === undefined) rfMissingCells += 1;
+        else rfTotalForecastCents += v;
+      }
+    }
+  }
+
+  // Workforce BigInt exact cent calculation
+  const wfPeriods = corpus.workforceCorpus.periods;
+  const periodIdxMap = new Map<string, number>(wfPeriods.map((p, i) => [p, i]));
+  const positionSummaries: {
+    readonly positionCode: string;
+    readonly accountCode: string;
+    readonly fteMonths: string;
+    readonly totalBasePay: string;
+    readonly totalBenefits: string;
+    readonly totalBonus: string;
+    readonly totalCost: string;
+  }[] = [];
+  let wfGrandFteHundredths = 0n;
+  let wfGrandCostCents = 0n;
+  let rampP04Cost = '0.00';
+  let attritionP06Cost = '0.00';
+
+  const activePositions = [...corpus.workforceCorpus.positions]
+    .filter((p) => p.status === 'active')
+    .sort((a, b) => a.positionCode.localeCompare(b.positionCode));
+
+  for (const pos of activePositions) {
+    const startIdx = periodIdxMap.get(pos.startPeriodCode)!;
+    const endIdx = pos.endPeriodCode ? periodIdxMap.get(pos.endPeriodCode)! : wfPeriods.length - 1;
+    const meritIdx = pos.meritPeriodCode ? periodIdxMap.get(pos.meritPeriodCode)! : -1;
+
+    const salaryMicro = parseScaledBigInt(pos.annualSalary, 6);
+    const fteMicro = parseScaledBigInt(pos.fte, 6);
+    const burdenMicro = parseScaledBigInt(pos.burdenRate, 6);
+    const bonusMicro = parseScaledBigInt(pos.bonusRate, 6);
+    const rampMicro = parseScaledBigInt(pos.rampFirstPeriodPct, 6);
+    const meritPctMicro = parseScaledBigInt(pos.meritIncreasePct, 6);
+
+    const annualForFteMicro = divRoundHalfUp(salaryMicro * fteMicro, 1_000_000n);
+    const monthlyBaseMicro = divRoundHalfUp(annualForFteMicro, 12n);
+
+    let posFteHundredths = 0n;
+    let posBaseCents = 0n;
+    let posBenCents = 0n;
+    let posBonCents = 0n;
+    let posTotalCents = 0n;
+
+    for (let idx = 0; idx < wfPeriods.length; idx += 1) {
+      const pCode = wfPeriods[idx]!;
+      const active = idx >= startIdx && idx <= endIdx;
+      if (!active) {
+        if (pos.positionCode === 'WF-FIN-05' && pCode === 'P06') attritionP06Cost = '0.00';
+        continue;
+      }
+      const effRampMicro = idx === startIdx ? rampMicro : 1_000_000n;
+      const effMeritMicro = meritIdx !== -1 && idx >= meritIdx ? 1_000_000n + meritPctMicro : 1_000_000n;
+
+      const effFteHundredths = divRoundHalfUp(fteMicro * effRampMicro, 10_000_000_000n);
+      const baseCents = divRoundHalfUp(monthlyBaseMicro * effRampMicro * effMeritMicro, 10_000_000_000_000_000n);
+      const benCents = divRoundHalfUp(baseCents * burdenMicro, 1_000_000n);
+      const bonCents = divRoundHalfUp(baseCents * bonusMicro, 1_000_000n);
+      const cellTotal = baseCents + benCents + bonCents;
+
+      if (pos.positionCode === 'WF-CSM-03' && pCode === 'P04') rampP04Cost = formatCents(cellTotal);
+
+      posFteHundredths += effFteHundredths;
+      posBaseCents += baseCents;
+      posBenCents += benCents;
+      posBonCents += bonCents;
+      posTotalCents += cellTotal;
+    }
+
+    wfGrandFteHundredths += posFteHundredths;
+    wfGrandCostCents += posTotalCents;
+    positionSummaries.push({
+      positionCode: pos.positionCode,
+      accountCode: pos.accountCode,
+      fteMonths: formatCents(posFteHundredths),
+      totalBasePay: formatCents(posBaseCents),
+      totalBenefits: formatCents(posBenCents),
+      totalBonus: formatCents(posBonCents),
+      totalCost: formatCents(posTotalCents),
+    });
+  }
+
+  return {
+    derivationMethod: 'Independent JS BigInt minor-unit integer arithmetic with zero /core imports (M2 Corpus v2)',
+    approvedDate: '2026-11-26',
+    generatorVersion: corpus.meta.generatorVersion,
+    seed: corpus.meta.seed,
+    tenantBCompanyId: corpus.tenantB.company.id,
+    tenantBCompanyName: corpus.tenantB.company.name,
+    tenantB,
+    rollingForecast: {
+      cutoffPeriod: corpus.rollingForecastCorpus.cutoffPeriod,
+      totalActual: formatCents(rfTotalActualCents),
+      totalForecast: formatCents(rfTotalForecastCents),
+      totalFullHorizon: formatCents(rfTotalActualCents + rfTotalForecastCents),
+      totalMissingCells: rfMissingCells,
+    },
+    scenarios: {
+      baseGrandTotal: formatCents(baseEval.grandTotalCents),
+      upsideGrandTotal: formatCents(upsideEval.grandTotalCents),
+      downsideGrandTotal: formatCents(downsideEval.grandTotalCents),
+      baseVsUpsideTotalDelta: formatCents(upsideEval.grandTotalCents - baseEval.grandTotalCents),
+      baseVsDownsideTotalDelta: formatCents(downsideEval.grandTotalCents - baseEval.grandTotalCents),
+      baseAccountTotals: baseEval.accountTotals,
+      upsideAccountTotals: upsideEval.accountTotals,
+      downsideAccountTotals: downsideEval.accountTotals,
+    },
+    workforce: {
+      activePositionCount: activePositions.length,
+      inactiveExcludedCount: corpus.workforceCorpus.positions.length - activePositions.length,
+      grandTotalFteMonths: formatCents(wfGrandFteHundredths),
+      grandTotalCost: formatCents(wfGrandCostCents),
+      rampP04Cost,
+      attritionP06Cost,
+      positionSummaries,
+    },
+  };
+}
+
+export function writeIndependentM2Oracle(rootDir = process.cwd()): string {
+  const corpusPath = join(rootDir, 'fixtures/corpus/m2_corpus.json');
+  const outPath = join(rootDir, 'fixtures/oracles/expected/m2_corpus_expected.json');
+  const m2Corpus = JSON.parse(readFileSync(corpusPath, 'utf8')) as RawM2Corpus;
+  const oracle = computeIndependentM2CorpusOracle(m2Corpus);
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, `${JSON.stringify(oracle, null, 2)}\n`, 'utf8');
+  return outPath;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const out = writeIndependentOracle(process.cwd());
-  process.stdout.write(`✓ Wrote independent BigInt oracle at ${out}\n`);
+  const outM2 = writeIndependentM2Oracle(process.cwd());
+  process.stdout.write(`✓ Wrote independent BigInt oracles at ${out} and ${outM2}\n`);
 }

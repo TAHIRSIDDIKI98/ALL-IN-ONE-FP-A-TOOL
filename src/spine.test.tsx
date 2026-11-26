@@ -6,9 +6,17 @@ import { describe, expect, it } from 'vitest';
 import { SPINE_ROUTE_DEFS } from '../shared/spine.js';
 import { App } from './App.js';
 import BoardPackPage, { BoardPackPreview } from './pages/BoardPackPage.js';
-import type { BoardPackReportPayload, ChartAccountPayload, IndustryPackDetail } from './api/client.js';
+import type {
+  BoardPackReportPayload,
+  ChartAccountPayload,
+  ConnectorsOverviewResponse,
+  IndustryPackDetail,
+  OnboardingValidationReport,
+} from './api/client.js';
+import { ConnectorsPanel } from './components/ConnectorsPanel.js';
+import { OnboardingPipelinePanel } from './components/OnboardingPipelinePanel.js';
 import CoaMapperPage, { CoaMappingEditor, IndustryPackCatalogPanel } from './pages/CoaMapperPage.js';
-import ImportWizardPage from './pages/ImportWizardPage.js';
+import ImportWizardPage, { ImportWizardContent } from './pages/ImportWizardPage.js';
 import ModelGridPage from './pages/ModelGridPage.js';
 import SetupWizardPage from './pages/SetupWizardPage.js';
 import SignInPage from './pages/SignInPage.js';
@@ -385,4 +393,270 @@ describe('7-Screen Spine Inventory, Landmarks & Five-State Honesty (U1–U3, §9
     expect(emptyHtml).toContain('No verified industry packs were loaded for this workspace.');
   });
 
+  it('mounts Connectors radio option inside ImportWizardPage (1 h1) and renders all ConnectorsPanel states honestly (WI-0040)', () => {
+    const noop = (): void => {};
+    const companyId = '11111111-1111-4111-8111-111111111111';
+
+    const wizardHtml = renderToStaticMarkup(
+      createElement(ImportWizardContent, {
+        company: {
+          id: companyId,
+          name: 'Wire Co',
+          currency: 'USD',
+          calendarKind: '12month',
+          fiscalYear: 2026,
+          calendarYears: [],
+          periodCount: 12,
+        },
+        authToken: 'token-123',
+        onNavigate: noop,
+      }),
+    );
+    expect(wizardHtml.match(/<h1\b/g)?.length).toBe(1);
+    expect(wizardHtml).toContain('Actuals — GL journal CSV');
+    expect(wizardHtml).toContain('Budget — account × period plan CSV');
+    expect(wizardHtml).toContain('Connectors — Google Sheets, QBO &amp; Xero sync');
+
+    const loadingHtml = renderToStaticMarkup(
+      createElement(ConnectorsPanel, {
+        companyId,
+        authToken: 'token-123',
+        onNavigate: noop,
+        initialState: 'loading',
+      }),
+    );
+    expect(loadingHtml).toContain('role="status"');
+    expect(loadingHtml).toContain('Loading connectors and sync ledger...');
+
+    const emptyHtml = renderToStaticMarkup(
+      createElement(ConnectorsPanel, {
+        companyId,
+        authToken: 'token-123',
+        onNavigate: noop,
+        initialState: 'empty',
+        initialOverview: { companyId, baseCurrency: 'USD', connectors: [], recentRuns: [] },
+      }),
+    );
+    expect(emptyHtml).toContain('No external connectors are configured for this company yet.');
+    expect(emptyHtml).toContain('Reload Connectors');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(ConnectorsPanel, {
+        companyId,
+        authToken: 'token-123',
+        onNavigate: noop,
+        initialState: 'error',
+        initialFailure: {
+          code: 'TENANT_FORBIDDEN',
+          message: 'Only workspace owners or editors may configure or run external connectors.',
+          action: 'load',
+        },
+      }),
+    );
+    expect(errorHtml).toContain('TENANT_FORBIDDEN');
+    expect(errorHtml).toContain('Retry failed action');
+
+    const overviewWithQuarantine: ConnectorsOverviewResponse = {
+      companyId,
+      baseCurrency: 'USD',
+      connectors: [
+        {
+          id: '22222222-2222-4222-8222-222222222222',
+          companyId,
+          sourceSystem: 'quickbooks_online',
+          name: 'QBO Sandbox Primary',
+          externalRef: 'realm-913035',
+          syncCursor: '2026-04-30',
+          status: 'active',
+          lastSyncedAt: '2026-11-26T00:00:00.000Z',
+          createdAt: '2026-11-26T00:00:00.000Z',
+          updatedAt: '2026-11-26T00:00:00.000Z',
+        },
+      ],
+      recentRuns: [
+        {
+          id: '33333333-3333-4333-8333-333333333333',
+          companyId,
+          connectorId: '22222222-2222-4222-8222-222222222222',
+          sourceSystem: 'quickbooks_online',
+          connectorName: 'QBO Sandbox Primary',
+          mode: 'incremental',
+          status: 'quarantined',
+          cursorBefore: '2026-04-01',
+          cursorAfter: '2026-04-01',
+          sourceHash: 'a'.repeat(64),
+          rowsPulled: 2,
+          rowsImported: 0,
+          rowsQuarantined: 2,
+          totalDebits: '500.00',
+          totalCredits: '450.00',
+          reconciliationStatus: 'mismatch_quarantined',
+          reconciliationReason: 'RECONCILIATION_IMBALANCE:ref=QBO-BAD:debit=500.00:credit=450.00',
+          importBatchId: null,
+          replacedRunId: null,
+          startedAt: '2026-11-26T00:05:00.000Z',
+          completedAt: '2026-11-26T00:05:01.000Z',
+        },
+      ],
+    };
+    const partialHtml = renderToStaticMarkup(
+      createElement(ConnectorsPanel, {
+        companyId,
+        authToken: 'token-123',
+        onNavigate: noop,
+        initialState: 'populated',
+        initialOverview: overviewWithQuarantine,
+      }),
+    );
+    expect(partialHtml).toContain('Partial workspace data');
+    expect(partialHtml).toContain('QBO Sandbox Primary (QuickBooks Online)');
+    expect(partialHtml).toContain('mismatch_quarantined: RECONCILIATION_IMBALANCE');
+    expect(partialHtml).toContain('500.00');
+    expect(partialHtml).toContain('450.00');
+    expect(partialHtml).not.toContain('<h1>');
+    expect(partialHtml).not.toContain('rounded-full');
+  });
+
+  it('mounts Onboarding radio option inside ImportWizardPage (1 h1) and renders all OnboardingPipelinePanel states honestly (WI-0042)', () => {
+    const noop = (): void => {};
+    const companyId = '11111111-1111-4111-8111-111111111111';
+
+    const wizardHtml = renderToStaticMarkup(
+      createElement(ImportWizardContent, {
+        company: {
+          id: companyId,
+          name: 'Wire Co',
+          currency: 'USD',
+          calendarKind: '12month',
+          fiscalYear: 2026,
+          calendarYears: [],
+          periodCount: 12,
+        },
+        authToken: 'token-123',
+        onNavigate: noop,
+      }),
+    );
+    expect(wizardHtml.match(/<h1\b/g)?.length).toBe(1);
+    expect(wizardHtml).toContain('Onboarding — CoA match, validation &amp; cutover rehearsal');
+
+    const loadingHtml = renderToStaticMarkup(
+      createElement(OnboardingPipelinePanel, {
+        companyId,
+        authToken: 'token-123',
+        onNavigate: noop,
+        initialState: 'loading',
+      }),
+    );
+    expect(loadingHtml).toContain('role="status"');
+    expect(loadingHtml).toContain('Running deterministic CoA matching');
+
+    const emptyHtml = renderToStaticMarkup(
+      createElement(OnboardingPipelinePanel, {
+        companyId,
+        authToken: 'token-123',
+        onNavigate: noop,
+        initialState: 'empty',
+      }),
+    );
+    expect(emptyHtml).toContain('No partner migration payload has been validated yet.');
+    expect(emptyHtml).toContain('Validate Partner Export');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(OnboardingPipelinePanel, {
+        companyId,
+        authToken: 'token-123',
+        onNavigate: noop,
+        initialState: 'error',
+        initialFailure: {
+          code: 'TENANT_FORBIDDEN',
+          message: 'Only workspace owners or editors may run customer onboarding.',
+          action: 'validate',
+        },
+      }),
+    );
+    expect(errorHtml).toContain('TENANT_FORBIDDEN');
+    expect(errorHtml).toContain('Retry failed action');
+
+    const validationReport: OnboardingValidationReport = {
+      companyId,
+      sourceHash: 'd'.repeat(64),
+      asOfDate: '2026-11-26',
+      rowsIn: 10,
+      importableCount: 8,
+      quarantinedCount: 2,
+      rowAccountingTies: true,
+      duplicatesDetected: 0,
+      entryCount: 4,
+      totalDebits: '58000.00',
+      totalCredits: '58000.00',
+      coveredPeriods: ['FY2026 P01', 'FY2026 P02', 'FY2026 P04'],
+      missingInteriorPeriods: ['FY2026 P03'],
+      leadingZeroCollisions: [],
+      quarantineBreakdown: [{ category: 'BLANK_ROW', count: 1 }],
+      quarantined: [{ rowNo: 10, reason: 'BLANK_ROW' }],
+      anomalies: [
+        {
+          kind: 'calendar_gap',
+          severity: 'review',
+          title: 'Potential exception — review calendar gap',
+          detail: 'Potential exception — review: Missing interior fiscal period(s): FY2026 P03.',
+        },
+      ],
+      suggestions: [
+        {
+          sourceCode: 'OPS-CASH',
+          rowCount: 3,
+          sampleValues: ['Collection'],
+          currentStatus: 'unmapped',
+          currentAccountCode: null,
+          suggestedAccountCode: '1000',
+          suggestedAccountName: 'Operating Cash',
+          matchRule: 'token_name_match',
+          confidenceScore: 74,
+          reason: 'Deterministic keyword match',
+          requiresHumanApproval: true,
+        },
+      ],
+      availableAccounts: [{ code: '1000', name: 'Operating Cash' }],
+      goLiveStatus: 'ready_with_warnings',
+      blockers: [],
+      warnings: ['Potential exception — review: Missing interior fiscal period(s): FY2026 P03.'],
+    };
+
+    const populatedHtml = renderToStaticMarkup(
+      createElement(OnboardingPipelinePanel, {
+        companyId,
+        authToken: 'token-123',
+        onNavigate: noop,
+        initialState: 'populated',
+        initialValidation: validationReport,
+        initialRehearsals: [
+          {
+            companyId,
+            mode: 'dry_run',
+            rehearsalHash: 'a'.repeat(64),
+            sourceHash: 'd'.repeat(64),
+            validation: validationReport,
+            committed: null,
+            trialBalanceAfter: {
+              isBalanced: true,
+              totalDebit: '58000.00',
+              totalCredit: '58000.00',
+              accountCount: 4,
+            },
+            executedAt: '2026-11-26T05:30:00.000Z',
+          },
+        ],
+      }),
+    );
+    expect(populatedHtml).toContain('Partial workspace data');
+    expect(populatedHtml).toContain('Row accounting ties');
+    expect(populatedHtml).toContain('FY2026 P03');
+    expect(populatedHtml).toContain('Approve Selected CoA Mappings');
+    expect(populatedHtml).toContain('Cutover rehearsal ledger (1 run(s))');
+    expect(populatedHtml).toContain('58000.00');
+    expect(populatedHtml).not.toContain('<h1>');
+    expect(populatedHtml).not.toContain('rounded-full');
+  });
 });
+
