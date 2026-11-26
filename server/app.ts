@@ -93,6 +93,31 @@ import {
   transitionApprovalTaskRecord,
 } from './db/repositories/workflow.js';
 import {
+  WorkforceCommitRequestSchema,
+  WorkforceCommitResponseSchema,
+  WorkforcePreviewRequestSchema,
+  WorkforcePreviewResponseSchema,
+  WorkforceSavePositionsRequestSchema,
+  WorkforceWorkspaceResponseSchema,
+} from '../shared/workforce.js';
+import {
+  FluxAnalysisResponseSchema,
+  PvmBridgeRequestSchema,
+  PvmBridgeResponseSchema,
+} from '../shared/variance.js';
+import {
+  commitWorkforcePlan,
+  getWorkforceWorkspace,
+  previewWorkforcePlan,
+  saveWorkforcePositions,
+} from './db/repositories/workforce.js';
+import { computeCompanyPvmBridge, getFluxAnalysis } from './db/repositories/variance.js';
+import {
+  DashboardReportTemplateIdSchema,
+  DashboardSummaryResponseSchema,
+} from '../shared/dashboards.js';
+import { getDashboardSummary } from './db/repositories/dashboards.js';
+import {
   createCompanyWorkspace,
   findAppUserByFirebaseUid,
   getCompanyWorkspace,
@@ -727,8 +752,8 @@ export function createSpineApp(context: SpineContext) {
         const format = BoardPackExportFormatSchema.safeParse(req.query['format']);
         if (!format.success) {
           throw new AppError('VALIDATION_FAILED', {
-            userMessage: 'The board-pack export requires ?format=xlsx or ?format=pdf.',
-            details: { issues: ['format: expected xlsx or pdf'] },
+            userMessage: 'The board-pack export requires ?format=xlsx, ?format=pdf, or ?format=pptx.',
+            details: { issues: ['format: expected xlsx, pdf, or pptx'] },
           });
         }
         const fiscalYear = readFiscalYearQuery(req.query['year']);
@@ -743,7 +768,9 @@ export function createSpineApp(context: SpineContext) {
           'content-type',
           format.data === 'pdf'
             ? 'application/pdf'
-            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            : format.data === 'pptx'
+              ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+              : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         );
         res.setHeader('content-disposition', `attachment; filename="board-pack-${period}.${format.data}"`);
         res.send(bytes);
@@ -1011,6 +1038,199 @@ export function createSpineApp(context: SpineContext) {
           }),
         );
         res.status(200).json(WorkflowNotificationSummarySchema.parse(notification));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Workforce Module endpoints (§2.4 One-Engine Framework Proof, WI-0035):
+   * persistent position roster + pure /core/workforce driver compilation + commit through planning engine.
+   */
+  app.get(
+    '/api/companies/:companyId/workforce',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        const workspace = await getWorkforceWorkspace(db, {
+          companyId,
+          actorId: userId,
+          fiscalYear,
+        });
+        res.status(200).json(WorkforceWorkspaceResponseSchema.parse(workspace));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/workforce/positions',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(WorkforceSavePositionsRequestSchema, req.body);
+        const workspace = await db.transaction((tx) =>
+          saveWorkforcePositions(tx, {
+            companyId,
+            actorId: userId,
+            positions: body.positions,
+            fiscalYear: body.fiscalYear ?? null,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(200).json(WorkforceWorkspaceResponseSchema.parse(workspace));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/workforce/preview',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const body = parseBody(WorkforcePreviewRequestSchema, req.body);
+        const preview = await previewWorkforcePlan(db, {
+          companyId,
+          request: body,
+        });
+        res.status(200).json(WorkforcePreviewResponseSchema.parse(preview));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/workforce/commit',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(WorkforceCommitRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          commitWorkforcePlan(tx, {
+            companyId,
+            actorId: userId,
+            request: body,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(WorkforceCommitResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Variance Analysis endpoints (SPEC §3.10, WI-0036):
+   * Flux waterfall bridge over committed BvA + exact Price-Volume-Mix (PVM) bridge.
+   */
+  app.get(
+    '/api/companies/:companyId/variance/flux',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const period = readPeriodQuery(req.query['period']);
+        if (period === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The flux analysis endpoint requires ?period= (year-to-date through that period).',
+            details: { issues: ['period: required'] },
+          });
+        }
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        const minAbsRaw = req.query['minAbs'];
+        const minAbsVariance =
+          typeof minAbsRaw === 'string' && minAbsRaw.trim().length > 0 ? minAbsRaw.trim() : undefined;
+        const topNRaw = req.query['topN'];
+        let topN: number | undefined;
+        if (topNRaw !== undefined) {
+          const parsedTopN = z.coerce.number().int().min(1).max(100).safeParse(topNRaw);
+          if (!parsedTopN.success) {
+            throw new AppError('VALIDATION_FAILED', {
+              userMessage: 'The topN filter must be an integer between 1 and 100.',
+              details: { issues: ['topN: expected integer between 1 and 100'] },
+            });
+          }
+          topN = parsedTopN.data;
+        }
+        const report = await getFluxAnalysis(db, {
+          companyId,
+          throughPeriodCode: period,
+          ...(fiscalYear === null ? {} : { fiscalYear }),
+          ...(minAbsVariance === undefined ? {} : { minAbsVariance }),
+          ...(topN === undefined ? {} : { topN }),
+        });
+        res.status(200).json(FluxAnalysisResponseSchema.parse(report));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/variance/pvm',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const body = parseBody(PvmBridgeRequestSchema, req.body);
+        const result = await computeCompanyPvmBridge(db, {
+          companyId,
+          request: body,
+        });
+        res.status(200).json(PvmBridgeResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M2 Dashboards v1 & KPI Library (SPEC §3.11, WI-0038):
+   * Canonical KPI evaluation + multi-period trend + Report Builder with 100% citation coverage,
+   * backed by a fingerprint-invalidated aggregate cache (`RPT2`).
+   */
+  app.get(
+    '/api/companies/:companyId/dashboards',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const period = readPeriodQuery(req.query['period']);
+        if (period === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The dashboards endpoint requires ?period= (year-to-date through that period).',
+            details: { issues: ['period: required'] },
+          });
+        }
+        const fiscalYear = readFiscalYearQuery(req.query['year']);
+        const rawTemplate = req.query['template'];
+        const parsedTemplate = DashboardReportTemplateIdSchema.safeParse(
+          rawTemplate === undefined ? 'executive_summary' : rawTemplate,
+        );
+        if (!parsedTemplate.success) {
+          throw new AppError('VALIDATION_FAILED', {
+            userMessage: 'The template filter must be executive_summary, cash_and_runway, or plan_performance.',
+            details: { issues: ['template: expected executive_summary, cash_and_runway, or plan_performance'] },
+          });
+        }
+        const report = await getDashboardSummary(db, {
+          companyId,
+          throughPeriodCode: period,
+          ...(fiscalYear === null ? {} : { fiscalYear }),
+          templateId: parsedTemplate.data,
+        });
+        res.status(200).json(DashboardSummaryResponseSchema.parse(report));
       } catch (error) {
         next(error);
       }

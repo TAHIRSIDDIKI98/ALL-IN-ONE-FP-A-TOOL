@@ -12,6 +12,7 @@ export interface SqlExecutor {
 const MIGRATION_SENTINEL_CHECKS: Readonly<Record<string, string>> = {
   '0001_m1_spine.sql': "SELECT to_regclass('public.app_user') AS reg",
   '0002_m2_collaboration.sql': "SELECT to_regclass('public.approval_task') AS reg",
+  '0003_m2_workforce.sql': "SELECT to_regclass('public.workforce_position') AS reg",
 };
 
 export function listMigrationFiles(migrationsDir: string): string[] {

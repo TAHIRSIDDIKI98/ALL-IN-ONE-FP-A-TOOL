@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { inflateRawSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { describe, expect, it } from 'vitest';
 import { BvaReportSchema } from '../../shared/bva.js';
@@ -122,8 +123,67 @@ function extractPdfText(buffer: Uint8Array): string {
   return decoded;
 }
 
+function decodeXmlEntities(value: string): string {
+  return value
+    .replaceAll('&amp;', '&')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'");
+}
+
+function extractPptxSlides(bytes: Uint8Array): {
+  readonly slideCount: number;
+  readonly runs: readonly string[];
+  readonly joined: string;
+} {
+  const buf = Buffer.from(bytes);
+  expect(buf.subarray(0, 2).toString('ascii')).toBe('PK');
+
+  let eocdPos = -1;
+  for (let pos = buf.length - 22; pos >= 0 && pos >= buf.length - 65_557; pos -= 1) {
+    if (buf.readUInt32LE(pos) === 0x06054b50) {
+      eocdPos = pos;
+      break;
+    }
+  }
+  expect(eocdPos).toBeGreaterThanOrEqual(0);
+
+  const cdEntries = buf.readUInt16LE(eocdPos + 10);
+  const cdOffset = buf.readUInt32LE(eocdPos + 16);
+  const runs: string[] = [];
+  let slideCount = 0;
+
+  let cursor = cdOffset;
+  for (let idx = 0; idx < cdEntries; idx += 1) {
+    expect(buf.readUInt32LE(cursor)).toBe(0x02014b50);
+    const method = buf.readUInt16LE(cursor + 10);
+    const compSize = buf.readUInt32LE(cursor + 20);
+    const nameLen = buf.readUInt16LE(cursor + 28);
+    const extraLen = buf.readUInt16LE(cursor + 30);
+    const commentLen = buf.readUInt16LE(cursor + 32);
+    const localOffset = buf.readUInt32LE(cursor + 42);
+    const entryName = buf.subarray(cursor + 46, cursor + 46 + nameLen).toString('utf8');
+    cursor = cursor + 46 + nameLen + extraLen + commentLen;
+
+    if (!/^ppt\/slides\/slide\d+\.xml$/.test(entryName)) continue;
+    slideCount += 1;
+    expect(buf.readUInt32LE(localOffset)).toBe(0x04034b50);
+    const localNameLen = buf.readUInt16LE(localOffset + 26);
+    const localExtraLen = buf.readUInt16LE(localOffset + 28);
+    const dataPos = localOffset + 30 + localNameLen + localExtraLen;
+    const compressed = buf.subarray(dataPos, dataPos + compSize);
+    const xml = (method === 8 ? inflateRawSync(compressed) : compressed).toString('utf8');
+    for (const match of xml.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g)) {
+      runs.push(decodeXmlEntities(match[1] ?? ''));
+    }
+  }
+
+  return { slideCount, runs, joined: runs.join('\n') };
+}
+
 describe('Board-pack cross-artifact tie-out (A6, U5, G7)', () => {
-  it('prints every canonical row verbatim in the actual XLSX and PDF artifacts', async () => {
+  it('prints every canonical row verbatim in the actual XLSX, PDF, and PPTX artifacts', async () => {
     const xlsx = await renderBoardPack(pack, 'xlsx');
     const workbook = await loadWorkbook(xlsx);
     const cells: string[] = [];
@@ -139,19 +199,32 @@ describe('Board-pack cross-artifact tie-out (A6, U5, G7)', () => {
     const pdfText = extractPdfText(await renderBoardPack(pack, 'pdf'));
     expect(pdfText.length).toBeGreaterThan(0);
 
+    const pptx = await renderBoardPack(pack, 'pptx');
+    const pptxSlides = extractPptxSlides(pptx);
+    expect(pptxSlides.slideCount).toBe(7);
+
     for (const row of pack.rows) {
       expect(cells, `xlsx label ${row.key}`).toContain(row.label);
       expect(cells, `xlsx value ${row.key}`).toContain(row.value);
       expect(pdfText, `pdf label ${row.key}`).toContain(row.label);
       expect(pdfText, `pdf value ${row.key}`).toContain(row.value);
+      expect(pptxSlides.runs, `pptx label ${row.key}`).toContain(row.label);
+      expect(pptxSlides.runs, `pptx value ${row.key}`).toContain(row.value);
       if (row.detail !== null) {
         expect(cells, `xlsx detail ${row.key}`).toContain(row.detail);
         expect(pdfText, `pdf detail ${row.key}`).toContain(row.detail);
+        expect(pptxSlides.runs, `pptx detail ${row.key}`).toContain(row.detail);
       }
     }
     expect(cells).toContain(pack.basis);
     expect(cells).toContain(pack.disclosure);
     expect(pdfText).toContain(pack.basis);
+    expect(pptxSlides.runs).toContain(pack.basis);
+    expect(pptxSlides.runs).toContain(pack.disclosure);
+    expect(pptxSlides.runs).toContain(pack.companyName);
+    expect(pptxSlides.runs).toContain(pack.baseCurrency);
+    expect(pptxSlides.runs).toContain(`${pack.sources[0]?.sourceFilename} - ${pack.sources[0]?.sourceHash}`);
+    expect(pptxSlides.runs).toContain('A1 pass 0.00');
   });
 
   it('keeps the no-plan display token instead of writing an invented zero (§5.2 null law)', async () => {
@@ -166,13 +239,48 @@ describe('Board-pack cross-artifact tie-out (A6, U5, G7)', () => {
         }
       }
     }
+    const pptxSlides = extractPptxSlides(await renderBoardPack(pack, 'pptx'));
     expect(cells).toContain(`Plan ${NOT_PLANNED}; variance ${NOT_PLANNED}; ${NOT_PLANNED}; na`);
+    expect(pptxSlides.runs).toContain(`Plan ${NOT_PLANNED}; variance ${NOT_PLANNED}; ${NOT_PLANNED}; na`);
     // The engine value 0.00 appears elsewhere in the pack, but this specific BvA line has no plan.
     expect(pack.rows.find((row) => row.key === 'bva:1000')?.value).toBe('750.25');
   });
 
+  it('paginates long board-pack sections cleanly across multiple PPTX slides without dropping rows', async () => {
+    const manyBvaRows = Array.from({ length: 28 }, (_, index) => {
+      const code = String(4000 + index);
+      return {
+        section: 'bva' as const,
+        key: `bva:${code}`,
+        label: `${code} - Line ${code}`,
+        value: `${index + 100}.00`,
+        detail: `Plan ${index + 90}.00; variance 10.00; 11.11%; favorable`,
+      };
+    });
+    const largePack = BoardPackReportSchema.parse({ ...pack, rows: [...pack.rows.slice(0, 2), ...manyBvaRows] });
+    const pptxSlides = extractPptxSlides(await renderBoardPack(largePack, 'pptx'));
+    // 1 title + 1 cover + 1 pl + 1 bs + 1 cf + 3 bva (28 rows / 13 per slide) + 1 provenance = 9 slides
+    expect(pptxSlides.slideCount).toBe(9);
+    for (const row of manyBvaRows) {
+      expect(pptxSlides.runs).toContain(row.label);
+      expect(pptxSlides.runs).toContain(row.value);
+      expect(pptxSlides.runs).toContain(row.detail);
+    }
+  });
+
   it('refuses an unknown export format at the shared contract boundary', () => {
     expect(BoardPackExportFormatSchema.safeParse('docx').success).toBe(false);
+    expect(BoardPackExportFormatSchema.safeParse('xlsx').success).toBe(true);
     expect(BoardPackExportFormatSchema.safeParse('pdf').success).toBe(true);
+    expect(BoardPackExportFormatSchema.safeParse('pptx').success).toBe(true);
+  });
+
+  it('links Board Pack cover KPIs to canonical /core/metrics definitions via boardPackKey (RPT1)', async () => {
+    const { METRIC_CATALOG_BY_KEY } = await import('../../core/metrics/index.js');
+    const coverMetric = METRIC_CATALOG_BY_KEY.get('pnl.revenue');
+    expect(coverMetric?.boardPackKey).toBe('statement:pnl.revenue');
+    expect(METRIC_CATALOG_BY_KEY.get('pnl.net_income')?.boardPackKey).toBe('statement:pnl.netIncome');
+    expect(METRIC_CATALOG_BY_KEY.get('bs.total_assets')?.boardPackKey).toBe('statement:bs.totalAssets');
+    expect(METRIC_CATALOG_BY_KEY.get('cf.ending_cash')?.boardPackKey).toBe('statement:cf.endingCash');
   });
 });

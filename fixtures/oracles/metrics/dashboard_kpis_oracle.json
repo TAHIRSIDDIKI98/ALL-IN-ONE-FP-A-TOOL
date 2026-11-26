@@ -1,0 +1,130 @@
+{
+  "description": "Hand-computed M2 Dashboards v1 KPI Library & Report Builder golden oracles (MASTER_PROMPT §11.5: RPT1, RPT4, Null Law)",
+  "cases": [
+    {
+      "name": "healthy_planned",
+      "currencyScale": 2,
+      "hasPlan": true,
+      "pnl": {
+        "revenue": "1200.00",
+        "cogs": "480.00",
+        "grossProfit": "720.00",
+        "opex": "360.00",
+        "ebitda": "360.00",
+        "netIncome": "252.00"
+      },
+      "balanceSheet": {
+        "totalAssets": "2500.00",
+        "totalLiabilities": "1000.00",
+        "totalEquity": "1500.00",
+        "cashBalance": "1500.00"
+      },
+      "cashFlow": {
+        "operatingCashFlow": "300.00",
+        "freeCashFlow": "240.00",
+        "endingCash": "1500.00"
+      },
+      "plan": {
+        "revenue": "1500.00",
+        "ebitda": "300.00"
+      },
+      "expectedKpis": {
+        "pnl.revenue": { "value": "1200.00", "formattedValue": "1200.00", "status": "computed" },
+        "pnl.gross_profit": { "value": "720.00", "formattedValue": "720.00", "status": "computed" },
+        "pnl.gross_margin": { "value": "60.00", "formattedValue": "60.00%", "status": "computed" },
+        "pnl.ebitda": { "value": "360.00", "formattedValue": "360.00", "status": "computed" },
+        "pnl.ebitda_margin": { "value": "30.00", "formattedValue": "30.00%", "status": "computed" },
+        "pnl.net_income": { "value": "252.00", "formattedValue": "252.00", "status": "computed" },
+        "pnl.net_margin": { "value": "21.00", "formattedValue": "21.00%", "status": "computed" },
+        "pnl.opex_ratio": { "value": "30.00", "formattedValue": "30.00%", "status": "computed" },
+        "cf.operating_cash_flow": { "value": "300.00", "formattedValue": "300.00", "status": "computed" },
+        "cf.free_cash_flow": { "value": "240.00", "formattedValue": "240.00", "status": "computed" },
+        "cf.cash_conversion": { "value": "83.33", "formattedValue": "83.33%", "status": "computed" },
+        "cf.ending_cash": { "value": "1500.00", "formattedValue": "1500.00", "status": "computed" },
+        "bs.total_assets": { "value": "2500.00", "formattedValue": "2500.00", "status": "computed" },
+        "bs.total_liabilities": { "value": "1000.00", "formattedValue": "1000.00", "status": "computed" },
+        "bs.total_equity": { "value": "1500.00", "formattedValue": "1500.00", "status": "computed" },
+        "bs.liabilities_to_equity": { "value": "0.67", "formattedValue": "0.67x", "status": "computed" },
+        "plan.revenue_attainment": { "value": "80.00", "formattedValue": "80.00%", "status": "computed" },
+        "plan.ebitda_attainment": { "value": "120.00", "formattedValue": "120.00%", "status": "computed" }
+      }
+    },
+    {
+      "name": "zero_revenue_unplanned",
+      "currencyScale": 2,
+      "hasPlan": false,
+      "pnl": {
+        "revenue": "0.00",
+        "cogs": "0.00",
+        "grossProfit": "0.00",
+        "opex": "0.00",
+        "ebitda": "0.00",
+        "netIncome": "0.00"
+      },
+      "balanceSheet": {
+        "totalAssets": "0.00",
+        "totalLiabilities": "0.00",
+        "totalEquity": "0.00",
+        "cashBalance": "0.00"
+      },
+      "cashFlow": {
+        "operatingCashFlow": "0.00",
+        "freeCashFlow": "0.00",
+        "endingCash": "0.00"
+      },
+      "plan": {
+        "revenue": null,
+        "ebitda": null
+      },
+      "expectedKpis": {
+        "pnl.revenue": { "value": "0.00", "formattedValue": "0.00", "status": "computed" },
+        "pnl.gross_margin": { "value": null, "formattedValue": "n/m", "status": "nm" },
+        "pnl.ebitda_margin": { "value": null, "formattedValue": "n/m", "status": "nm" },
+        "pnl.net_margin": { "value": null, "formattedValue": "n/m", "status": "nm" },
+        "pnl.opex_ratio": { "value": null, "formattedValue": "n/m", "status": "nm" },
+        "cf.cash_conversion": { "value": null, "formattedValue": "n/m", "status": "nm" },
+        "bs.liabilities_to_equity": { "value": null, "formattedValue": "n/m", "status": "nm" },
+        "plan.revenue_attainment": { "value": null, "formattedValue": "not planned", "status": "not_planned" },
+        "plan.ebitda_attainment": { "value": null, "formattedValue": "not planned", "status": "not_planned" }
+      }
+    },
+    {
+      "name": "jpy_zero_scale_negative_ebitda",
+      "currencyScale": 0,
+      "hasPlan": true,
+      "pnl": {
+        "revenue": "500000",
+        "cogs": "350000",
+        "grossProfit": "150000",
+        "opex": "200000",
+        "ebitda": "-50000",
+        "netIncome": "-65000"
+      },
+      "balanceSheet": {
+        "totalAssets": "900000",
+        "totalLiabilities": "300000",
+        "totalEquity": "600000",
+        "cashBalance": "250000"
+      },
+      "cashFlow": {
+        "operatingCashFlow": "-40000",
+        "freeCashFlow": "-45000",
+        "endingCash": "250000"
+      },
+      "plan": {
+        "revenue": "400000",
+        "ebitda": "0"
+      },
+      "expectedKpis": {
+        "pnl.revenue": { "value": "500000", "formattedValue": "500000", "status": "computed" },
+        "pnl.gross_margin": { "value": "30.00", "formattedValue": "30.00%", "status": "computed" },
+        "pnl.ebitda_margin": { "value": "-10.00", "formattedValue": "-10.00%", "status": "computed" },
+        "pnl.net_margin": { "value": "-13.00", "formattedValue": "-13.00%", "status": "computed" },
+        "cf.cash_conversion": { "value": null, "formattedValue": "n/m", "status": "nm" },
+        "bs.liabilities_to_equity": { "value": "0.50", "formattedValue": "0.50x", "status": "computed" },
+        "plan.revenue_attainment": { "value": "125.00", "formattedValue": "125.00%", "status": "computed" },
+        "plan.ebitda_attainment": { "value": null, "formattedValue": "n/m", "status": "nm" }
+      }
+    }
+  ]
+}

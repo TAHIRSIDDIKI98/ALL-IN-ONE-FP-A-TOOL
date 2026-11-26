@@ -28,6 +28,25 @@ import type {
   WorkflowNotificationSummary,
   WorkflowOverviewResponse,
 } from '../../shared/workflow.js';
+import type {
+  WorkforceCommitRequest,
+  WorkforceCommitResponse,
+  WorkforcePreviewRequest,
+  WorkforcePreviewResponse,
+  WorkforceSavePositionsRequest,
+  WorkforceWorkspaceResponse,
+} from '../../shared/workforce.js';
+import type {
+  FluxAnalysisResponse,
+  PvmBridgeRequest,
+  PvmBridgeResponse,
+} from '../../shared/variance.js';
+import type {
+  DashboardReportTemplateId,
+  DashboardSummaryResponse,
+} from '../../shared/dashboards.js';
+import type { BoardPackExportFormat } from '../../shared/boardPack.js';
+export type { BoardPackExportFormat };
 
 export interface ApiErrorEnvelope {
   readonly code: string;
@@ -147,7 +166,7 @@ export interface ApiClient {
     query: {
       readonly period: string;
       readonly fiscalYear?: number | null;
-      readonly format: 'xlsx' | 'pdf';
+      readonly format: BoardPackExportFormat;
     },
   ): Promise<Blob>;
   importBudget(
@@ -215,6 +234,43 @@ export interface ApiClient {
     companyId: string,
     notificationId: string,
   ): Promise<WorkflowNotificationSummary>;
+  getWorkforceWorkspace(
+    companyId: string,
+    query?: { readonly year?: number | null },
+  ): Promise<WorkforceWorkspaceResponse>;
+  saveWorkforcePositions(
+    companyId: string,
+    request: WorkforceSavePositionsRequest,
+  ): Promise<WorkforceWorkspaceResponse>;
+  previewWorkforcePlan(
+    companyId: string,
+    request: WorkforcePreviewRequest,
+  ): Promise<WorkforcePreviewResponse>;
+  commitWorkforcePlan(
+    companyId: string,
+    request: WorkforceCommitRequest,
+  ): Promise<WorkforceCommitResponse>;
+  getFluxAnalysis(
+    companyId: string,
+    query: {
+      readonly period: string;
+      readonly fiscalYear?: number | null;
+      readonly minAbs?: string | null;
+      readonly topN?: number | null;
+    },
+  ): Promise<FluxAnalysisResponse>;
+  computePvmBridge(
+    companyId: string,
+    request: PvmBridgeRequest,
+  ): Promise<PvmBridgeResponse>;
+  getDashboardSummary(
+    companyId: string,
+    query: {
+      readonly period: string;
+      readonly fiscalYear?: number | null;
+      readonly template?: DashboardReportTemplateId | null;
+    },
+  ): Promise<DashboardSummaryResponse>;
 }
 
 function boardPackQuery(period: string, fiscalYear?: number | null): string {
@@ -515,6 +571,70 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         `/api/companies/${encodeURIComponent(companyId)}/workflow/notifications/${encodeURIComponent(notificationId)}/read`,
         {},
       ),
+    getWorkforceWorkspace: (companyId, query) => {
+      const params = new URLSearchParams();
+      if (query?.year !== undefined && query.year !== null) {
+        params.set('year', String(query.year));
+      }
+      const suffix = params.toString();
+      return request<WorkforceWorkspaceResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/workforce${suffix.length > 0 ? `?${suffix}` : ''}`,
+      );
+    },
+    saveWorkforcePositions: (companyId, body) =>
+      request<WorkforceWorkspaceResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/workforce/positions`,
+        body,
+      ),
+    previewWorkforcePlan: (companyId, body) =>
+      request<WorkforcePreviewResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/workforce/preview`,
+        body,
+      ),
+    commitWorkforcePlan: (companyId, body) =>
+      request<WorkforceCommitResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/workforce/commit`,
+        body,
+      ),
+    getFluxAnalysis: (companyId, query) => {
+      const params = new URLSearchParams({ period: query.period });
+      if (query.fiscalYear !== undefined && query.fiscalYear !== null) {
+        params.set('year', String(query.fiscalYear));
+      }
+      if (query.minAbs !== undefined && query.minAbs !== null && query.minAbs.trim().length > 0) {
+        params.set('minAbs', query.minAbs.trim());
+      }
+      if (query.topN !== undefined && query.topN !== null) {
+        params.set('topN', String(query.topN));
+      }
+      return request<FluxAnalysisResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/variance/flux?${params.toString()}`,
+      );
+    },
+    computePvmBridge: (companyId, body) =>
+      request<PvmBridgeResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/variance/pvm`,
+        body,
+      ),
+    getDashboardSummary: (companyId, query) => {
+      const params = new URLSearchParams({ period: query.period });
+      if (query.fiscalYear !== undefined && query.fiscalYear !== null) {
+        params.set('year', String(query.fiscalYear));
+      }
+      if (query.template !== undefined && query.template !== null) {
+        params.set('template', query.template);
+      }
+      return request<DashboardSummaryResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/dashboards?${params.toString()}`,
+      );
+    },
   };
 }
 

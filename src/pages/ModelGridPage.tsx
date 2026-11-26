@@ -28,6 +28,11 @@ import type {
   TransitionApprovalTaskRequest,
   WorkflowOverviewResponse,
 } from '../../shared/workflow.js';
+import type {
+  WorkforceCommitResponse,
+  WorkforcePreviewResponse,
+  WorkforceWorkspaceResponse,
+} from '../../shared/workforce.js';
 import {
   DriverAuthoringPanel,
   type DriverAuthoringFailure,
@@ -37,13 +42,18 @@ import {
   WorkflowPanel,
   type WorkflowActionFailure,
 } from '../components/PlanningWorkspace.js';
+import { WorkforcePanel, type WorkforceActionFailure } from '../components/WorkforcePanel.js';
 import {
   buildDriverDefinitions,
+  buildWorkforcePositionsPayload,
   createInitialDriverPlanDraft,
+  createInitialWorkforceDraft,
   periodCodes,
   resolvePlanningDefaults,
+  workforceDraftFromRecords,
   type DriverPlanDraft,
   type PlanningDefaults,
+  type WorkforcePlanDraft,
 } from '../state/planningView.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
@@ -490,6 +500,27 @@ export function PlanningView(props: {
   );
   const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
 
+  const [workforceWorkspace, setWorkforceWorkspace] = useState<WorkforceWorkspaceResponse | null>(
+    null,
+  );
+  const [workforceState, setWorkforceState] = useState<'loading' | 'idle' | 'error'>('loading');
+  const [workforceLoadFailure, setWorkforceLoadFailure] = useState<{
+    readonly code: string;
+    readonly message: string;
+  } | null>(null);
+  const [workforceReload, setWorkforceReload] = useState(0);
+  const [workforceDraft, setWorkforceDraft] = useState<WorkforcePlanDraft>(() =>
+    createInitialWorkforceDraft(props.fiscalYear, '', periods[0] ?? 'P01'),
+  );
+  const [workforcePreviewResult, setWorkforcePreviewResult] =
+    useState<WorkforcePreviewResponse | null>(null);
+  const [workforceCommitResult, setWorkforceCommitResult] =
+    useState<WorkforceCommitResponse | null>(null);
+  const [workforceBusy, setWorkforceBusy] = useState<'save' | 'preview' | 'commit' | null>(null);
+  const [workforceActionFailure, setWorkforceActionFailure] =
+    useState<WorkforceActionFailure | null>(null);
+  const [workforceNotice, setWorkforceNotice] = useState<string | null>(null);
+
   useEffect(() => {
     if (companyId === null || authToken === null) return;
     let cancelled = false;
@@ -636,6 +667,44 @@ export function PlanningView(props: {
       cancelled = true;
     };
   }, [companyId, authToken, workflowReload]);
+
+  useEffect(() => {
+    if (companyId === null || authToken === null) return;
+    let cancelled = false;
+    setWorkforceState('loading');
+    setWorkforceLoadFailure(null);
+    createApiClient({ getToken: () => authToken })
+      .getWorkforceWorkspace(companyId, { year: props.fiscalYear })
+      .then((result) => {
+        if (cancelled) return;
+        setWorkforceWorkspace(result);
+        setWorkforceState('idle');
+        const defaultAcct =
+          result.accounts.find((account) => account.type === 'expense')?.code ??
+          result.accounts[0]?.code ??
+          '';
+        const defaultPer = result.periods[0] ?? periods[0] ?? 'P01';
+        setWorkforceDraft((previous) =>
+          workforceDraftFromRecords(
+            result.positions,
+            result.fiscalYear,
+            defaultAcct,
+            defaultPer,
+            previous,
+          ),
+        );
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setWorkforceWorkspace(null);
+        setWorkforceState('error');
+        const failure = toPlanningFailure(error, 'scenarios');
+        setWorkforceLoadFailure({ code: failure.code, message: failure.message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, authToken, props.fiscalYear, workforceReload]);
 
   if (forcedState === 'loading') {
     return <LoadingState label="Loading planning scenarios and the current plan versions from the server..." />;
@@ -878,6 +947,165 @@ export function PlanningView(props: {
     void runPreviewDriverPlan();
   };
 
+  const toWorkforceFailure = (
+    error: unknown,
+    action: 'save' | 'preview' | 'commit',
+  ): WorkforceActionFailure => {
+    if (error instanceof ApiClientError) {
+      const rawIssues = error.details['issues'];
+      const issues = Array.isArray(rawIssues) ? rawIssues.map((item) => String(item)) : [];
+      return { code: error.code, message: error.message, issues, action };
+    }
+    return {
+      code: 'INTERNAL_ERROR',
+      message: error instanceof Error ? error.message : 'Workforce request failed.',
+      issues: [],
+      action,
+    };
+  };
+
+  const workforcePeriods = workforceWorkspace?.periods ?? periods;
+
+  const runSaveWorkforceRoster = async (): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    const built = buildWorkforcePositionsPayload(workforceDraft, workforcePeriods, {
+      requireScenarioName: false,
+      allowEmpty: true,
+    });
+    if (!built.ok) {
+      setWorkforceActionFailure({
+        code: 'VALIDATION_FAILED',
+        message: 'Workforce roster validation failed; no positions were saved.',
+        issues: built.issues,
+        action: 'save',
+      });
+      return;
+    }
+    setWorkforceBusy('save');
+    setWorkforceActionFailure(null);
+    setWorkforceNotice(null);
+    try {
+      const updated = await createApiClient({ getToken: () => authToken }).saveWorkforcePositions(
+        companyId,
+        {
+          fiscalYear: props.fiscalYear,
+          positions: [...built.positions],
+        },
+      );
+      setWorkforceWorkspace(updated);
+      setWorkforceNotice(`Saved ${String(updated.positions.length)} Workforce position(s) to database.`);
+      setWorkforceDraft((prev) =>
+        workforceDraftFromRecords(
+          updated.positions,
+          updated.fiscalYear,
+          updated.accounts.find((account) => account.type === 'expense')?.code ??
+            updated.accounts[0]?.code ??
+            '',
+          updated.periods[0] ?? 'P01',
+          prev,
+        ),
+      );
+    } catch (error: unknown) {
+      setWorkforceActionFailure(toWorkforceFailure(error, 'save'));
+    } finally {
+      setWorkforceBusy(null);
+    }
+  };
+
+  const runPreviewWorkforcePlan = async (): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    const built = buildWorkforcePositionsPayload(workforceDraft, workforcePeriods, {
+      requireScenarioName: false,
+    });
+    if (!built.ok) {
+      setWorkforceActionFailure({
+        code: 'VALIDATION_FAILED',
+        message: 'Workforce preview validation failed; check highlighted issues below.',
+        issues: built.issues,
+        action: 'preview',
+      });
+      return;
+    }
+    setWorkforceBusy('preview');
+    setWorkforceActionFailure(null);
+    setWorkforceNotice(null);
+    setWorkforceCommitResult(null);
+    try {
+      const result = await createApiClient({ getToken: () => authToken }).previewWorkforcePlan(
+        companyId,
+        {
+          fiscalYear: props.fiscalYear,
+          periods: [...workforcePeriods],
+          positions: [...built.positions],
+        },
+      );
+      setWorkforcePreviewResult(result);
+    } catch (error: unknown) {
+      setWorkforceActionFailure(toWorkforceFailure(error, 'preview'));
+    } finally {
+      setWorkforceBusy(null);
+    }
+  };
+
+  const runCommitWorkforcePlan = async (): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    const built = buildWorkforcePositionsPayload(workforceDraft, workforcePeriods, {
+      requireScenarioName: true,
+    });
+    if (!built.ok) {
+      setWorkforceActionFailure({
+        code: 'VALIDATION_FAILED',
+        message: 'Workforce commit validation failed; nothing was written.',
+        issues: built.issues,
+        action: 'commit',
+      });
+      return;
+    }
+    setWorkforceBusy('commit');
+    setWorkforceActionFailure(null);
+    setWorkforceNotice(null);
+    try {
+      const result = await createApiClient({ getToken: () => authToken }).commitWorkforcePlan(
+        companyId,
+        {
+          fiscalYear: props.fiscalYear,
+          scenarioName: built.scenarioName,
+          scenarioKind: built.scenarioKind,
+          periods: [...workforcePeriods],
+          positions: [...built.positions],
+          saveRoster: true,
+        },
+      );
+      setWorkforcePreviewResult(result.preview);
+      setWorkforceCommitResult(result);
+      setWorkforceNotice(
+        `Committed ${result.commit.scenarioName} v${String(result.commit.versionNo)} from Workforce module.`,
+      );
+      setSelection((previous) => ({ ...previous, selectedScenario: result.commit.scenarioName }));
+      setScenarioReload((key) => key + 1);
+      setForecastReload((key) => key + 1);
+      setComparisonReload((key) => key + 1);
+      setWorkflowReload((key) => key + 1);
+      setWorkforceReload((key) => key + 1);
+    } catch (error: unknown) {
+      setWorkforceActionFailure(toWorkforceFailure(error, 'commit'));
+    } finally {
+      setWorkforceBusy(null);
+    }
+  };
+
+  const retryWorkforceAction = (): void => {
+    if (workforceActionFailure?.action === 'save') {
+      void runSaveWorkforceRoster();
+      return;
+    }
+    if (workforceActionFailure?.action === 'commit') {
+      void runCommitWorkforcePlan();
+      return;
+    }
+    void runPreviewWorkforcePlan();
+  };
+
   const authoringPanel = (
     <DriverAuthoringPanel
       fiscalYear={props.fiscalYear}
@@ -897,6 +1125,27 @@ export function PlanningView(props: {
       onPreview={() => void runPreviewDriverPlan()}
       onCommit={() => void runCommitDriverPlan()}
       onRetryAction={retryDriverAction}
+    />
+  );
+
+  const workforcePanel = (
+    <WorkforcePanel
+      workspace={workforceWorkspace}
+      loadState={workforceState}
+      loadFailure={workforceLoadFailure}
+      onRetryLoad={() => setWorkforceReload((key) => key + 1)}
+      onOpenCoaMapper={() => onNavigate('/coa-mapper')}
+      draft={workforceDraft}
+      onChangeDraft={setWorkforceDraft}
+      previewResult={workforcePreviewResult}
+      commitResult={workforceCommitResult}
+      actionBusy={workforceBusy}
+      actionFailure={workforceActionFailure}
+      actionNotice={workforceNotice}
+      onSaveRoster={() => void runSaveWorkforceRoster()}
+      onPreview={() => void runPreviewWorkforcePlan()}
+      onCommit={() => void runCommitWorkforcePlan()}
+      onRetryAction={retryWorkforceAction}
     />
   );
 
@@ -923,11 +1172,12 @@ export function PlanningView(props: {
     return (
       <div className="space-y-6">
         <InlineEmptyState
-          disclosure="This company has no planning scenario yet. Import a budget or commit a driver plan below; until then there is no plan to forecast or compare, and nothing here is invented."
+          disclosure="This company has no planning scenario yet. Import a budget, save a Workforce roster, or commit a driver plan below; until then there is no plan to forecast or compare, and nothing here is invented."
           ctaLabel="Import a Budget in Import Wizard"
           onAction={() => onNavigate('/import')}
         />
         {authoringPanel}
+        {workforcePanel}
         {workflowPanel}
       </div>
     );
@@ -1087,6 +1337,8 @@ export function PlanningView(props: {
         )}
         {comparisonReady && <ScenarioComparisonTable report={comparison} currency={props.currency} />}
       </section>
+
+      {workforcePanel}
 
       {workflowPanel}
     </div>

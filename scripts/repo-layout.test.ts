@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = process.cwd();
 
-const SANDBOX_HOME_DOTDIRS = new Set(['.npm', '.cache', '.local', '.arena', '.vite', '.playwright-cli']);
+const SANDBOX_HOME_DOTDIRS = new Set(['.aistudio', '.npm', '.cache', '.local', '.arena', '.vite', '.playwright-cli']);
 
 const ALLOWED_ROOT_ENTRIES = new Set([
   '.env.example',

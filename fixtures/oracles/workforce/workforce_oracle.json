@@ -1,0 +1,101 @@
+{
+  "description": "Independent golden oracle for M2 Workforce module (WI-0035): mid-year hire w/ 50% onboarding ramp, early attrition, merit increase, employer burden, annual bonus, and exact P&L account tie-out.",
+  "currencyScale": 2,
+  "periods": ["P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12"],
+  "positions": [
+    {
+      "positionCode": "ENG-001",
+      "title": "Senior Platform Engineer",
+      "departmentName": "Engineering",
+      "accountCode": "5100",
+      "startPeriodCode": "P01",
+      "endPeriodCode": null,
+      "fte": "1.00",
+      "annualSalary": "120000.00",
+      "burdenRate": "0.20",
+      "bonusRate": "0.10",
+      "rampFirstPeriodPct": "1.00",
+      "meritPeriodCode": "P07",
+      "meritIncreasePct": "0.05",
+      "status": "active"
+    },
+    {
+      "positionCode": "SALES-001",
+      "title": "Enterprise Account Executive",
+      "departmentName": "Sales",
+      "accountCode": "6100",
+      "startPeriodCode": "P03",
+      "endPeriodCode": null,
+      "fte": "1.00",
+      "annualSalary": "90000.00",
+      "burdenRate": "0.22",
+      "bonusRate": "0.00",
+      "rampFirstPeriodPct": "0.50",
+      "meritPeriodCode": null,
+      "meritIncreasePct": "0.00",
+      "status": "active"
+    },
+    {
+      "positionCode": "FIN-001",
+      "title": "Interim FP&A Analyst",
+      "departmentName": "Finance",
+      "accountCode": "6100",
+      "startPeriodCode": "P01",
+      "endPeriodCode": "P04",
+      "fte": "0.50",
+      "annualSalary": "72000.00",
+      "burdenRate": "0.10",
+      "bonusRate": "0.00",
+      "rampFirstPeriodPct": "1.00",
+      "meritPeriodCode": null,
+      "meritIncreasePct": "0.00",
+      "status": "active"
+    }
+  ],
+  "expected": {
+    "totalsByAccount": {
+      "5100": "159900.00",
+      "6100": "100125.00"
+    },
+    "totalsByDepartment": {
+      "Engineering": "159900.00",
+      "Finance": "13200.00",
+      "Sales": "86925.00"
+    },
+    "totalsByPosition": {
+      "ENG-001": "159900.00",
+      "FIN-001": "13200.00",
+      "SALES-001": "86925.00"
+    },
+    "fteByPeriod": {
+      "P01": "1.50",
+      "P02": "1.50",
+      "P03": "2.00",
+      "P04": "2.50",
+      "P05": "2.00",
+      "P06": "2.00",
+      "P07": "2.00",
+      "P08": "2.00",
+      "P09": "2.00",
+      "P10": "2.00",
+      "P11": "2.00",
+      "P12": "2.00"
+    },
+    "costByPeriod": {
+      "P01": "16300.00",
+      "P02": "16300.00",
+      "P03": "20875.00",
+      "P04": "25450.00",
+      "P05": "22150.00",
+      "P06": "22150.00",
+      "P07": "22800.00",
+      "P08": "22800.00",
+      "P09": "22800.00",
+      "P10": "22800.00",
+      "P11": "22800.00",
+      "P12": "22800.00"
+    },
+    "grandTotalFteMonths": "23.50",
+    "grandTotalCost": "260025.00"
+  }
+}

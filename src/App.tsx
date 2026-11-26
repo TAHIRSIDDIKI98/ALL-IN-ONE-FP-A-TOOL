@@ -93,7 +93,7 @@ export function App(props: { readonly initialPath?: string; readonly initialSear
       <div className="flex flex-1 flex-col md:flex-row">
         <nav
           aria-label="Primary Spine Navigation"
-          className="border-b md:border-b-0 md:border-r border-slate-200 bg-white px-4 py-4 md:w-56"
+          className="border-b md:border-b-0 md:border-r border-slate-200 bg-white px-4 py-4 md:w-56 md:shrink-0"
         >
           <ul className="flex flex-wrap gap-1 md:flex-col">
             {SPINE_ROUTE_DEFS.map((route) => {
@@ -121,7 +121,7 @@ export function App(props: { readonly initialPath?: string; readonly initialSear
           </ul>
         </nav>
 
-        <main id="main-content" role="main" tabIndex={-1} className="flex-1 p-6">
+        <main id="main-content" role="main" tabIndex={-1} className="flex-1 min-w-0 p-6">
           <Suspense fallback={<LoadingState label="Loading workspace screen..." />}>
             {renderPage()}
           </Suspense>

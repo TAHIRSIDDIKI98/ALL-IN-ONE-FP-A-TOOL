@@ -1,0 +1,138 @@
+{
+  "description": "Independent golden oracle for M2 Flux Analysis waterfall bridge and Price-Volume-Mix (PVM) bridge (MASTER_PROMPT §5.7).",
+  "flux": {
+    "minAbsVariance": "100.00",
+    "topN": 2,
+    "inputAccounts": [
+      {
+        "accountCode": "4000",
+        "accountName": "Service revenue",
+        "accountType": "revenue",
+        "actual": "11850.00",
+        "plan": "10000.00",
+        "varianceAmount": "1850.00",
+        "variancePctKind": "computed",
+        "variancePctFormatted": "18.50%",
+        "favorability": "favorable"
+      },
+      {
+        "accountCode": "5100",
+        "accountName": "Engineering payroll",
+        "accountType": "expense",
+        "actual": "7200.00",
+        "plan": "6000.00",
+        "varianceAmount": "1200.00",
+        "variancePctKind": "computed",
+        "variancePctFormatted": "20.00%",
+        "favorability": "unfavorable"
+      },
+      {
+        "accountCode": "6100",
+        "accountName": "Cloud hosting",
+        "accountType": "expense",
+        "actual": "1100.00",
+        "plan": "1500.00",
+        "varianceAmount": "-400.00",
+        "variancePctKind": "computed",
+        "variancePctFormatted": "-26.67%",
+        "favorability": "favorable"
+      },
+      {
+        "accountCode": "6200",
+        "accountName": "Travel & events",
+        "accountType": "expense",
+        "actual": "850.00",
+        "plan": "800.00",
+        "varianceAmount": "50.00",
+        "variancePctKind": "computed",
+        "variancePctFormatted": "6.25%",
+        "favorability": "unfavorable"
+      },
+      {
+        "accountCode": "6300",
+        "accountName": "Legal advisory",
+        "accountType": "expense",
+        "actual": "300.00",
+        "plan": null,
+        "varianceAmount": null,
+        "variancePctKind": "null",
+        "variancePctFormatted": null,
+        "favorability": "na"
+      }
+    ],
+    "expected": {
+      "topAccountCodes": ["4000", "5100"],
+      "topShares": ["52.86%", "34.29%"],
+      "unplannedAccountCodes": ["6300"],
+      "otherPlannedCount": 2,
+      "bridge": {
+        "planTotal": "18300.00",
+        "topDriversVariance": "3050.00",
+        "otherPlannedVariance": "-350.00",
+        "plannedVarianceTotal": "2700.00",
+        "plannedActualTotal": "21000.00",
+        "unplannedActualTotal": "300.00",
+        "actualTotal": "21300.00",
+        "totalAbsPlannedVariance": "3500.00",
+        "revenueVariance": "1850.00",
+        "expenseVariance": "850.00",
+        "netOperatingVariance": "1000.00",
+        "tieOutValid": true
+      }
+    }
+  },
+  "pvm": {
+    "items": [
+      {
+        "key": "SKU_A",
+        "label": "Enterprise Seat",
+        "planUnits": "100",
+        "planPrice": "10.00",
+        "actualUnits": "120",
+        "actualPrice": "11.00"
+      },
+      {
+        "key": "SKU_B",
+        "label": "Analytics Add-on",
+        "planUnits": "100",
+        "planPrice": "20.00",
+        "actualUnits": "110",
+        "actualPrice": "19.00"
+      }
+    ],
+    "expected": {
+      "totalPlanUnits": "200.00",
+      "totalActualUnits": "230.00",
+      "totalPlanRevenue": "3000.00",
+      "totalActualRevenue": "3410.00",
+      "totalVariance": "410.00",
+      "variancePct": "13.67%",
+      "variancePctStatus": "computed",
+      "priceVariance": "10.00",
+      "volumeVariance": "450.00",
+      "mixVariance": "-50.00",
+      "invariantPassed": true,
+      "invariantDelta": "0",
+      "items": [
+        {
+          "key": "SKU_A",
+          "planRevenue": "1000.00",
+          "actualRevenue": "1320.00",
+          "totalVariance": "320.00",
+          "priceEffect": "120.00",
+          "volumeAtPlanPrice": "200.00",
+          "mixContribution": "-25.00"
+        },
+        {
+          "key": "SKU_B",
+          "planRevenue": "2000.00",
+          "actualRevenue": "2090.00",
+          "totalVariance": "90.00",
+          "priceEffect": "-110.00",
+          "volumeAtPlanPrice": "200.00",
+          "mixContribution": "-25.00"
+        }
+      ]
+    }
+  }
+}

@@ -9,6 +9,7 @@ coverage/
 .local/
 .arena/
 .playwright-cli/
+.aistudio/
 playwright-report/
 test-results/
 

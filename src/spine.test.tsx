@@ -287,6 +287,7 @@ describe('7-Screen Spine Inventory, Landmarks & Five-State Honesty (U1–U3, §9
     expect(html).toContain('>Board Pack Export</h1>');
     expect(html).toContain('Export XLSX');
     expect(html).toContain('Export PDF');
+    expect(html).toContain('Export PPTX');
     expect(html).toContain('Partial workspace data');
     expect(html).toContain('A3 fail 1.00');
     expect(html).not.toContain('—%');

@@ -1,12 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { verifyPvmInvariant } from '../invariants.js';
 import { money } from '../money/index.js';
 import {
+  analyzeFlux,
   buildBudgetVariance,
+  buildPvmBridge,
   computePvmDecomposition,
   computeVariance,
   deriveFavorability,
   type BudgetVarianceAccountInput,
+  type BudgetVarianceRow,
 } from './index.js';
 
 const BASIS = {
@@ -254,5 +259,180 @@ describe('Price-Volume-Mix (PVM) Decomposition (§5.7)', () => {
       favorability: 'unfavorable',
     });
     expect(result.totals.actual).toBe('100.00');
+  });
+
+  it('reconciles Flux waterfall bridge and share-of-variance against the committed golden oracle (WI-0036)', () => {
+    const oracle = JSON.parse(
+      readFileSync(join(process.cwd(), 'fixtures/oracles/variance/flux_pvm_oracle.json'), 'utf8'),
+    ) as {
+      flux: {
+        minAbsVariance: string;
+        topN: number;
+        inputAccounts: BudgetVarianceRow[];
+        expected: {
+          topAccountCodes: string[];
+          topShares: string[];
+          unplannedAccountCodes: string[];
+          otherPlannedCount: number;
+          bridge: Record<string, unknown>;
+        };
+      };
+    };
+
+    const outcome = analyzeFlux({
+      rows: oracle.flux.inputAccounts,
+      minAbsVariance: oracle.flux.minAbsVariance,
+      topN: oracle.flux.topN,
+      scale: 2,
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    expect(outcome.result.drivers.map((d) => d.accountCode)).toEqual(oracle.flux.expected.topAccountCodes);
+    expect(outcome.result.drivers.map((d) => d.shareOfAbsVariancePct)).toEqual(
+      oracle.flux.expected.topShares,
+    );
+    expect(outcome.result.unplannedAccounts.map((u) => u.accountCode)).toEqual(
+      oracle.flux.expected.unplannedAccountCodes,
+    );
+    expect(outcome.result.otherPlannedCount).toBe(oracle.flux.expected.otherPlannedCount);
+    expect(outcome.result.bridge).toEqual(oracle.flux.expected.bridge);
+
+    // Negative & edge cases: reject negative threshold, invalid topN, and handle zero-variance cleanly
+    const badThreshold = analyzeFlux({ rows: oracle.flux.inputAccounts, minAbsVariance: '-5.00', topN: 0 });
+    expect(badThreshold.ok).toBe(false);
+    if (!badThreshold.ok) {
+      expect(badThreshold.issues).toEqual(['NEGATIVE_THRESHOLD:minAbsVariance', 'INVALID_TOP_N']);
+    }
+
+    const emptyPlanned = analyzeFlux({
+      rows: oracle.flux.inputAccounts.filter((r) => r.plan === null),
+    });
+    expect(emptyPlanned.ok).toBe(true);
+    if (emptyPlanned.ok) {
+      expect(emptyPlanned.result.drivers).toEqual([]);
+      expect(emptyPlanned.result.unplannedAccounts).toHaveLength(1);
+      expect(emptyPlanned.result.bridge.tieOutValid).toBe(true);
+    }
+  });
+
+  it('builds string-validated PVM bridges tying Price+Volume+Mix to Total Variance against the golden oracle (WI-0036)', () => {
+    const oracle = JSON.parse(
+      readFileSync(join(process.cwd(), 'fixtures/oracles/variance/flux_pvm_oracle.json'), 'utf8'),
+    ) as {
+      pvm: {
+        items: {
+          key: string;
+          label: string;
+          planUnits: string;
+          planPrice: string;
+          actualUnits: string;
+          actualPrice: string;
+        }[];
+        expected: {
+          totalPlanUnits: string;
+          totalActualUnits: string;
+          totalPlanRevenue: string;
+          totalActualRevenue: string;
+          totalVariance: string;
+          variancePct: string;
+          variancePctStatus: string;
+          priceVariance: string;
+          volumeVariance: string;
+          mixVariance: string;
+          invariantPassed: boolean;
+          invariantDelta: string;
+          items: {
+            key: string;
+            planRevenue: string;
+            actualRevenue: string;
+            totalVariance: string;
+            priceEffect: string;
+            volumeAtPlanPrice: string;
+            mixContribution: string;
+          }[];
+        };
+      };
+    };
+
+    const outcome = buildPvmBridge({ items: oracle.pvm.items, basis: BASIS, scale: 2 });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    expect(outcome.bridge.totalPlanUnits).toBe(oracle.pvm.expected.totalPlanUnits);
+    expect(outcome.bridge.totalActualUnits).toBe(oracle.pvm.expected.totalActualUnits);
+    expect(outcome.bridge.totalPlanRevenue).toBe(oracle.pvm.expected.totalPlanRevenue);
+    expect(outcome.bridge.totalActualRevenue).toBe(oracle.pvm.expected.totalActualRevenue);
+    expect(outcome.bridge.totalVariance).toBe(oracle.pvm.expected.totalVariance);
+    expect(outcome.bridge.variancePct).toBe(oracle.pvm.expected.variancePct);
+    expect(outcome.bridge.variancePctStatus).toBe(oracle.pvm.expected.variancePctStatus);
+    expect(outcome.bridge.priceVariance).toBe(oracle.pvm.expected.priceVariance);
+    expect(outcome.bridge.volumeVariance).toBe(oracle.pvm.expected.volumeVariance);
+    expect(outcome.bridge.mixVariance).toBe(oracle.pvm.expected.mixVariance);
+    expect(outcome.bridge.invariantPassed).toBe(true);
+    expect(outcome.bridge.invariantDelta).toBe('0');
+
+    for (let i = 0; i < oracle.pvm.expected.items.length; i += 1) {
+      const exp = oracle.pvm.expected.items[i]!;
+      const got = outcome.bridge.items[i]!;
+      expect(got.key).toBe(exp.key);
+      expect(got.planRevenue).toBe(exp.planRevenue);
+      expect(got.actualRevenue).toBe(exp.actualRevenue);
+      expect(got.totalVariance).toBe(exp.totalVariance);
+      expect(got.priceEffect).toBe(exp.priceEffect);
+      expect(got.volumeAtPlanPrice).toBe(exp.volumeAtPlanPrice);
+      expect(got.mixContribution).toBe(exp.mixContribution);
+    }
+
+    // Zero-plan revenue -> variancePctStatus 'nm', never Infinity
+    const zeroPlanBridge = buildPvmBridge({
+      items: [
+        {
+          key: 'NEW_SKU',
+          label: 'Launch Tier',
+          planUnits: '0',
+          planPrice: '50.00',
+          actualUnits: '10',
+          actualPrice: '50.00',
+        },
+      ],
+      basis: BASIS,
+      scale: 2,
+    });
+    expect(zeroPlanBridge.ok).toBe(true);
+    if (zeroPlanBridge.ok) {
+      expect(zeroPlanBridge.bridge.variancePct).toBe('n/m');
+      expect(zeroPlanBridge.bridge.variancePctStatus).toBe('nm');
+      expect(zeroPlanBridge.bridge.invariantPassed).toBe(true);
+    }
+
+    // Reject duplicate keys, negative units, empty inputs
+    const invalid = buildPvmBridge({
+      items: [
+        {
+          key: 'SKU_A',
+          label: 'Seat',
+          planUnits: '-5',
+          planPrice: '10.00',
+          actualUnits: '10',
+          actualPrice: 'abc',
+        },
+        {
+          key: 'SKU_A',
+          label: 'Duplicate',
+          planUnits: '10',
+          planPrice: '10.00',
+          actualUnits: '10',
+          actualPrice: '10.00',
+        },
+      ],
+      basis: BASIS,
+    });
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(invalid.issues).toContain('NEGATIVE_UNITS:SKU_A:planUnits');
+      expect(invalid.issues).toContain('INVALID_PRICE:SKU_A:actualPrice');
+      expect(invalid.issues).toContain('DUPLICATE_ITEM_KEY:SKU_A');
+    }
   });
 });

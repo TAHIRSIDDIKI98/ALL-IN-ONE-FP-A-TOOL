@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import {
   ApiClientError,
   createApiClient,
+  type BoardPackExportFormat,
   type BoardPackReportPayload,
   type BoardPackRowPayload,
 } from '../api/client.js';
@@ -9,7 +10,7 @@ import { EmptyState, ErrorState, LoadingState, PartialBanner } from '../componen
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
-type ExportFormat = 'xlsx' | 'pdf';
+type ExportFormat = BoardPackExportFormat;
 
 const SECTIONS: readonly { readonly id: BoardPackRowPayload['section']; readonly title: string }[] = [
   { id: 'cover', title: 'Cover KPIs' },
@@ -29,8 +30,8 @@ function describeError(error: unknown): { code: string; message: string } {
 }
 
 /**
- * Board Pack (MASTER_PROMPT §9.3.7, A6/U5/G7). The preview renders the SERVER's canonical rows;
- * XLSX and PDF downloads are generated from those same rows. The browser never computes a value.
+ * Board Pack (MASTER_PROMPT §9.3.7, §3.2 M2 PPTX, A6/U5/G7). The preview renders the SERVER's
+ * canonical rows; XLSX, PDF, and PPTX downloads are generated from those same rows.
  */
 export default function BoardPackPage({ onNavigate, forcedState }: SpinePageProps): ReactElement {
   const { company, authToken } = useWorkspaceStore();
@@ -227,17 +228,24 @@ export function BoardPackPreview(props: BoardPackPreviewProps): ReactElement {
         </label>
         <button
           type="button"
-          className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+          className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
           onClick={() => onExport('xlsx')}
         >
           Export XLSX
         </button>
         <button
           type="button"
-          className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+          className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
           onClick={() => onExport('pdf')}
         >
           Export PDF
+        </button>
+        <button
+          type="button"
+          className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          onClick={() => onExport('pptx')}
+        >
+          Export PPTX
         </button>
       </div>
 

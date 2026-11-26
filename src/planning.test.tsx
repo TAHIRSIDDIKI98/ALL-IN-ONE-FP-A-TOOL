@@ -9,7 +9,12 @@ import type {
   ScenarioSummary,
 } from '../shared/planning.js';
 import type { WorkflowOverviewResponse } from '../shared/workflow.js';
+import type { WorkforcePreviewResponse, WorkforceWorkspaceResponse } from '../shared/workforce.js';
+import type { FluxAnalysisResponse, PvmBridgeResponse } from '../shared/variance.js';
+import type { DashboardSummaryResponse } from '../shared/dashboards.js';
 import type { ChartAccountPayload } from './api/client.js';
+import { DashboardsPanel } from './components/DashboardsPanel.js';
+import { FluxPvmPanel } from './components/FluxPvmPanel.js';
 import {
   DriverAuthoringPanel,
   DriverPlanPreviewTable,
@@ -18,17 +23,23 @@ import {
   ScenarioInventory,
   WorkflowPanel,
 } from './components/PlanningWorkspace.js';
+import { WorkforcePanel } from './components/WorkforcePanel.js';
 import ModelGridPage from './pages/ModelGridPage.js';
 import {
   availableTaskActions,
   buildCommentRequestPayload,
   buildDriverDefinitions,
+  buildPvmBridgeItemsPayload,
+  buildWorkforcePositionsPayload,
   createEmptyDriverRow,
+  createEmptyPvmItemDraft,
   createInitialCommentDraft,
   createInitialDriverPlanDraft,
+  createInitialWorkforceDraft,
   periodCodes,
   resolvePlanningDefaults,
   unreadNotificationCount,
+  workforceDraftFromRecords,
   type DriverPlanDraft,
 } from './state/planningView.js';
 
@@ -889,3 +900,662 @@ describe('M2 collaboration & workflow view inside the Model Grid (WI-0034)', () 
     expect(errorHtml).toContain('Retry failed action');
   });
 });
+
+const sampleWorkforceWorkspace: WorkforceWorkspaceResponse = {
+  companyId: COMPANY_ID,
+  fiscalYear: 2026,
+  currency: 'USD',
+  currencyScale: 2,
+  actorRole: 'owner',
+  moduleSpec: {
+    moduleKey: 'workforce',
+    moduleName: 'Workforce & Headcount Compensation',
+    version: '2.0.0',
+    dimensions: ['department', 'position', 'account'],
+    driverKinds: ['fixed'],
+    recommendedStatementLineKeys: ['pl.opex.payroll', 'pl.cogs.direct'],
+    inputColumns: [],
+    reportPackSections: ['headcount_fte', 'compensation_breakdown'],
+  },
+  periods: ['P01', 'P02', 'P03'],
+  accounts: [
+    { code: '5100', name: 'Direct Engineering Payroll', type: 'expense' },
+    { code: '6100', name: 'OpEx Payroll & Benefits', type: 'expense' },
+  ],
+  positions: [
+    {
+      id: '77777777-7777-4777-8777-777777777777',
+      positionCode: 'ENG-001',
+      title: 'Senior Platform Engineer',
+      departmentName: 'Engineering',
+      accountCode: '5100',
+      accountName: 'Direct Engineering Payroll',
+      startPeriodCode: 'P01',
+      endPeriodCode: null,
+      fte: '1.00',
+      annualSalary: '120000.00',
+      burdenRate: '0.20',
+      bonusRate: '0.10',
+      rampFirstPeriodPct: '1.00',
+      meritPeriodCode: null,
+      meritIncreasePct: '0.00',
+      status: 'active',
+      createdAt: '2026-11-25T12:00:00.000Z',
+      updatedAt: '2026-11-25T12:00:00.000Z',
+    },
+  ],
+};
+
+const sampleWorkforcePreview: WorkforcePreviewResponse = {
+  companyId: COMPANY_ID,
+  fiscalYear: 2026,
+  currency: 'USD',
+  currencyScale: 2,
+  periods: ['P01', 'P02', 'P03'],
+  positionPeriodRows: [],
+  positionSummaries: [
+    {
+      positionCode: 'ENG-001',
+      title: 'Senior Platform Engineer',
+      departmentName: 'Engineering',
+      accountCode: '5100',
+      status: 'active',
+      fteMonths: '3.00',
+      totalBasePay: '30000.00',
+      totalBenefits: '6000.00',
+      totalBonus: '3000.00',
+      totalCost: '39000.00',
+    },
+  ],
+  departmentSummaries: [{ departmentName: 'Engineering', fteMonths: '3.00', totalCost: '39000.00' }],
+  fteByPeriod: { P01: '1.00', P02: '1.00', P03: '1.00' },
+  costByPeriod: { P01: '13000.00', P02: '13000.00', P03: '13000.00' },
+  grandTotalFteMonths: '3.00',
+  grandTotalCost: '39000.00',
+  compiledDrivers: [],
+  driverPlan: {
+    fiscalYear: 2026,
+    currencyScale: 2,
+    periods: ['P01', 'P02', 'P03'],
+    lines: [],
+    totalsByAccount: { '5100': '39000.00' },
+    totalsByPeriod: { P01: '13000.00', P02: '13000.00', P03: '13000.00' },
+    grandTotal: '39000.00',
+  },
+};
+
+describe('M2 Workforce module view inside Model Grid (WI-0035)', () => {
+  it('validates Workforce draft positions strictly by string shape and builds wire payloads without client math', () => {
+    const initial = createInitialWorkforceDraft(2026, '5100', 'P01');
+    const missingSalary = buildWorkforcePositionsPayload(initial, ['P01', 'P02', 'P03'], {
+      requireScenarioName: true,
+    });
+    expect(missingSalary.ok).toBe(false);
+    if (!missingSalary.ok) {
+      expect(missingSalary.issues.some((i) => i.includes('position code is required'))).toBe(true);
+      expect(missingSalary.issues.some((i) => i.includes('annual salary'))).toBe(true);
+    }
+
+    const hydrated = workforceDraftFromRecords(
+      sampleWorkforceWorkspace.positions,
+      2026,
+      '5100',
+      'P01',
+    );
+    const built = buildWorkforcePositionsPayload(hydrated, ['P01', 'P02', 'P03'], {
+      requireScenarioName: true,
+    });
+    expect(built.ok).toBe(true);
+    if (built.ok) {
+      expect(built.scenarioName).toBe('Workforce Plan FY2026');
+      expect(built.positions[0]?.positionCode).toBe('ENG-001');
+      expect(built.positions[0]?.annualSalary).toBe('120000.00');
+    }
+  });
+
+  it('renders WorkforcePanel across loading, error, read-only viewer, and populated preview states without h1s or pill clutter', () => {
+    const draft = workforceDraftFromRecords(sampleWorkforceWorkspace.positions, 2026, '5100', 'P01');
+
+    const populatedHtml = renderToStaticMarkup(
+      createElement(WorkforcePanel, {
+        workspace: sampleWorkforceWorkspace,
+        loadState: 'idle',
+        loadFailure: null,
+        onRetryLoad: noop,
+        onOpenCoaMapper: noop,
+        draft,
+        onChangeDraft: noop,
+        previewResult: sampleWorkforcePreview,
+        commitResult: null,
+        actionBusy: null,
+        actionFailure: null,
+        actionNotice: 'Saved 1 Workforce position(s) to database.',
+        onSaveRoster: noop,
+        onPreview: noop,
+        onCommit: noop,
+        onRetryAction: noop,
+      }),
+    );
+
+    expect(populatedHtml).toContain('Workforce &amp; headcount module');
+    expect(populatedHtml).toContain('ENG-001');
+    expect(populatedHtml).toContain('Senior Platform Engineer');
+    expect(populatedHtml).toContain('39000.00');
+    expect(populatedHtml).toContain('3.00');
+    expect(populatedHtml).toContain('Commit to scenario');
+    expect(populatedHtml).not.toContain('<h1');
+    expect(populatedHtml).not.toContain('rounded-full');
+
+    const viewerHtml = renderToStaticMarkup(
+      createElement(WorkforcePanel, {
+        workspace: { ...sampleWorkforceWorkspace, actorRole: 'viewer' },
+        loadState: 'idle',
+        loadFailure: null,
+        onRetryLoad: noop,
+        onOpenCoaMapper: noop,
+        draft,
+        onChangeDraft: noop,
+        previewResult: null,
+        commitResult: null,
+        actionBusy: null,
+        actionFailure: null,
+        actionNotice: null,
+        onSaveRoster: noop,
+        onPreview: noop,
+        onCommit: noop,
+        onRetryAction: noop,
+      }),
+    );
+    expect(viewerHtml).toContain('read-only');
+    expect(viewerHtml).not.toContain('Save roster');
+    expect(viewerHtml).not.toContain('Commit to scenario');
+
+    const loadingHtml = renderToStaticMarkup(
+      createElement(WorkforcePanel, {
+        workspace: null,
+        loadState: 'loading',
+        loadFailure: null,
+        onRetryLoad: noop,
+        onOpenCoaMapper: noop,
+        draft,
+        onChangeDraft: noop,
+        previewResult: null,
+        commitResult: null,
+        actionBusy: null,
+        actionFailure: null,
+        actionNotice: null,
+        onSaveRoster: noop,
+        onPreview: noop,
+        onCommit: noop,
+        onRetryAction: noop,
+      }),
+    );
+    expect(loadingHtml).toContain('aria-busy="true"');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(WorkforcePanel, {
+        workspace: null,
+        loadState: 'error',
+        loadFailure: { code: 'TENANT_FORBIDDEN', message: 'Forbidden' },
+        onRetryLoad: noop,
+        onOpenCoaMapper: noop,
+        draft,
+        onChangeDraft: noop,
+        previewResult: null,
+        commitResult: null,
+        actionBusy: null,
+        actionFailure: null,
+        actionNotice: null,
+        onSaveRoster: noop,
+        onPreview: noop,
+        onCommit: noop,
+        onRetryAction: noop,
+      }),
+    );
+    expect(errorHtml).toContain('role="alert"');
+    expect(errorHtml).toContain('TENANT_FORBIDDEN');
+  });
+});
+
+const sampleFlux: FluxAnalysisResponse = {
+  companyId: COMPANY_ID,
+  fiscalYear: 2026,
+  throughPeriodCode: 'P01',
+  scenarioId: null,
+  scenarioName: 'Budget FY2026',
+  planVersionId: null,
+  versionNo: 1,
+  hasPlan: true,
+  minAbsVariance: '100.00',
+  topN: 2,
+  totalPlannedAccounts: 4,
+  materialCount: 3,
+  otherPlannedCount: 2,
+  drivers: [
+    {
+      rank: 1,
+      accountCode: '4000',
+      accountName: 'Service revenue',
+      accountType: 'revenue',
+      actual: '11850.00',
+      plan: '10000.00',
+      varianceAmount: '1850.00',
+      absVarianceAmount: '1850.00',
+      variancePctKind: 'computed',
+      variancePctFormatted: '18.50%',
+      shareOfAbsVariancePct: '52.86%',
+      favorability: 'favorable',
+      isMaterial: true,
+    },
+  ],
+  unplannedAccounts: [
+    {
+      accountCode: '6300',
+      accountName: 'Legal advisory',
+      accountType: 'expense',
+      actual: '300.00',
+    },
+  ],
+  bridge: {
+    planTotal: '18300.00',
+    topDriversVariance: '3050.00',
+    otherPlannedVariance: '-350.00',
+    plannedVarianceTotal: '2700.00',
+    plannedActualTotal: '21000.00',
+    unplannedActualTotal: '300.00',
+    actualTotal: '21300.00',
+    totalAbsPlannedVariance: '3500.00',
+    revenueVariance: '1850.00',
+    expenseVariance: '850.00',
+    netOperatingVariance: '1000.00',
+    tieOutValid: true,
+  },
+};
+
+const samplePvm: PvmBridgeResponse = {
+  companyId: COMPANY_ID,
+  fiscalYear: 2026,
+  periodCode: 'P01',
+  baseCurrency: 'USD',
+  scenarioName: 'Budget FY2026',
+  totalPlanUnits: '200.00',
+  totalActualUnits: '230.00',
+  totalPlanRevenue: '3000.00',
+  totalActualRevenue: '3410.00',
+  totalVariance: '410.00',
+  variancePct: '13.67%',
+  variancePctStatus: 'computed',
+  priceVariance: '10.00',
+  volumeVariance: '450.00',
+  mixVariance: '-50.00',
+  invariantPassed: true,
+  invariantDelta: '0',
+  items: [
+    {
+      key: 'SKU_A',
+      label: 'Enterprise Seat',
+      planUnits: '100.00',
+      planPrice: '10.00',
+      actualUnits: '120.00',
+      actualPrice: '11.00',
+      planRevenue: '1000.00',
+      actualRevenue: '1320.00',
+      totalVariance: '320.00',
+      priceEffect: '120.00',
+      volumeAtPlanPrice: '200.00',
+      mixContribution: '-25.00',
+      favorability: 'favorable',
+    },
+  ],
+};
+
+describe('M2 Flux Waterfall & PVM Bridge view inside StatementsPage (WI-0036)', () => {
+  it('validates PVM segment drafts strictly by decimal string shape and builds wire items without float arithmetic', () => {
+    const emptyBuilt = buildPvmBridgeItemsPayload([]);
+    expect(emptyBuilt.ok).toBe(false);
+    if (!emptyBuilt.ok) {
+      expect(emptyBuilt.issues[0]).toContain('NO_PVM_ITEMS');
+    }
+
+    const badRows = [
+      { ...createEmptyPvmItemDraft('1'), key: 'SKU_A', label: 'A', planUnits: '-5', planPrice: '10.00', actualUnits: '10', actualPrice: '11.00' },
+      { ...createEmptyPvmItemDraft('2'), key: 'SKU_A', label: 'Duplicate', planUnits: '10', planPrice: '10.00', actualUnits: '12', actualPrice: 'bad' },
+    ];
+    const invalidBuilt = buildPvmBridgeItemsPayload(badRows);
+    expect(invalidBuilt.ok).toBe(false);
+    if (!invalidBuilt.ok) {
+      expect(invalidBuilt.issues.some((i) => i.includes('DUPLICATE_ITEM_KEY:SKU_A'))).toBe(true);
+      expect(invalidBuilt.issues.some((i) => i.includes('plan units must be a non-negative'))).toBe(true);
+      expect(invalidBuilt.issues.some((i) => i.includes('actual price must be a canonical decimal'))).toBe(true);
+    }
+
+    const validBuilt = buildPvmBridgeItemsPayload([
+      {
+        id: '1',
+        key: 'SKU_A',
+        label: 'Enterprise Seat',
+        planUnits: '100',
+        planPrice: '10.00',
+        actualUnits: '120',
+        actualPrice: '11.00',
+      },
+    ]);
+    expect(validBuilt.ok).toBe(true);
+    if (validBuilt.ok) {
+      expect(validBuilt.items[0]?.planPrice).toBe('10.00');
+      expect(validBuilt.items[0]?.actualUnits).toBe('120');
+    }
+  });
+
+  it('renders FluxPvmPanel across loading, empty, error, partial unplanned disclosure, and populated PVM invariant states cleanly', () => {
+    const populatedHtml = renderToStaticMarkup(
+      createElement(FluxPvmPanel, {
+        period: 'P01',
+        flux: sampleFlux,
+        fluxState: 'idle',
+        fluxError: null,
+        minAbsInput: '100.00',
+        topNInput: 2,
+        filterError: null,
+        onChangeMinAbs: noop,
+        onChangeTopN: noop,
+        onApplyFilter: noop,
+        onRetryFlux: noop,
+        onOpenImport: noop,
+        pvmItems: [
+          {
+            id: '1',
+            key: 'SKU_A',
+            label: 'Enterprise Seat',
+            planUnits: '100',
+            planPrice: '10.00',
+            actualUnits: '120',
+            actualPrice: '11.00',
+          },
+        ],
+        onChangePvmItems: noop,
+        pvmResult: samplePvm,
+        pvmState: 'idle',
+        pvmIssues: [],
+        pvmError: null,
+        onComputePvm: noop,
+        onResetPvm: noop,
+      }),
+    );
+
+    expect(populatedHtml).toContain('Material Flux Waterfall Bridge');
+    expect(populatedHtml).toContain('18300.00');
+    expect(populatedHtml).toContain('52.86%');
+    expect(populatedHtml).toContain('Tie-out valid');
+    expect(populatedHtml).toContain('Partial workspace data:');
+    expect(populatedHtml).toContain('6300');
+    expect(populatedHtml).toContain('Legal advisory');
+    expect(populatedHtml).toContain('Price-Volume-Mix (PVM) Decomposition Bridge');
+    expect(populatedHtml).toContain('Invariant holds');
+    expect(populatedHtml).toContain('410.00');
+    expect(populatedHtml).toContain('-50.00');
+    expect(populatedHtml).not.toContain('<h1');
+    expect(populatedHtml).not.toContain('rounded-full');
+
+    const emptyHtml = renderToStaticMarkup(
+      createElement(FluxPvmPanel, {
+        period: 'P01',
+        flux: { ...sampleFlux, hasPlan: false, drivers: [], unplannedAccounts: [] },
+        fluxState: 'idle',
+        fluxError: null,
+        minAbsInput: '0.00',
+        topNInput: 10,
+        filterError: null,
+        onChangeMinAbs: noop,
+        onChangeTopN: noop,
+        onApplyFilter: noop,
+        onRetryFlux: noop,
+        onOpenImport: noop,
+        pvmItems: [createEmptyPvmItemDraft('1')],
+        onChangePvmItems: noop,
+        pvmResult: null,
+        pvmState: 'idle',
+        pvmIssues: [],
+        pvmError: null,
+        onComputePvm: noop,
+        onResetPvm: noop,
+      }),
+    );
+    expect(emptyHtml).toContain('Open Import Wizard');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(FluxPvmPanel, {
+        period: 'P01',
+        flux: null,
+        fluxState: 'error',
+        fluxError: { code: 'PERIOD_NOT_FOUND', message: 'Missing period' },
+        minAbsInput: '0.00',
+        topNInput: 10,
+        filterError: null,
+        onChangeMinAbs: noop,
+        onChangeTopN: noop,
+        onApplyFilter: noop,
+        onRetryFlux: noop,
+        onOpenImport: noop,
+        pvmItems: [createEmptyPvmItemDraft('1')],
+        onChangePvmItems: noop,
+        pvmResult: null,
+        pvmState: 'error',
+        pvmIssues: ['EMPTY_ITEM_KEY'],
+        pvmError: { code: 'VALIDATION_FAILED', message: 'Invalid PVM' },
+        onComputePvm: noop,
+        onResetPvm: noop,
+      }),
+    );
+    expect(errorHtml).toContain('PERIOD_NOT_FOUND');
+    expect(errorHtml).toContain('VALIDATION_FAILED');
+    expect(errorHtml).toContain('EMPTY_ITEM_KEY');
+  });
+
+  it('renders DashboardsPanel across populated, unplanned partial, empty, loading, and error states without h1 or pill badges', () => {
+    const sampleDashboard: DashboardSummaryResponse = {
+      companyId: COMPANY_ID,
+      companyName: 'Aurora SaaS Corp',
+      baseCurrency: 'USD',
+      currencyScale: 2,
+      range: { fromPeriodCode: 'P01', throughPeriodCode: 'P04', fiscalYear: 2026 },
+      hasActuals: true,
+      hasPlan: false,
+      scenarioName: null,
+      versionNo: null,
+      articulation: { valid: true, checks: [] },
+      kpis: [
+        {
+          key: 'pnl.revenue',
+          label: 'Revenue (YTD)',
+          category: 'profitability',
+          formula: 'SUM(pl.revenue.*)',
+          sourceKeys: ['pl.revenue.product'],
+          boardPackKey: 'statement:pnl.revenue',
+          unit: 'currency',
+          format: 'currency',
+          basis: 'ytd',
+          phase: 'M2',
+          value: '1200.00',
+          formattedValue: '1200.00',
+          status: 'computed',
+        },
+        {
+          key: 'pnl.ebitda',
+          label: 'EBITDA',
+          category: 'profitability',
+          formula: 'pnl.gross_profit - SUM(pl.opex.*)',
+          sourceKeys: ['pl.opex.payroll'],
+          boardPackKey: null,
+          unit: 'currency',
+          format: 'currency',
+          basis: 'ytd',
+          phase: 'M2',
+          value: '360.00',
+          formattedValue: '360.00',
+          status: 'computed',
+        },
+        {
+          key: 'pnl.net_income',
+          label: 'Net Income (YTD)',
+          category: 'profitability',
+          formula: 'pnl.ebit + pl.nonop.* - pl.tax.income_tax',
+          sourceKeys: ['pl.tax.income_tax'],
+          boardPackKey: 'statement:pnl.netIncome',
+          unit: 'currency',
+          format: 'currency',
+          basis: 'ytd',
+          phase: 'M2',
+          value: '252.00',
+          formattedValue: '252.00',
+          status: 'computed',
+        },
+        {
+          key: 'cf.ending_cash',
+          label: 'Ending Cash',
+          category: 'cash',
+          formula: 'bs.asset.cash',
+          sourceKeys: ['bs.asset.cash'],
+          boardPackKey: 'statement:cf.endingCash',
+          unit: 'currency',
+          format: 'currency',
+          basis: 'point_in_time',
+          phase: 'M2',
+          value: '1500.00',
+          formattedValue: '1500.00',
+          status: 'computed',
+        },
+        {
+          key: 'plan.revenue_attainment',
+          label: 'Revenue Plan Attainment %',
+          category: 'plan',
+          formula: '(pnl.revenue / plan.revenue) * 100',
+          sourceKeys: ['pl.revenue.product'],
+          boardPackKey: null,
+          unit: 'percent',
+          format: 'percent',
+          basis: 'ytd',
+          phase: 'M2',
+          value: null,
+          formattedValue: 'not planned',
+          status: 'not_planned',
+        },
+      ],
+      trend: [
+        {
+          periodCode: 'P01',
+          periodNo: 1,
+          fiscalYear: 2026,
+          revenue: '1200.00',
+          ebitda: '360.00',
+          netIncome: '252.00',
+          operatingCashFlow: '300.00',
+          endingCash: '1500.00',
+          revenueBarPct: 80,
+          ebitdaBarPct: 24,
+          cashBarPct: 100,
+          ebitdaPositive: true,
+          cashPositive: true,
+        },
+      ],
+      reportBuilder: {
+        templateId: 'executive_summary',
+        templateLabel: 'Executive Summary Pack',
+        blockCount: 2,
+        citedBlockCount: 2,
+        unlinkedBlockCount: 0,
+        citationCoveragePct: '100.00%',
+        blocks: [
+          {
+            id: 'exec-rev',
+            kind: 'metric',
+            title: 'YTD Revenue',
+            citationKey: 'pnl.revenue',
+            unit: 'currency',
+            value: '1200.00',
+            formattedValue: '1200.00',
+            status: 'computed',
+            cited: true,
+          },
+          {
+            id: 'exec-cash',
+            kind: 'statement_line',
+            title: 'Cash & Equivalents Line',
+            citationKey: 'bs.asset.cash',
+            unit: 'currency',
+            value: '1500.00',
+            formattedValue: '1500.00',
+            status: 'computed',
+            cited: true,
+          },
+        ],
+      },
+      sources: [],
+    };
+
+    const populatedHtml = renderToStaticMarkup(
+      createElement(DashboardsPanel, {
+        dashboard: sampleDashboard,
+        loadState: 'idle',
+        loadError: null,
+        templateId: 'executive_summary',
+        onChangeTemplate: noop,
+        onRetry: noop,
+        onOpenImport: noop,
+      }),
+    );
+
+    expect(populatedHtml).toContain('Executive KPIs &amp; Report Builder');
+    expect(populatedHtml).toContain('1200.00');
+    expect(populatedHtml).toContain('360.00');
+    expect(populatedHtml).toContain('1500.00');
+    expect(populatedHtml).toContain('not planned');
+    expect(populatedHtml).toContain('Partial workspace data:');
+    expect(populatedHtml).toContain('100.00% cited');
+    expect(populatedHtml).toContain('2/2 blocks cited (100.00%)');
+    expect(populatedHtml).toContain('bs.asset.cash');
+    expect(populatedHtml).not.toContain('<h1');
+    expect(populatedHtml).not.toContain('rounded-full');
+
+    const emptyHtml = renderToStaticMarkup(
+      createElement(DashboardsPanel, {
+        dashboard: { ...sampleDashboard, hasActuals: false },
+        loadState: 'idle',
+        loadError: null,
+        templateId: 'executive_summary',
+        onChangeTemplate: noop,
+        onRetry: noop,
+        onOpenImport: noop,
+      }),
+    );
+    expect(emptyHtml).toContain('Open Import Wizard');
+
+    const loadingHtml = renderToStaticMarkup(
+      createElement(DashboardsPanel, {
+        dashboard: null,
+        loadState: 'loading',
+        loadError: null,
+        templateId: 'executive_summary',
+        onChangeTemplate: noop,
+        onRetry: noop,
+        onOpenImport: noop,
+      }),
+    );
+    expect(loadingHtml).toContain('Evaluating KPI catalog');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(DashboardsPanel, {
+        dashboard: null,
+        loadState: 'error',
+        loadError: { code: 'PERIOD_NOT_FOUND', message: 'Period P99 does not exist.' },
+        templateId: 'executive_summary',
+        onChangeTemplate: noop,
+        onRetry: noop,
+        onOpenImport: noop,
+      }),
+    );
+    expect(errorHtml).toContain('PERIOD_NOT_FOUND');
+    expect(errorHtml).toContain('Period P99 does not exist.');
+  });
+});
+

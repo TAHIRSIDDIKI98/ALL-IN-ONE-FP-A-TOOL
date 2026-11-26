@@ -190,7 +190,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
     const actualTables = tablesRes.rows.map((r) => r.tablename);
     const expectedTables = [...schemaSnapshot.tables].sort();
     expect(actualTables).toEqual(expectedTables);
-    expect(actualTables).toHaveLength(22);
+    expect(actualTables).toHaveLength(23);
 
     // Idempotent second run applies 0 new files
     const secondRun = await applyMigrations(db);
@@ -562,6 +562,89 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
         `INSERT INTO notification (company_id, recipient_id, job_id, event_kind, plan_version_id, comment_id, title, body)
          VALUES ($1, $2, $3, 'mention', $4, $5, 'Cross tenant', 'Should fail')`,
         [s.companyA, bOnlyUserId, jobId, s.versionA, commentId],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('WI-0035 M2 Workforce: enforces workforce_position tenant FKs, unique code per company, and NUMERIC range checks', async () => {
+    const s = await seedBaseTenants(db, 'wfpos');
+
+    const bOnlyRes = await db.query<{ id: string }>(
+      `INSERT INTO app_user (firebase_uid, email, display_name) VALUES ('uid-wfpos-bonly', 'wfpos-bonly@example.com', 'B Only') RETURNING id`,
+    );
+    const bOnlyUserId = bOnlyRes.rows[0]!.id;
+    await db.query(`INSERT INTO membership (company_id, user_id, role) VALUES ($1, $2, 'editor')`, [
+      s.companyB,
+      bOnlyUserId,
+    ]);
+
+    // Positive: valid workforce_position row inserts cleanly with NUMERIC(28,6) precision
+    await db.query(
+      `INSERT INTO workforce_position (
+         company_id, position_code, title, department_name, account_id,
+         start_period_code, end_period_code, fte, annual_salary, burden_rate,
+         bonus_rate, ramp_first_period_pct, merit_period_code, merit_increase_pct,
+         status, created_by
+       ) VALUES (
+         $1, 'ENG-001', 'Staff Engineer', 'Engineering', $2,
+         'P01', NULL, '1.000000', '120000.000000', '0.200000',
+         '0.100000', '0.500000', NULL, '0.000000',
+         'active', $3
+       )`,
+      [s.companyA, s.revAcctA, s.userId],
+    );
+
+    // Negative: duplicate position_code in same company rejected
+    await expect(
+      db.query(
+        `INSERT INTO workforce_position (
+           company_id, position_code, title, department_name, account_id,
+           start_period_code, fte, annual_salary, status, created_by
+         ) VALUES ($1, 'ENG-001', 'Dup', 'Engineering', $2, 'P01', '1', '100000', 'active', $3)`,
+        [s.companyA, s.revAcctA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative cross-tenant FK: referencing Company B account from Company A fails
+    await expect(
+      db.query(
+        `INSERT INTO workforce_position (
+           company_id, position_code, title, department_name, account_id,
+           start_period_code, fte, annual_salary, status, created_by
+         ) VALUES ($1, 'ENG-002', 'Bad Acct', 'Engineering', $2, 'P01', '1', '100000', 'active', $3)`,
+        [s.companyA, s.revAcctB, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative cross-tenant FK: created_by belonging only to Company B fails
+    await expect(
+      db.query(
+        `INSERT INTO workforce_position (
+           company_id, position_code, title, department_name, account_id,
+           start_period_code, fte, annual_salary, status, created_by
+         ) VALUES ($1, 'ENG-003', 'Bad Creator', 'Engineering', $2, 'P01', '1', '100000', 'active', $3)`,
+        [s.companyA, s.revAcctA, bOnlyUserId],
+      ),
+    ).rejects.toThrow();
+
+    // Negative CHECK constraints: negative salary or ramp > 1 rejected
+    await expect(
+      db.query(
+        `INSERT INTO workforce_position (
+           company_id, position_code, title, department_name, account_id,
+           start_period_code, fte, annual_salary, status, created_by
+         ) VALUES ($1, 'ENG-NEG', 'Neg Salary', 'Engineering', $2, 'P01', '1', '-1.00', 'active', $3)`,
+        [s.companyA, s.revAcctA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      db.query(
+        `INSERT INTO workforce_position (
+           company_id, position_code, title, department_name, account_id,
+           start_period_code, fte, annual_salary, ramp_first_period_pct, status, created_by
+         ) VALUES ($1, 'ENG-RAMP', 'Bad Ramp', 'Engineering', $2, 'P01', '1', '10000', '1.25', 'active', $3)`,
+        [s.companyA, s.revAcctA, s.userId],
       ),
     ).rejects.toThrow();
   });

@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "0002_m2_collaboration",
-  "migration": "db/migrations/0002_m2_collaboration.sql",
-  "tableCount": 22,
+  "schemaVersion": "0003_m2_workforce",
+  "migration": "db/migrations/0003_m2_workforce.sql",
+  "tableCount": 23,
   "tables": [
     "account",
     "app_user",
@@ -24,7 +24,8 @@
     "plan_line",
     "plan_version",
     "scenario",
-    "statement_line"
+    "statement_line",
+    "workforce_position"
   ],
   "moneyColumns": [
     {
@@ -50,6 +51,36 @@
     {
       "table": "plan_line",
       "column": "amount",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "workforce_position",
+      "column": "fte",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "workforce_position",
+      "column": "annual_salary",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "workforce_position",
+      "column": "burden_rate",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "workforce_position",
+      "column": "bonus_rate",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "workforce_position",
+      "column": "ramp_first_period_pct",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "workforce_position",
+      "column": "merit_increase_pct",
       "type": "NUMERIC(28,6)"
     }
   ],
@@ -1536,6 +1567,139 @@
     {
       "table": "statement_line",
       "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "workforce_position",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "workforce_position",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "position_code",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "title",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "department_name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "account_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "start_period_code",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "end_period_code",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "fte",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "annual_salary",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "burden_rate",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "workforce_position",
+      "column": "bonus_rate",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "workforce_position",
+      "column": "ramp_first_period_pct",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "workforce_position",
+      "column": "merit_period_code",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "merit_increase_pct",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "workforce_position",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": "'active'::text"
+    },
+    {
+      "table": "workforce_position",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "workforce_position",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "workforce_position",
+      "column": "updated_at",
       "type": "timestamp with time zone",
       "nullable": false,
       "default": "now()"
@@ -4405,6 +4569,274 @@
         "sort_order"
       ],
       "references": "statement_line.statement"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_account_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.account_id"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_annual_salary_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.annual_salary"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_annual_salary_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.annual_salary"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_bonus_rate_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.bonus_rate"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_bonus_rate_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.bonus_rate"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_burden_rate_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.burden_rate"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_burden_rate_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.burden_rate"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.company_id"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.created_at"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_created_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.created_by"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_department_name_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.department_name"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_department_name_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.department_name"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_end_period_code_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.end_period_code"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_fte_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.fte"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_fte_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.fte"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.id"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_merit_increase_pct_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.merit_increase_pct"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_merit_increase_pct_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.merit_increase_pct"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_merit_period_code_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.merit_period_code"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_position_code_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.position_code"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_position_code_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.position_code"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_ramp_first_period_pct_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.ramp_first_period_pct"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_ramp_first_period_pct_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.ramp_first_period_pct"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_start_period_code_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.start_period_code"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_start_period_code_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.start_period_code"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.status"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.status"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_title_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.title"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_title_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.title"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_updated_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "workforce_position.updated_at"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_company_id_account_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "account_id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "workforce_position.id"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "workforce_position.id"
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_company_id_position_code_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "position_code"
+      ],
+      "references": "workforce_position.company_id"
     }
   ],
   "indexes": [
@@ -4980,6 +5412,42 @@
       "columns": [
         "statement",
         "sort_order"
+      ]
+    },
+    {
+      "table": "workforce_position",
+      "name": "idx_workforce_position_company",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "status",
+        "position_code"
+      ]
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_company_id_position_code_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "position_code"
+      ]
+    },
+    {
+      "table": "workforce_position",
+      "name": "workforce_position_pkey",
+      "unique": true,
+      "columns": [
+        "id"
       ]
     }
   ],

@@ -2,6 +2,9 @@ import ExcelJS from 'exceljs';
 import type { Content } from 'pdfmake/interfaces';
 import pdfmake from 'pdfmake/build/pdfmake.js';
 import helvetica from 'pdfmake/build/standard-fonts/Helvetica.js';
+import PptxGenJS from 'pptxgenjs';
+import { evaluateKpiLibrary, type CurrencyScale } from '../../core/metrics/index.js';
+import { scaleForCurrency } from '../../core/money/index.js';
 import { STATEMENT_LINE_MAP } from '../../core/statements/index.js';
 import {
   BOARD_PACK_KEY_NAMESPACES,
@@ -92,13 +95,26 @@ export async function buildBoardPackReport(
       : { fiscalYear: params.fiscalYear }),
   });
 
+  const currencyScale = scaleForCurrency(company.base_currency) as CurrencyScale;
+  const coverKpis = evaluateKpiLibrary({
+    currencyScale,
+    hasPlan: bva.hasPlan,
+    pnl: statements.pnl,
+    balanceSheet: statements.balanceSheet,
+    cashFlow: statements.cashFlow,
+  });
+
   const prefix = BOARD_PACK_KEY_NAMESPACES.statement;
   const basisRange = `Year to date ${statements.range.fromPeriodCode} to ${statements.range.throughPeriodCode}, FY${statements.range.fiscalYear}`;
+  const revKpi = coverKpis.byKey['pnl.revenue']!;
+  const niKpi = coverKpis.byKey['pnl.net_income']!;
+  const assetsKpi = coverKpis.byKey['bs.total_assets']!;
+  const cashKpi = coverKpis.byKey['cf.ending_cash']!;
   const rows: BoardPackRow[] = [
-    line('cover', `${prefix}pnl.revenue`, 'Revenue (YTD)', statements.pnl.revenue, basisRange),
-    line('cover', `${prefix}pnl.netIncome`, 'Net income (YTD)', statements.pnl.netIncome, basisRange),
-    line('cover', `${prefix}bs.totalAssets`, 'Total assets', statements.balanceSheet.totalAssets, basisRange),
-    line('cover', `${prefix}cf.endingCash`, 'Ending cash', statements.cashFlow.endingCash, basisRange),
+    line('cover', revKpi.boardPackKey ?? `${prefix}pnl.revenue`, revKpi.label, revKpi.value ?? NOT_PLANNED, basisRange),
+    line('cover', niKpi.boardPackKey ?? `${prefix}pnl.netIncome`, niKpi.label, niKpi.value ?? NOT_PLANNED, basisRange),
+    line('cover', assetsKpi.boardPackKey ?? `${prefix}bs.totalAssets`, assetsKpi.label, assetsKpi.value ?? NOT_PLANNED, basisRange),
+    line('cover', cashKpi.boardPackKey ?? `${prefix}cf.endingCash`, cashKpi.label, cashKpi.value ?? NOT_PLANNED, basisRange),
 
     line('pl', `${prefix}pnl.revenue`, 'Revenue', statements.pnl.revenue),
     line('pl', `${prefix}pnl.cogs`, 'Cost of goods sold', statements.pnl.cogs),
@@ -266,9 +282,211 @@ async function renderPdf(pack: BoardPackReport): Promise<Buffer> {
   }).getBuffer();
 }
 
+const PPTX_ROWS_PER_SLIDE = 13;
+
+function chunkRows<T>(items: readonly T[], size: number): T[][] {
+  if (items.length === 0) return [[]];
+  const chunks: T[][] = [];
+  for (let offset = 0; offset < items.length; offset += size) {
+    chunks.push(items.slice(offset, offset + size));
+  }
+  return chunks;
+}
+
+async function renderPptx(pack: BoardPackReport): Promise<Buffer> {
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_16x9';
+  pptx.author = 'OneFP&A';
+  pptx.company = pack.companyName;
+  pptx.title = `Board Pack - ${pack.companyName}`;
+  pptx.subject = pack.basis;
+
+  const titleSlide = pptx.addSlide();
+  titleSlide.background = { color: 'F8FAFC' };
+  titleSlide.addShape('rect', { x: 0, y: 0, w: 10, h: 1.35, fill: { color: '0F172A' }, line: { color: '0F172A' } });
+  titleSlide.addText('Board Pack', {
+    x: 0.6,
+    y: 0.3,
+    w: 8.8,
+    h: 0.75,
+    fontFace: 'Helvetica',
+    fontSize: 28,
+    bold: true,
+    color: 'FFFFFF',
+  });
+  titleSlide.addText(pack.companyName, {
+    x: 0.6,
+    y: 1.6,
+    w: 8.8,
+    h: 0.5,
+    fontFace: 'Helvetica',
+    fontSize: 20,
+    bold: true,
+    color: '0F172A',
+  });
+  titleSlide.addText(`${pack.baseCurrency} - ${pack.basis}`, {
+    x: 0.6,
+    y: 2.2,
+    w: 8.8,
+    h: 0.45,
+    fontFace: 'Helvetica',
+    fontSize: 12,
+    color: '334155',
+  });
+  titleSlide.addText(
+    `Articulation: ${pack.articulation.valid ? 'all checks passed' : 'check failures present'}`,
+    {
+      x: 0.6,
+      y: 2.75,
+      w: 8.8,
+      h: 0.35,
+      fontFace: 'Helvetica',
+      fontSize: 11,
+      bold: true,
+      color: pack.articulation.valid ? '047857' : 'B91C1C',
+    },
+  );
+  titleSlide.addText(pack.disclosure, {
+    x: 0.6,
+    y: 3.3,
+    w: 8.8,
+    h: 1.4,
+    fontFace: 'Helvetica',
+    fontSize: 10,
+    color: '475569',
+    valign: 'top',
+  });
+
+  for (const section of SECTION_ORDER) {
+    const sectionRows = pack.rows.filter((candidate) => candidate.section === section);
+    const pages = chunkRows(sectionRows, PPTX_ROWS_PER_SLIDE);
+
+    pages.forEach((pageRows, pageIndex) => {
+      const slide = pptx.addSlide();
+      slide.background = { color: 'FFFFFF' };
+      const titleSuffix = pages.length > 1 ? ` (${pageIndex + 1}/${pages.length})` : '';
+      slide.addText(`${SECTION_TITLES[section]}${titleSuffix}`, {
+        x: 0.5,
+        y: 0.3,
+        w: 9.0,
+        h: 0.4,
+        fontFace: 'Helvetica',
+        fontSize: 16,
+        bold: true,
+        color: '0F172A',
+      });
+      slide.addText(`${pack.companyName} · ${pack.baseCurrency} · ${pack.basis}`, {
+        x: 0.5,
+        y: 0.68,
+        w: 9.0,
+        h: 0.25,
+        fontFace: 'Helvetica',
+        fontSize: 8,
+        color: '64748B',
+      });
+
+      const headerRow: PptxGenJS.TableRow = [
+        { text: 'Label', options: { bold: true, color: 'FFFFFF', fill: { color: '0F172A' } } },
+        { text: 'Value', options: { bold: true, color: 'FFFFFF', fill: { color: '0F172A' }, align: 'right' } },
+        { text: 'Detail', options: { bold: true, color: 'FFFFFF', fill: { color: '0F172A' } } },
+      ];
+      const bodyRows: PptxGenJS.TableRow[] =
+        pageRows.length === 0
+          ? [[{ text: 'No rows in section' }, { text: '' }, { text: '' }]]
+          : pageRows.map((row, idx) => {
+              const rowFill = idx % 2 === 1 ? { color: 'F8FAFC' } : { color: 'FFFFFF' };
+              return [
+                { text: row.label, options: { fill: rowFill, color: '0F172A' } },
+                {
+                  text: row.value,
+                  options: {
+                    fill: rowFill,
+                    color: '0F172A',
+                    align: 'right',
+                    fontFace: 'Courier New',
+                  },
+                },
+                { text: row.detail ?? '', options: { fill: rowFill, color: '475569' } },
+              ];
+            });
+
+      slide.addTable([headerRow, ...bodyRows], {
+        x: 0.5,
+        y: 1.0,
+        w: 9.0,
+        colW: [3.2, 1.6, 4.2],
+        fontFace: 'Helvetica',
+        fontSize: 8.5,
+        border: { type: 'solid', pt: 0.5, color: 'CBD5E1' },
+        margin: [0.04, 0.06, 0.04, 0.06],
+      });
+    });
+  }
+
+  const provenanceRows: PptxGenJS.TableRow[] = [
+    [{ text: 'Company' }, { text: pack.companyName }],
+    [{ text: 'Currency' }, { text: pack.baseCurrency }],
+    [{ text: 'Basis' }, { text: pack.basis }],
+    [{ text: 'Disclosure' }, { text: pack.disclosure }],
+    ...pack.sources.map((source): PptxGenJS.TableRow => [
+      { text: 'Committed source' },
+      { text: `${source.sourceFilename} - ${source.sourceHash}` },
+    ]),
+    ...pack.articulation.checks.map((check): PptxGenJS.TableRow => [
+      { text: `Articulation ${check.id}` },
+      { text: `${check.id} ${check.passed ? 'pass' : 'fail'} ${check.delta}` },
+    ]),
+  ];
+
+  const provenancePages = chunkRows(provenanceRows, PPTX_ROWS_PER_SLIDE);
+  provenancePages.forEach((pageRows, pageIndex) => {
+    const provSlide = pptx.addSlide();
+    provSlide.background = { color: 'FFFFFF' };
+    const titleSuffix = provenancePages.length > 1 ? ` (${pageIndex + 1}/${provenancePages.length})` : '';
+    provSlide.addText(`Provenance${titleSuffix}`, {
+      x: 0.5,
+      y: 0.3,
+      w: 9.0,
+      h: 0.4,
+      fontFace: 'Helvetica',
+      fontSize: 16,
+      bold: true,
+      color: '0F172A',
+    });
+    const provHeader: PptxGenJS.TableRow = [
+      { text: 'Field', options: { bold: true, color: 'FFFFFF', fill: { color: '0F172A' } } },
+      { text: 'Value', options: { bold: true, color: 'FFFFFF', fill: { color: '0F172A' } } },
+    ];
+    provSlide.addTable([provHeader, ...pageRows], {
+      x: 0.5,
+      y: 0.9,
+      w: 9.0,
+      colW: [2.2, 6.8],
+      fontFace: 'Helvetica',
+      fontSize: 8.5,
+      border: { type: 'solid', pt: 0.5, color: 'CBD5E1' },
+      margin: [0.04, 0.06, 0.04, 0.06],
+    });
+  });
+
+  const raw = await pptx.write({ outputType: 'nodebuffer' });
+  if (raw instanceof Uint8Array) {
+    return Buffer.from(raw);
+  }
+  if (raw instanceof ArrayBuffer) {
+    return Buffer.from(raw);
+  }
+  if (typeof raw === 'string') {
+    return Buffer.from(raw, 'binary');
+  }
+  return Buffer.from(await raw.arrayBuffer());
+}
+
 export function renderBoardPack(
   pack: BoardPackReport,
   format: BoardPackExportFormat,
 ): Promise<Buffer> {
-  return format === 'xlsx' ? renderXlsx(pack) : renderPdf(pack);
+  if (format === 'xlsx') return renderXlsx(pack);
+  if (format === 'pdf') return renderPdf(pack);
+  return renderPptx(pack);
 }

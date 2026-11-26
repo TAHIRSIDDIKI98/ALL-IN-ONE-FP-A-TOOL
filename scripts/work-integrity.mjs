@@ -31,7 +31,6 @@ const OUT_OF_PHASE_NAMES = new Set([
   'monte-carlo',
   'marketplace',
   'benchmarks',
-  'workforce',
   'capex',
   'treasury',
   'AIChatPage.tsx',

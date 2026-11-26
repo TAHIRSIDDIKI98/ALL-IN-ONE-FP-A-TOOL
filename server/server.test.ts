@@ -2,6 +2,7 @@ import { once } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { inflateRawSync } from 'node:zlib';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import ExcelJS from 'exceljs';
@@ -15,6 +16,13 @@ import { seedChartOfAccounts } from './db/repositories/import.js';
 import { MESSY_CSV } from './db/testing/corpus-fixtures.js';
 import { verifyCompanyAuditLog } from './audit/index.js';
 import { CoaMappingReportSchema } from '../shared/coaMapping.js';
+import {
+  computeDashboardSummaryUncached,
+  getDashboardSummaryWithMeta,
+  invalidateDashboardCacheForTests,
+} from './db/repositories/dashboards.js';
+import workforceOracle from '../fixtures/oracles/workforce/workforce_oracle.json' with { type: 'json' };
+import fluxPvmOracle from '../fixtures/oracles/variance/flux_pvm_oracle.json' with { type: 'json' };
 
 const SECRET = 'server-test-sandbox-secret-long-enough';
 
@@ -75,6 +83,51 @@ function extractPdfText(bytes: Uint8Array): string {
     decoded += '\n';
   }
   return decoded;
+}
+
+function extractPptxRuns(bytes: Uint8Array): string[] {
+  const buf = Buffer.from(bytes);
+  expect(buf.subarray(0, 2).toString('ascii')).toBe('PK');
+  let eocdPos = -1;
+  for (let pos = buf.length - 22; pos >= 0 && pos >= buf.length - 65_557; pos -= 1) {
+    if (buf.readUInt32LE(pos) === 0x06054b50) {
+      eocdPos = pos;
+      break;
+    }
+  }
+  expect(eocdPos).toBeGreaterThanOrEqual(0);
+  const cdEntries = buf.readUInt16LE(eocdPos + 10);
+  const cdOffset = buf.readUInt32LE(eocdPos + 16);
+  const runs: string[] = [];
+  let cursor = cdOffset;
+  for (let idx = 0; idx < cdEntries; idx += 1) {
+    expect(buf.readUInt32LE(cursor)).toBe(0x02014b50);
+    const method = buf.readUInt16LE(cursor + 10);
+    const compSize = buf.readUInt32LE(cursor + 20);
+    const nameLen = buf.readUInt16LE(cursor + 28);
+    const extraLen = buf.readUInt16LE(cursor + 30);
+    const commentLen = buf.readUInt16LE(cursor + 32);
+    const localOffset = buf.readUInt32LE(cursor + 42);
+    const entryName = buf.subarray(cursor + 46, cursor + 46 + nameLen).toString('utf8');
+    cursor = cursor + 46 + nameLen + extraLen + commentLen;
+    if (!/^ppt\/slides\/slide\d+\.xml$/.test(entryName)) continue;
+    const localNameLen = buf.readUInt16LE(localOffset + 26);
+    const localExtraLen = buf.readUInt16LE(localOffset + 28);
+    const dataPos = localOffset + 30 + localNameLen + localExtraLen;
+    const compressed = buf.subarray(dataPos, dataPos + compSize);
+    const xml = (method === 8 ? inflateRawSync(compressed) : compressed).toString('utf8');
+    for (const match of xml.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g)) {
+      runs.push(
+        (match[1] ?? '')
+          .replaceAll('&amp;', '&')
+          .replaceAll('&lt;', '<')
+          .replaceAll('&gt;', '>')
+          .replaceAll('&quot;', '"')
+          .replaceAll('&apos;', "'"),
+      );
+    }
+  }
+  return runs;
 }
 
 async function listen(app: ReturnType<typeof createSpineApp>): Promise<{ server: Server; baseUrl: string }> {
@@ -1380,31 +1433,59 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     });
     const pdfText = extractPdfText(new Uint8Array(await pdfBlob.arrayBuffer()));
     expect(pdfText.length).toBeGreaterThan(0);
+    const pptxBlob = await client.downloadBoardPack(workspace.companyId, {
+      period: 'P02',
+      fiscalYear: 2026,
+      format: 'pptx',
+    });
+    const pptxRuns = extractPptxRuns(new Uint8Array(await pptxBlob.arrayBuffer()));
+    expect(pptxRuns.length).toBeGreaterThan(0);
+
     for (const row of pack.rows) {
       expect(cells, `xlsx ${row.key}`).toContain(row.label);
       expect(cells, `xlsx ${row.key}`).toContain(row.value);
       expect(pdfText, `pdf ${row.key}`).toContain(row.label);
       expect(pdfText, `pdf ${row.key}`).toContain(row.value);
+      expect(pptxRuns, `pptx ${row.key}`).toContain(row.label);
+      expect(pptxRuns, `pptx ${row.key}`).toContain(row.value);
       if (row.detail !== null) {
         expect(cells, `xlsx detail ${row.key}`).toContain(row.detail);
         expect(pdfText, `pdf detail ${row.key}`).toContain(row.detail);
+        expect(pptxRuns, `pptx detail ${row.key}`).toContain(row.detail);
       }
     }
     expect(cells).toContain(pack.basis);
     expect(cells).toContain(pack.disclosure);
     expect(pdfText).toContain(pack.basis);
+    expect(pptxRuns).toContain(pack.basis);
+    expect(pptxRuns).toContain(pack.disclosure);
 
-    // Typed negative cases: no period, unsupported format, foreign tenant. None writes a batch.
+    // Typed negative & header cases: verify PPTX OOXML MIME type, filename, and negative guards.
     const clientIdentity: VerifiedIdentity = {
       firebaseUid: 'sandbox:client-import@onefpa.test',
       email: 'client-import@onefpa.test',
       displayName: 'Client Import',
     };
+    const pptxHttpResponse = await fetch(
+      `${baseUrl}/api/companies/${workspace.companyId}/board-pack/export?period=P02&format=pptx`,
+      { headers: bearer(clientIdentity) },
+    );
+    expect(pptxHttpResponse.status).toBe(200);
+    expect(pptxHttpResponse.headers.get('content-type')).toContain(
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    );
+    expect(pptxHttpResponse.headers.get('content-disposition')).toBe(
+      'attachment; filename="board-pack-P02.pptx"',
+    );
     const unauthenticated = await fetch(
       `${baseUrl}/api/companies/${workspace.companyId}/board-pack?period=P02`,
     );
     expect(unauthenticated.status).toBe(401);
     expect(((await unauthenticated.json()) as { error: { code: string } }).error.code).toBe('SESSION_REQUIRED');
+    const unauthPptx = await fetch(
+      `${baseUrl}/api/companies/${workspace.companyId}/board-pack/export?period=P02&format=pptx`,
+    );
+    expect(unauthPptx.status).toBe(401);
 
     const noPeriod = await fetch(`${baseUrl}/api/companies/${workspace.companyId}/board-pack`, {
       headers: bearer(clientIdentity),
@@ -1424,6 +1505,11 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     );
     expect(foreignPack.status).toBe(403);
     expect(((await foreignPack.json()) as { error: { code: string } }).error.code).toBe('TENANT_FORBIDDEN');
+    const foreignPptx = await fetch(
+      `${baseUrl}/api/companies/${workspace.companyId}/board-pack/export?period=P02&format=pptx`,
+      { headers: bearer(INTRUDER) },
+    );
+    expect(foreignPptx.status).toBe(403);
     expect(await countBatches(workspace.companyId)).toBe(2);
   }, 120_000);
 
@@ -2126,5 +2212,707 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     const auditVerification = await verifyCompanyAuditLog(db, companyId);
     expect(auditVerification.valid).toBe(true);
     expect(auditVerification.checkedCount).toBeGreaterThanOrEqual(15);
+  }, 60_000);
+
+  it('WI-0035 M2 Workforce Module & §2.4 One-Engine Proof: persists positions, compiles golden oracle drivers, commits to plan_line, ties out Rolling Forecast & BvA, and enforces RBAC', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:wfmod-owner@onefpa.test',
+      email: 'wfmod-owner@onefpa.test',
+      displayName: 'Workforce Owner',
+    };
+    const viewer: VerifiedIdentity = {
+      firebaseUid: 'sandbox:wfmod-viewer@onefpa.test',
+      email: 'wfmod-viewer@onefpa.test',
+      displayName: 'Workforce Viewer',
+    };
+
+    // 1. Setup company & Chart of Accounts (`5100` COGS Direct, `6100` OpEx Payroll)
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Workforce Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'HQ',
+        entityName: 'HQ',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    const chartCsv = [
+      'code,name,type,normal_side,statement_line_key',
+      '5100,Direct Engineering Payroll,expense,debit,pl.cogs.direct',
+      '6100,OpEx Payroll & Benefits,expense,debit,pl.opex.payroll',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ csvText: chartCsv }),
+        })
+      ).status,
+    ).toBe(201);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            email: viewer.email,
+            displayName: viewer.displayName,
+            role: 'viewer',
+          }),
+        })
+      ).status,
+    ).toBe(201);
+
+    // 2. Initial GET /workforce returns spec, 12 periods, 2 postable accounts, 0 positions
+    const initialRes = await fetch(`${baseUrl}/api/companies/${companyId}/workforce`, {
+      headers: bearer(owner),
+    });
+    expect(initialRes.status).toBe(200);
+    const initial = (await initialRes.json()) as {
+      fiscalYear: number;
+      actorRole: string;
+      moduleSpec: { moduleKey: string; dimensions: string[] };
+      periods: string[];
+      accounts: { code: string }[];
+      positions: unknown[];
+    };
+    expect(initial.fiscalYear).toBe(2026);
+    expect(initial.actorRole).toBe('owner');
+    expect(initial.moduleSpec.moduleKey).toBe('workforce');
+    expect(initial.moduleSpec.dimensions).toEqual(['department', 'position', 'account']);
+    expect(initial.periods).toHaveLength(12);
+    expect(initial.accounts.map((a) => a.code)).toEqual(['5100', '6100']);
+    expect(initial.positions).toEqual([]);
+
+    // 3. Save golden oracle roster to `workforce_position` table
+    const saveRes = await fetch(`${baseUrl}/api/companies/${companyId}/workforce/positions`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        positions: workforceOracle.positions,
+      }),
+    });
+    expect(saveRes.status).toBe(200);
+    const saved = (await saveRes.json()) as { positions: { positionCode: string; status: string }[] };
+    expect(saved.positions).toHaveLength(3);
+
+    // 4. Dry-run preview from saved roster matches golden oracle to the cent
+    const previewRes = await fetch(`${baseUrl}/api/companies/${companyId}/workforce/preview`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({ fiscalYear: 2026 }),
+    });
+    expect(previewRes.status).toBe(200);
+    const preview = (await previewRes.json()) as {
+      grandTotalCost: string;
+      grandTotalFteMonths: string;
+      driverPlan: { grandTotal: string; totalsByAccount: Record<string, string> };
+    };
+    expect(preview.grandTotalCost).toBe(workforceOracle.expected.grandTotalCost);
+    expect(preview.grandTotalFteMonths).toBe(workforceOracle.expected.grandTotalFteMonths);
+    expect(preview.driverPlan.grandTotal).toBe(workforceOracle.expected.grandTotalCost);
+    expect(preview.driverPlan.totalsByAccount).toEqual(workforceOracle.expected.totalsByAccount);
+
+    // 5. Commit Workforce module into Budget FY2026 via shared One-Engine planning repository
+    const commitRes = await fetch(`${baseUrl}/api/companies/${companyId}/workforce/commit`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        scenarioName: 'Budget FY2026',
+        scenarioKind: 'budget',
+      }),
+    });
+    expect(commitRes.status).toBe(201);
+    const committed = (await commitRes.json()) as {
+      preview: { grandTotalCost: string };
+      commit: { versionNo: number; grandTotal: string; lineCount: number };
+    };
+    expect(committed.commit.versionNo).toBe(1);
+    expect(committed.commit.grandTotal).toBe('260025.00');
+    expect(committed.commit.lineCount).toBe(24);
+
+    // 6. Verify Rolling Forecast and BvA read the exact committed plan_lines cent-for-cent
+    const rfRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/planning/rolling-forecast?year=2026&scenario=${encodeURIComponent('Budget FY2026')}`,
+      { headers: bearer(owner) },
+    );
+    expect(rfRes.status).toBe(200);
+    const rf = (await rfRes.json()) as {
+      totalForecast: string;
+      rows: { accountCode: string; forecastSubtotal: string }[];
+    };
+    expect(rf.totalForecast).toBe('260025.00');
+    expect(rf.rows.find((r) => r.accountCode === '5100')?.forecastSubtotal).toBe('159900.00');
+    expect(rf.rows.find((r) => r.accountCode === '6100')?.forecastSubtotal).toBe('100125.00');
+
+    const bvaRes = await fetch(`${baseUrl}/api/companies/${companyId}/bva?period=P12&year=2026`, {
+      headers: bearer(owner),
+    });
+    expect(bvaRes.status).toBe(200);
+    const bva = (await bvaRes.json()) as { hasPlan: boolean; totals: { plan: string } };
+    expect(bva.hasPlan).toBe(true);
+    expect(bva.totals.plan).toBe('260025.00');
+
+    // 7. Negative cases: viewer cannot write positions/commit (403), unmapped account or inverted range fails atomically (422), foreign tenant 403, unauth 401
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/workforce/positions`, {
+          method: 'POST',
+          headers: bearer(viewer),
+          body: JSON.stringify({ fiscalYear: 2026, positions: [] }),
+        })
+      ).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/workforce/commit`, {
+          method: 'POST',
+          headers: bearer(viewer),
+          body: JSON.stringify({
+            fiscalYear: 2026,
+            scenarioName: 'Budget FY2026',
+            scenarioKind: 'budget',
+          }),
+        })
+      ).status,
+    ).toBe(403);
+
+    const badSaveRes = await fetch(`${baseUrl}/api/companies/${companyId}/workforce/positions`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        fiscalYear: 2026,
+        positions: [
+          {
+            ...workforceOracle.positions[0],
+            startPeriodCode: 'P08',
+            endPeriodCode: 'P02',
+            accountCode: '9999',
+          },
+        ],
+      }),
+    });
+    expect(badSaveRes.status).toBe(422);
+    const badSaveBody = (await badSaveRes.json()) as { error: { details: { issues: string[] } } };
+    expect(badSaveBody.error.details.issues).toContain('UNMAPPED_ACCOUNT:9999');
+    expect(badSaveBody.error.details.issues).toContain('END_BEFORE_START:ENG-001');
+
+    // Confirm previous 3 positions are still intact after rejected save
+    const afterBadSaveRes = await fetch(`${baseUrl}/api/companies/${companyId}/workforce`, {
+      headers: bearer(owner),
+    });
+    const afterBadSave = (await afterBadSaveRes.json()) as { positions: unknown[] };
+    expect(afterBadSave.positions).toHaveLength(3);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/workforce`, {
+          headers: bearer(INTRUDER),
+        })
+      ).status,
+    ).toBe(403);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/workforce`)).status).toBe(401);
+
+    const auditVerification = await verifyCompanyAuditLog(db, companyId);
+    expect(auditVerification.valid).toBe(true);
+  }, 60_000);
+
+  it('WI-0036 M2 Flux Analysis Waterfall Bridge & PVM Decomposition: ties out to committed BvA/GL, enforces calendar/tenant/input validation, and preserves exact cent reconciliation', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:flux-owner@onefpa.test',
+      email: 'flux-owner@onefpa.test',
+      displayName: 'Flux Owner',
+    };
+
+    // 1. Setup company, Chart of Accounts, FY2026 Budget, and balanced P01 Actuals GL journal
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Flux Variance Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'HQ',
+        entityName: 'HQ',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    const chartCsv = [
+      'code,name,type,normal_side,statement_line_key',
+      '1000,Operating Cash,asset,debit,bs.asset.cash',
+      '4000,Service revenue,revenue,credit,pl.revenue.service',
+      '5100,Engineering payroll,expense,debit,pl.cogs.direct',
+      '6100,Cloud hosting,expense,debit,pl.opex.other',
+      '6200,Travel & events,expense,debit,pl.opex.other',
+      '6300,Legal advisory,expense,debit,pl.opex.other',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ csvText: chartCsv }),
+        })
+      ).status,
+    ).toBe(201);
+
+    const budgetCsv = [
+      'account_code,period,amount',
+      '4000,P01,10000.00',
+      '5100,P01,6000.00',
+      '6100,P01,1500.00',
+      '6200,P01,800.00',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/budget/import`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ csvText: budgetCsv, fiscalYear: 2026, sourceFilename: 'flux-budget.csv' }),
+        })
+      ).status,
+    ).toBe(201);
+
+    const actualsCsv = [
+      'entry_ref,date,account_code,description,debit,credit',
+      'JE-FLUX-1,2026-01-15,1000,Net cash movement,2400.00,0.00',
+      'JE-FLUX-1,2026-01-15,4000,Service revenue actuals,0.00,11850.00',
+      'JE-FLUX-1,2026-01-15,5100,Engineering payroll actuals,7200.00,0.00',
+      'JE-FLUX-1,2026-01-15,6100,Cloud hosting actuals,1100.00,0.00',
+      'JE-FLUX-1,2026-01-15,6200,Travel & events actuals,850.00,0.00',
+      'JE-FLUX-1,2026-01-15,6300,Unplanned legal advisory,300.00,0.00',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ kind: 'actuals', sourceFilename: 'flux-actuals.csv', csvText: actualsCsv }),
+        })
+      ).status,
+    ).toBe(201);
+
+    // 2. GET /variance/flux ties out identically to BvA and the golden oracle
+    const fluxRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/variance/flux?period=P01&year=2026&minAbs=100.00&topN=2`,
+      { headers: bearer(owner) },
+    );
+    expect(fluxRes.status).toBe(200);
+    const flux = (await fluxRes.json()) as {
+      hasPlan: boolean;
+      totalPlannedAccounts: number;
+      otherPlannedCount: number;
+      drivers: { accountCode: string; shareOfAbsVariancePct: string }[];
+      unplannedAccounts: { accountCode: string; actual: string }[];
+      bridge: {
+        planTotal: string;
+        topDriversVariance: string;
+        otherPlannedVariance: string;
+        plannedVarianceTotal: string;
+        plannedActualTotal: string;
+        unplannedActualTotal: string;
+        actualTotal: string;
+        revenueVariance: string;
+        expenseVariance: string;
+        netOperatingVariance: string;
+        tieOutValid: boolean;
+      };
+    };
+
+    expect(flux.hasPlan).toBe(true);
+    expect(flux.totalPlannedAccounts).toBe(4);
+    expect(flux.otherPlannedCount).toBe(fluxPvmOracle.flux.expected.otherPlannedCount);
+    expect(flux.drivers.map((d) => d.accountCode)).toEqual(fluxPvmOracle.flux.expected.topAccountCodes);
+    expect(flux.drivers.map((d) => d.shareOfAbsVariancePct)).toEqual(fluxPvmOracle.flux.expected.topShares);
+    expect(flux.unplannedAccounts.map((u) => u.accountCode)).toEqual(['1000', '6300']);
+    expect(flux.bridge.planTotal).toBe(fluxPvmOracle.flux.expected.bridge.planTotal);
+    expect(flux.bridge.topDriversVariance).toBe(fluxPvmOracle.flux.expected.bridge.topDriversVariance);
+    expect(flux.bridge.otherPlannedVariance).toBe(fluxPvmOracle.flux.expected.bridge.otherPlannedVariance);
+    expect(flux.bridge.plannedVarianceTotal).toBe(fluxPvmOracle.flux.expected.bridge.plannedVarianceTotal);
+    expect(flux.bridge.plannedActualTotal).toBe(fluxPvmOracle.flux.expected.bridge.plannedActualTotal);
+    expect(flux.bridge.unplannedActualTotal).toBe('2700.00');
+    expect(flux.bridge.actualTotal).toBe('23700.00');
+    expect(flux.bridge.revenueVariance).toBe(fluxPvmOracle.flux.expected.bridge.revenueVariance);
+    expect(flux.bridge.expenseVariance).toBe(fluxPvmOracle.flux.expected.bridge.expenseVariance);
+    expect(flux.bridge.netOperatingVariance).toBe(fluxPvmOracle.flux.expected.bridge.netOperatingVariance);
+    expect(flux.bridge.tieOutValid).toBe(true);
+
+    // Confirm BvA ties out to Flux totals cent-for-cent
+    const bvaRes = await fetch(`${baseUrl}/api/companies/${companyId}/bva?period=P01&year=2026`, {
+      headers: bearer(owner),
+    });
+    expect(bvaRes.status).toBe(200);
+    const bva = (await bvaRes.json()) as {
+      totals: { plan: string; varianceAmount: string; unplannedActual: string; actual: string };
+    };
+    expect(flux.bridge.planTotal).toBe(bva.totals.plan);
+    expect(flux.bridge.plannedVarianceTotal).toBe(bva.totals.varianceAmount);
+    expect(flux.bridge.unplannedActualTotal).toBe(bva.totals.unplannedActual);
+    expect(flux.bridge.actualTotal).toBe(bva.totals.actual);
+
+    // 3. POST /variance/pvm reproduces golden oracle decomposition and exact invariant
+    const scenariosRes = await fetch(`${baseUrl}/api/companies/${companyId}/planning/scenarios`, {
+      headers: bearer(owner),
+    });
+    const scenariosBody = (await scenariosRes.json()) as { scenarios: { scenarioId: string }[] };
+    const budgetScenarioId = scenariosBody.scenarios[0]?.scenarioId ?? null;
+    expect(budgetScenarioId).not.toBeNull();
+
+    const pvmRes = await fetch(`${baseUrl}/api/companies/${companyId}/variance/pvm`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        periodCode: 'P01',
+        fiscalYear: 2026,
+        scenarioId: budgetScenarioId,
+        items: fluxPvmOracle.pvm.items,
+      }),
+    });
+    expect(pvmRes.status).toBe(200);
+    const pvm = (await pvmRes.json()) as {
+      scenarioName: string | null;
+      totalPlanRevenue: string;
+      totalActualRevenue: string;
+      totalVariance: string;
+      variancePct: string | null;
+      priceVariance: string;
+      volumeVariance: string;
+      mixVariance: string;
+      invariantPassed: boolean;
+      invariantDelta: string;
+      items: {
+        key: string;
+        planRevenue: string;
+        actualRevenue: string;
+        totalVariance: string;
+        priceEffect: string;
+        volumeAtPlanPrice: string;
+        mixContribution: string;
+      }[];
+    };
+    expect(pvm.scenarioName).toBe('Budget FY2026');
+    expect(pvm.totalPlanRevenue).toBe(fluxPvmOracle.pvm.expected.totalPlanRevenue);
+    expect(pvm.totalActualRevenue).toBe(fluxPvmOracle.pvm.expected.totalActualRevenue);
+    expect(pvm.totalVariance).toBe(fluxPvmOracle.pvm.expected.totalVariance);
+    expect(pvm.variancePct).toBe(fluxPvmOracle.pvm.expected.variancePct);
+    expect(pvm.priceVariance).toBe(fluxPvmOracle.pvm.expected.priceVariance);
+    expect(pvm.volumeVariance).toBe(fluxPvmOracle.pvm.expected.volumeVariance);
+    expect(pvm.mixVariance).toBe(fluxPvmOracle.pvm.expected.mixVariance);
+    expect(pvm.invariantPassed).toBe(true);
+    expect(pvm.invariantDelta).toBe('0');
+    expect(pvm.items[0]?.priceEffect).toBe(fluxPvmOracle.pvm.expected.items[0]!.priceEffect);
+    expect(pvm.items[1]?.priceEffect).toBe(fluxPvmOracle.pvm.expected.items[1]!.priceEffect);
+
+    // 4. Negative cases: invalid query/body/period/scenario, cross-tenant (403), unauthenticated (401)
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/variance/flux`, {
+          headers: bearer(owner),
+        })
+      ).status,
+    ).toBe(422);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/variance/flux?period=P01&minAbs=-5.00`, {
+          headers: bearer(owner),
+        })
+      ).status,
+    ).toBe(422);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/variance/flux?period=P01&topN=0`, {
+          headers: bearer(owner),
+        })
+      ).status,
+    ).toBe(422);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/variance/pvm`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            periodCode: 'P99',
+            fiscalYear: 2026,
+            items: fluxPvmOracle.pvm.items,
+          }),
+        })
+      ).status,
+    ).toBe(422);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/variance/pvm`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            periodCode: 'P01',
+            fiscalYear: 2026,
+            scenarioId: '99999999-9999-4999-8999-999999999999',
+            items: fluxPvmOracle.pvm.items,
+          }),
+        })
+      ).status,
+    ).toBe(404);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/variance/pvm`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            periodCode: 'P01',
+            fiscalYear: 2026,
+            items: [
+              {
+                key: 'SKU_NEG',
+                label: 'Invalid',
+                planUnits: '-5',
+                planPrice: '10.00',
+                actualUnits: '10',
+                actualPrice: '10.00',
+              },
+            ],
+          }),
+        })
+      ).status,
+    ).toBe(422);
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/variance/flux?period=P01`, {
+          headers: bearer(INTRUDER),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/variance/pvm`, {
+          method: 'POST',
+          headers: bearer(INTRUDER),
+          body: JSON.stringify({ periodCode: 'P01', items: fluxPvmOracle.pvm.items }),
+        })
+      ).status,
+    ).toBe(403);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/variance/flux?period=P01`)).status).toBe(401);
+  }, 60_000);
+
+  it('WI-0038 RPT1/RPT2/RPT4: serves canonical KPIs, trend series, 100% cited Report Builder, and cache-to-engine tieout & invalidation', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:dash-owner@onefpa.test',
+      email: 'dash-owner@onefpa.test',
+      displayName: 'Dash Owner',
+    };
+
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Metrics Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'HQ',
+        entityName: 'HQ',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    const chartCsv = [
+      'code,name,type,normal_side,statement_line_key',
+      '1000,Operating Bank,asset,debit,bs.asset.cash',
+      '4000,Product Revenue,revenue,credit,pl.revenue.product',
+      '5000,Direct COGS,expense,debit,pl.cogs.direct',
+      '6000,Payroll OpEx,expense,debit,pl.opex.payroll',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ csvText: chartCsv }),
+        })
+      ).status,
+    ).toBe(201);
+
+    // 1. Empty actuals state before GL import
+    const emptyDashRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/dashboards?period=P02`,
+      { headers: bearer(owner) },
+    );
+    expect(emptyDashRes.status).toBe(200);
+    const emptyDash = (await emptyDashRes.json()) as {
+      hasActuals: boolean;
+      hasPlan: boolean;
+      kpis: readonly { key: string; status: string; formattedValue: string }[];
+      reportBuilder: { unlinkedBlockCount: number; citationCoveragePct: string };
+    };
+    expect(emptyDash.hasActuals).toBe(false);
+    expect(emptyDash.hasPlan).toBe(false);
+    expect(emptyDash.kpis.find((k) => k.key === 'pnl.gross_margin')?.status).toBe('nm');
+    expect(emptyDash.kpis.find((k) => k.key === 'plan.revenue_attainment')?.status).toBe('not_planned');
+    expect(emptyDash.reportBuilder.unlinkedBlockCount).toBe(0);
+    expect(emptyDash.reportBuilder.citationCoveragePct).toBe('100.00%');
+
+    // 2. Commit P01 & P02 GL actuals (P01 rev 1000, cogs 400, opex 200 -> EBITDA 400; P02 rev 200, cogs 80, opex 160 -> EBITDA -40)
+    // YTD P02: rev 1200.00, cogs 480.00 -> GP 720.00 (60.00%), opex 360.00 -> EBITDA 360.00 (30.00%), Cash 360.00
+    const actualsCsv = [
+      'entry_ref,posting_date,account_code,description,debit,credit',
+      'J-101,2026-01-15,1000,Cash inflow Jan,1000.00,0.00',
+      'J-101,2026-01-15,4000,Product Sales Jan,0.00,1000.00',
+      'J-102,2026-01-20,5000,Hosting Jan,400.00,0.00',
+      'J-102,2026-01-20,6000,Payroll Jan,200.00,0.00',
+      'J-102,2026-01-20,1000,Vendor & Payroll cash out Jan,0.00,600.00',
+      'J-201,2026-02-15,1000,Cash inflow Feb,200.00,0.00',
+      'J-201,2026-02-15,4000,Product Sales Feb,0.00,200.00',
+      'J-202,2026-02-20,5000,Hosting Feb,80.00,0.00',
+      'J-202,2026-02-20,6000,Payroll Feb,160.00,0.00',
+      'J-202,2026-02-20,1000,Vendor & Payroll cash out Feb,0.00,240.00',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({
+            kind: 'actuals',
+            sourceFilename: 'dash-actuals.csv',
+            csvText: actualsCsv,
+          }),
+        })
+      ).status,
+    ).toBe(201);
+
+    // Cache must invalidate automatically after GL commit!
+    const dashP02Res = await fetch(
+      `${baseUrl}/api/companies/${companyId}/dashboards?period=P02&template=cash_and_runway`,
+      { headers: bearer(owner) },
+    );
+    expect(dashP02Res.status).toBe(200);
+    const dashP02 = (await dashP02Res.json()) as {
+      hasActuals: boolean;
+      hasPlan: boolean;
+      kpis: readonly { key: string; value: string | null; formattedValue: string; status: string }[];
+      trend: readonly { periodCode: string; revenue: string; ebitda: string; endingCash: string }[];
+      reportBuilder: {
+        templateId: string;
+        blockCount: number;
+        citedBlockCount: number;
+        unlinkedBlockCount: number;
+        citationCoveragePct: string;
+      };
+    };
+
+    expect(dashP02.hasActuals).toBe(true);
+    expect(dashP02.hasPlan).toBe(false);
+    expect(dashP02.kpis.find((k) => k.key === 'pnl.revenue')?.formattedValue).toBe('1200.00');
+    expect(dashP02.kpis.find((k) => k.key === 'pnl.gross_margin')?.formattedValue).toBe('60.00%');
+    expect(dashP02.kpis.find((k) => k.key === 'pnl.ebitda')?.formattedValue).toBe('360.00');
+    expect(dashP02.kpis.find((k) => k.key === 'pnl.ebitda_margin')?.formattedValue).toBe('30.00%');
+    expect(dashP02.kpis.find((k) => k.key === 'cf.ending_cash')?.formattedValue).toBe('360.00');
+    expect(dashP02.kpis.find((k) => k.key === 'plan.revenue_attainment')?.formattedValue).toBe('not planned');
+    expect(dashP02.trend).toHaveLength(2);
+    expect(dashP02.trend[0]).toMatchObject({ periodCode: 'P01', revenue: '1000.00', ebitda: '400.00', endingCash: '400.00' });
+    expect(dashP02.trend[1]).toMatchObject({ periodCode: 'P02', revenue: '200.00', ebitda: '-40.00', endingCash: '360.00' });
+    expect(dashP02.reportBuilder.templateId).toBe('cash_and_runway');
+    expect(dashP02.reportBuilder.unlinkedBlockCount).toBe(0);
+    expect(dashP02.reportBuilder.citationCoveragePct).toBe('100.00%');
+
+    // RPT1 tieout against Statements + Board Pack cover
+    const [stmRes, packRes] = await Promise.all([
+      fetch(`${baseUrl}/api/companies/${companyId}/statements?period=P02`, { headers: bearer(owner) }),
+      fetch(`${baseUrl}/api/companies/${companyId}/board-pack?period=P02`, { headers: bearer(owner) }),
+    ]);
+    expect(stmRes.status).toBe(200);
+    expect(packRes.status).toBe(200);
+    const stm = (await stmRes.json()) as { pnl: { revenue: string; netIncome: string }; cashFlow: { endingCash: string } };
+    const pack = (await packRes.json()) as { rows: readonly { section: string; key: string; value: string }[] };
+    expect(dashP02.kpis.find((k) => k.key === 'pnl.revenue')?.value).toBe(stm.pnl.revenue);
+    expect(dashP02.kpis.find((k) => k.key === 'pnl.revenue')?.value).toBe(
+      pack.rows.find((r) => r.section === 'cover' && r.key === 'statement:pnl.revenue')?.value,
+    );
+
+    // 3. Import budget CSV -> RPT2 cache invalidates cleanly & plan attainment computes
+    const budgetCsv = [
+      'account_code,period_code,amount',
+      '4000,P01,1000.00',
+      '4000,P02,500.00',
+      '5000,P01,400.00',
+      '5000,P02,300.00',
+      '6000,P01,250.00',
+      '6000,P02,250.00',
+    ].join('\n');
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/budget/import`, {
+          method: 'POST',
+          headers: bearer(owner),
+          body: JSON.stringify({ fiscalYear: 2026, csvText: budgetCsv, sourceFilename: 'dash-budget.csv' }),
+        })
+      ).status,
+    ).toBe(201);
+
+    const plannedDashRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/dashboards?period=P02&template=plan_performance`,
+      { headers: bearer(owner) },
+    );
+    expect(plannedDashRes.status).toBe(200);
+    const plannedDash = (await plannedDashRes.json()) as {
+      hasPlan: boolean;
+      kpis: readonly { key: string; formattedValue: string }[];
+      reportBuilder: { templateId: string; citationCoveragePct: string; unlinkedBlockCount: number };
+    };
+    expect(plannedDash.hasPlan).toBe(true);
+    // YTD P02 plan rev = 1500.00, actual rev = 1200.00 -> 80.00%; plan ebitda = 1500 - 700 - 500 = 300.00, actual 360.00 -> 120.00%
+    expect(plannedDash.kpis.find((k) => k.key === 'plan.revenue_attainment')?.formattedValue).toBe('80.00%');
+    expect(plannedDash.kpis.find((k) => k.key === 'plan.ebitda_attainment')?.formattedValue).toBe('120.00%');
+    expect(plannedDash.reportBuilder.templateId).toBe('plan_performance');
+    expect(plannedDash.reportBuilder.unlinkedBlockCount).toBe(0);
+    expect(plannedDash.reportBuilder.citationCoveragePct).toBe('100.00%');
+
+    // 4. RPT2 explicit cache-hit vs uncached engine tieout
+    invalidateDashboardCacheForTests(db);
+    const firstMeta = await getDashboardSummaryWithMeta(db, {
+      companyId,
+      throughPeriodCode: 'P02',
+      templateId: 'plan_performance',
+    });
+    expect(firstMeta.cacheHit).toBe(false);
+    const secondMeta = await getDashboardSummaryWithMeta(db, {
+      companyId,
+      throughPeriodCode: 'P02',
+      templateId: 'plan_performance',
+    });
+    expect(secondMeta.cacheHit).toBe(true);
+    const freshEngine = await computeDashboardSummaryUncached(db, {
+      companyId,
+      throughPeriodCode: 'P02',
+      templateId: 'plan_performance',
+    });
+    expect(secondMeta.report).toEqual(freshEngine);
+
+    // 5. Validation & RBAC negative cases (401/403/422)
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/dashboards`, { headers: bearer(owner) })).status).toBe(422);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/dashboards?period=P02&template=bogus`, { headers: bearer(owner) })).status).toBe(422);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/dashboards?period=P99`, { headers: bearer(owner) })).status).toBe(422);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/dashboards?period=P02`, { headers: bearer(INTRUDER) })).status).toBe(403);
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/dashboards?period=P02`)).status).toBe(401);
   }, 60_000);
 });

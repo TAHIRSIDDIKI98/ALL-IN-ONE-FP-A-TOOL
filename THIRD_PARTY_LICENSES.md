@@ -1,7 +1,7 @@
 # Third-Party Dependency Licenses
 
 > Generated deterministically from `package-lock.json` (`MASTER_PROMPT §12.16 LIC2`).
-> Packages: **570** · Manifest Digest: `7c88aedc98d8f43a`
+> Packages: **574** · Manifest Digest: `039804f67445aaf3`
 
 | Package | Version | License |
 |---|---|---|
@@ -318,11 +318,13 @@
 | `http-errors` | `2.0.1` | `MIT` |
 | `http-parser-js` | `0.5.10` | `MIT` |
 | `http-proxy-agent` | `5.0.0` | `MIT` |
+| `https` | `1.0.0` | `ISC` |
 | `https-proxy-agent` | `5.0.1` | `MIT` |
 | `https-proxy-agent` | `7.0.6` | `MIT` |
 | `iconv-lite` | `0.7.3` | `MIT` |
 | `idb` | `7.1.1` | `ISC` |
 | `ieee754` | `1.2.1` | `BSD-3-Clause` |
+| `image-size` | `1.2.1` | `MIT` |
 | `immediate` | `3.0.6` | `MIT` |
 | `inflight` | `1.0.6` | `ISC` |
 | `inherits` | `2.0.4` | `ISC` |
@@ -449,12 +451,14 @@
 | `possible-typed-array-names` | `1.1.0` | `MIT` |
 | `postcss` | `8.5.33` | `MIT` |
 | `postgres` | `4.1.1` | `Unlicense` |
+| `pptxgenjs` | `4.0.1` | `MIT` |
 | `process-nextick-args` | `2.0.1` | `MIT` |
 | `prop-types` | `15.8.1` | `MIT` |
 | `proto3-json-serializer` | `2.0.2` | `Apache-2.0` |
 | `protobufjs` | `7.6.6` | `BSD-3-Clause` |
 | `proxy-addr` | `2.0.8` | `MIT` |
 | `qs` | `6.17.1` | `BSD-3-Clause` |
+| `queue` | `6.0.2` | `MIT` |
 | `range-parser` | `1.3.0` | `MIT` |
 | `raw-body` | `3.0.2` | `MIT` |
 | `react` | `19.1.10` | `MIT` |

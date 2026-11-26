@@ -6,3 +6,5 @@ export * from './statements/index.js';
 export * from './variance/index.js';
 export * from './import/index.js';
 export * from './planning/index.js';
+export * from './workforce/index.js';
+export * from './metrics/index.js';

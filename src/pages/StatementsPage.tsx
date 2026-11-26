@@ -6,11 +6,20 @@ import {
   type BvaReportPayload,
   type FinancialStatementsPayload,
 } from '../api/client.js';
+import type { FluxAnalysisResponse, PvmBridgeResponse } from '../../shared/variance.js';
+import type { DashboardReportTemplateId, DashboardSummaryResponse } from '../../shared/dashboards.js';
+import { DashboardsPanel } from '../components/DashboardsPanel.js';
+import { FluxPvmPanel } from '../components/FluxPvmPanel.js';
 import { EmptyState, ErrorState, LoadingState, PartialBanner } from '../components/StateFrame.js';
+import {
+  buildPvmBridgeItemsPayload,
+  createEmptyPvmItemDraft,
+  type PvmItemDraft,
+} from '../state/planningView.js';
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
-type StatementTab = 'pl' | 'bs' | 'cf' | 'bva';
+type StatementTab = 'pl' | 'bs' | 'cf' | 'bva' | 'flux' | 'dashboards';
 
 interface StatementLine {
   readonly label: string;
@@ -62,7 +71,9 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
   const initialTab = (() => {
     if (typeof window === 'undefined') return 'pl' as StatementTab;
     const param = new URLSearchParams(window.location.search).get('tab');
-    if (param === 'bs' || param === 'cf' || param === 'bva') return param;
+    if (param === 'bs' || param === 'cf' || param === 'bva' || param === 'flux' || param === 'dashboards') {
+      return param;
+    }
     return 'pl' as StatementTab;
   })();
 
@@ -75,6 +86,29 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
   const [bva, setBva] = useState<BvaReportPayload | null>(null);
   const [bvaState, setBvaState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [bvaError, setBvaError] = useState<{ code: string; message: string } | null>(null);
+
+  const [flux, setFlux] = useState<FluxAnalysisResponse | null>(null);
+  const [fluxState, setFluxState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [fluxError, setFluxError] = useState<{ code: string; message: string } | null>(null);
+  const [minAbsInput, setMinAbsInput] = useState('0.00');
+  const [appliedMinAbs, setAppliedMinAbs] = useState('0.00');
+  const [topNInput, setTopNInput] = useState(10);
+  const [appliedTopN, setAppliedTopN] = useState(10);
+  const [filterError, setFilterError] = useState<string | null>(null);
+
+  const [pvmItems, setPvmItems] = useState<readonly PvmItemDraft[]>(() => [
+    createEmptyPvmItemDraft('pvm-1'),
+    createEmptyPvmItemDraft('pvm-2'),
+  ]);
+  const [pvmResult, setPvmResult] = useState<PvmBridgeResponse | null>(null);
+  const [pvmState, setPvmState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [pvmIssues, setPvmIssues] = useState<readonly string[]>([]);
+  const [pvmError, setPvmError] = useState<{ code: string; message: string } | null>(null);
+
+  const [dashboard, setDashboard] = useState<DashboardSummaryResponse | null>(null);
+  const [dashboardState, setDashboardState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [dashboardError, setDashboardError] = useState<{ code: string; message: string } | null>(null);
+  const [dashboardTemplate, setDashboardTemplate] = useState<DashboardReportTemplateId>('executive_summary');
 
   const companyId = company?.id ?? null;
 
@@ -138,6 +172,126 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
       cancelled = true;
     };
   }, [activeTab, companyId, authToken, period, reloadKey]);
+
+  useEffect(() => {
+    if (activeTab !== 'flux' || companyId === null || authToken === null) return;
+    let cancelled = false;
+    setFluxState('loading');
+    setFluxError(null);
+    createApiClient({ getToken: () => authToken })
+      .getFluxAnalysis(companyId, {
+        period,
+        minAbs: appliedMinAbs,
+        topN: appliedTopN,
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setFlux(result);
+        setFluxState('idle');
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setFlux(null);
+        setFluxState('error');
+        setFluxError(
+          error instanceof ApiClientError
+            ? { code: error.code, message: error.message }
+            : {
+                code: 'INTERNAL_ERROR',
+                message: error instanceof Error ? error.message : 'Unable to load Flux Analysis.',
+              },
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, companyId, authToken, period, appliedMinAbs, appliedTopN, reloadKey]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboards' || companyId === null || authToken === null) return;
+    let cancelled = false;
+    setDashboardState('loading');
+    setDashboardError(null);
+    createApiClient({ getToken: () => authToken })
+      .getDashboardSummary(companyId, {
+        period,
+        template: dashboardTemplate,
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setDashboard(result);
+        setDashboardState('idle');
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setDashboard(null);
+        setDashboardState('error');
+        setDashboardError(
+          error instanceof ApiClientError
+            ? { code: error.code, message: error.message }
+            : {
+                code: 'INTERNAL_ERROR',
+                message: error instanceof Error ? error.message : 'Unable to load Dashboards v1.',
+              },
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, companyId, authToken, period, dashboardTemplate, reloadKey]);
+
+  const handleApplyFluxFilter = (): void => {
+    const trimmed = minAbsInput.trim();
+    const candidate = trimmed.length === 0 ? '0.00' : trimmed;
+    if (!/^\d+(?:\.\d{1,6})?$/.test(candidate)) {
+      setFilterError('Minimum variance magnitude must be a non-negative decimal string (e.g. 100.00).');
+      return;
+    }
+    setFilterError(null);
+    setMinAbsInput(candidate);
+    setAppliedMinAbs(candidate);
+    setAppliedTopN(topNInput);
+  };
+
+  const handleComputePvm = async (): Promise<void> => {
+    if (companyId === null || authToken === null) return;
+    const built = buildPvmBridgeItemsPayload(pvmItems);
+    if (!built.ok) {
+      setPvmIssues(built.issues);
+      setPvmError(null);
+      return;
+    }
+    setPvmIssues([]);
+    setPvmError(null);
+    setPvmState('loading');
+    try {
+      const result = await createApiClient({ getToken: () => authToken }).computePvmBridge(companyId, {
+        periodCode: period,
+        items: [...built.items],
+      });
+      setPvmResult(result);
+      setPvmState('idle');
+    } catch (error: unknown) {
+      setPvmResult(null);
+      setPvmState('error');
+      setPvmError(
+        error instanceof ApiClientError
+          ? { code: error.code, message: error.message }
+          : {
+              code: 'INTERNAL_ERROR',
+              message: error instanceof Error ? error.message : 'Unable to compute PVM bridge.',
+            },
+      );
+    }
+  };
+
+  const handleResetPvm = (): void => {
+    setPvmItems([createEmptyPvmItemDraft('pvm-1'), createEmptyPvmItemDraft('pvm-2')]);
+    setPvmResult(null);
+    setPvmIssues([]);
+    setPvmError(null);
+    setPvmState('idle');
+  };
 
   const selectTab = (tab: StatementTab): void => {
     setActiveTab(tab);
@@ -230,6 +384,8 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
                 { id: 'bs', label: 'Balance Sheet' },
                 { id: 'cf', label: 'Cash Flow' },
                 { id: 'bva', label: 'BvA View' },
+                { id: 'flux', label: 'Flux & PVM' },
+                { id: 'dashboards', label: 'Dashboards & KPIs' },
               ] as const
             ).map((t) => (
               <button
@@ -261,7 +417,42 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
         <PartialBanner detail="Statement articulation (A1–A5) did not tie; treat these figures as provisional." />
       )}
 
-      {activeTab === 'bva' ? (
+      {activeTab === 'dashboards' ? (
+        <DashboardsPanel
+          dashboard={dashboard}
+          loadState={dashboardState}
+          loadError={dashboardError}
+          templateId={dashboardTemplate}
+          onChangeTemplate={setDashboardTemplate}
+          onRetry={() => setReloadKey((key) => key + 1)}
+          onOpenImport={() => navigate('/import')}
+        />
+      ) : activeTab === 'flux' ? (
+        <FluxPvmPanel
+          period={period}
+          flux={flux}
+          fluxState={fluxState}
+          fluxError={fluxError}
+          minAbsInput={minAbsInput}
+          topNInput={topNInput}
+          filterError={filterError}
+          onChangeMinAbs={setMinAbsInput}
+          onChangeTopN={setTopNInput}
+          onApplyFilter={handleApplyFluxFilter}
+          onRetryFlux={() => setReloadKey((key) => key + 1)}
+          onOpenImport={() => navigate('/import')}
+          pvmItems={pvmItems}
+          onChangePvmItems={setPvmItems}
+          pvmResult={pvmResult}
+          pvmState={pvmState}
+          pvmIssues={pvmIssues}
+          pvmError={pvmError}
+          onComputePvm={() => {
+            void handleComputePvm();
+          }}
+          onResetPvm={handleResetPvm}
+        />
+      ) : activeTab === 'bva' ? (
         bvaState === 'loading' ? (
           <div role="status" aria-live="polite" className="text-sm font-medium text-slate-700">
             Loading the current plan version and joining it to the ledger…

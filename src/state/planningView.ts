@@ -7,6 +7,12 @@ import type {
   MembershipRole,
   WorkflowNotificationSummary,
 } from '../../shared/workflow.js';
+import type {
+  WorkforcePositionPayload,
+  WorkforcePositionRecord,
+  WorkforcePositionStatus,
+} from '../../shared/workforce.js';
+import type { PvmBridgeItemInput } from '../../shared/variance.js';
 
 /**
  * Pure selection and driver-authoring rules for the planning view (WI-0032, WI-0033).
@@ -460,5 +466,362 @@ export function availableTaskActions(
   }
   return [];
 }
+
+export interface WorkforcePositionDraft {
+  readonly id: string;
+  readonly positionCode: string;
+  readonly title: string;
+  readonly departmentName: string;
+  readonly accountCode: string;
+  readonly startPeriodCode: string;
+  readonly endPeriodCode: string;
+  readonly fte: string;
+  readonly annualSalary: string;
+  readonly burdenRate: string;
+  readonly bonusRate: string;
+  readonly rampFirstPeriodPct: string;
+  readonly meritPeriodCode: string;
+  readonly meritIncreasePct: string;
+  readonly status: WorkforcePositionStatus;
+}
+
+export interface WorkforcePlanDraft {
+  readonly scenarioName: string;
+  readonly scenarioKind: ScenarioKind;
+  readonly positions: readonly WorkforcePositionDraft[];
+}
+
+export function createEmptyWorkforcePositionDraft(
+  id: string,
+  defaultAccountCode = '',
+  defaultStartPeriod = 'P01',
+): WorkforcePositionDraft {
+  return {
+    id,
+    positionCode: '',
+    title: '',
+    departmentName: '',
+    accountCode: defaultAccountCode,
+    startPeriodCode: defaultStartPeriod,
+    endPeriodCode: '',
+    fte: '1.00',
+    annualSalary: '',
+    burdenRate: '0.20',
+    bonusRate: '0.00',
+    rampFirstPeriodPct: '1.00',
+    meritPeriodCode: '',
+    meritIncreasePct: '0.00',
+    status: 'active',
+  };
+}
+
+export function createInitialWorkforceDraft(
+  fiscalYear: number,
+  defaultAccountCode = '',
+  defaultStartPeriod = 'P01',
+): WorkforcePlanDraft {
+  return {
+    scenarioName: `Workforce Plan FY${String(fiscalYear)}`,
+    scenarioKind: 'forecast',
+    positions: [createEmptyWorkforcePositionDraft('wf-pos-1', defaultAccountCode, defaultStartPeriod)],
+  };
+}
+
+export function workforceDraftFromRecords(
+  records: readonly WorkforcePositionRecord[],
+  fiscalYear: number,
+  defaultAccountCode = '',
+  defaultStartPeriod = 'P01',
+  previousDraft?: WorkforcePlanDraft,
+): WorkforcePlanDraft {
+  const scenarioName = previousDraft?.scenarioName ?? `Workforce Plan FY${String(fiscalYear)}`;
+  const scenarioKind = previousDraft?.scenarioKind ?? 'forecast';
+  if (records.length === 0) {
+    return {
+      scenarioName,
+      scenarioKind,
+      positions: [createEmptyWorkforcePositionDraft('wf-pos-1', defaultAccountCode, defaultStartPeriod)],
+    };
+  }
+  return {
+    scenarioName,
+    scenarioKind,
+    positions: records.map((rec, index) => ({
+      id: `wf-rec-${rec.id || String(index)}`,
+      positionCode: rec.positionCode,
+      title: rec.title,
+      departmentName: rec.departmentName,
+      accountCode: rec.accountCode,
+      startPeriodCode: rec.startPeriodCode,
+      endPeriodCode: rec.endPeriodCode ?? '',
+      fte: rec.fte,
+      annualSalary: rec.annualSalary,
+      burdenRate: rec.burdenRate,
+      bonusRate: rec.bonusRate,
+      rampFirstPeriodPct: rec.rampFirstPeriodPct,
+      meritPeriodCode: rec.meritPeriodCode ?? '',
+      meritIncreasePct: rec.meritIncreasePct,
+      status: rec.status,
+    })),
+  };
+}
+
+export type BuildWorkforcePayloadResult =
+  | {
+      readonly ok: true;
+      readonly scenarioName: string;
+      readonly scenarioKind: ScenarioKind;
+      readonly positions: readonly WorkforcePositionPayload[];
+    }
+  | {
+      readonly ok: false;
+      readonly issues: readonly string[];
+    };
+
+/**
+ * Validates Workforce position rows strictly by string shape & period order without performing any
+ * compensation arithmetic. All monetary roll-ups and driver compilation run exclusively on the server.
+ */
+export function buildWorkforcePositionsPayload(
+  draft: WorkforcePlanDraft,
+  periods: readonly string[],
+  options?: { readonly requireScenarioName?: boolean; readonly allowEmpty?: boolean },
+): BuildWorkforcePayloadResult {
+  const issues: string[] = [];
+  const scenarioName = draft.scenarioName.trim();
+
+  if (options?.requireScenarioName === true && scenarioName.length === 0) {
+    issues.push('SCENARIO_NAME_REQUIRED: Enter a target scenario name before committing Workforce plan.');
+  }
+
+  if (periods.length === 0) {
+    issues.push('EMPTY_PERIODS: At least one fiscal period is required.');
+  }
+
+  if (draft.positions.length === 0 && options?.allowEmpty !== true) {
+    issues.push('NO_POSITIONS: Add at least one Workforce position before saving or running a preview.');
+  }
+
+  const periodIndex = new Map<string, number>();
+  for (let i = 0; i < periods.length; i += 1) {
+    periodIndex.set(periods[i]!, i);
+  }
+
+  const seenCodes = new Set<string>();
+  const built: WorkforcePositionPayload[] = [];
+  let activeCount = 0;
+
+  for (let i = 0; i < draft.positions.length; i += 1) {
+    const row = draft.positions[i]!;
+    const label = `Position ${String(i + 1)}`;
+    const positionCode = row.positionCode.trim().replace(/\s+/g, ' ');
+    const title = row.title.trim();
+    const departmentName = row.departmentName.trim();
+    const accountCode = row.accountCode.trim();
+    const startPeriodCode = row.startPeriodCode.trim();
+    const endPeriodRaw = row.endPeriodCode.trim();
+    const endPeriodCode = endPeriodRaw.length > 0 ? endPeriodRaw : null;
+    const meritPeriodRaw = row.meritPeriodCode.trim();
+    const meritPeriodCode = meritPeriodRaw.length > 0 ? meritPeriodRaw : null;
+
+    if (positionCode.length === 0) {
+      issues.push(`${label}: position code is required.`);
+    } else if (seenCodes.has(positionCode)) {
+      issues.push(`DUPLICATE_POSITION_CODE:${positionCode}`);
+    } else {
+      seenCodes.add(positionCode);
+    }
+
+    if (title.length === 0) {
+      issues.push(`${label}: role title is required.`);
+    }
+    if (departmentName.length === 0) {
+      issues.push(`${label}: department name is required.`);
+    }
+    if (accountCode.length === 0) {
+      issues.push(`${label}: GL expense account is required.`);
+    }
+
+    const startIdx = periodIndex.get(startPeriodCode);
+    if (startIdx === undefined) {
+      issues.push(`${label}: start period "${startPeriodCode}" is not in the fiscal horizon.`);
+    }
+
+    let endIdx = periods.length - 1;
+    if (endPeriodCode !== null) {
+      const resolvedEnd = periodIndex.get(endPeriodCode);
+      if (resolvedEnd === undefined) {
+        issues.push(`${label}: end period "${endPeriodCode}" is not in the fiscal horizon.`);
+      } else {
+        endIdx = resolvedEnd;
+      }
+    }
+    if (startIdx !== undefined && endIdx < startIdx) {
+      issues.push(`${label}: end period cannot precede start period.`);
+    }
+
+    if (meritPeriodCode !== null && !periodIndex.has(meritPeriodCode)) {
+      issues.push(`${label}: merit period "${meritPeriodCode}" is not in the fiscal horizon.`);
+    }
+
+    const decimalFields: readonly [string, string][] = [
+      ['FTE', row.fte],
+      ['annual salary', row.annualSalary],
+      ['burden rate', row.burdenRate],
+      ['bonus rate', row.bonusRate],
+      ['first-period ramp', row.rampFirstPeriodPct],
+      ['merit increase', row.meritIncreasePct],
+    ];
+    for (const [fieldName, rawValue] of decimalFields) {
+      if (!isCanonicalDecimalString(rawValue)) {
+        issues.push(`${label}: ${fieldName} must be a canonical decimal string.`);
+      }
+    }
+
+    if (row.status === 'active') {
+      activeCount += 1;
+    }
+
+    built.push({
+      positionCode,
+      title,
+      departmentName,
+      accountCode,
+      startPeriodCode,
+      endPeriodCode,
+      fte: row.fte.trim(),
+      annualSalary: row.annualSalary.trim(),
+      burdenRate: row.burdenRate.trim(),
+      bonusRate: row.bonusRate.trim(),
+      rampFirstPeriodPct: row.rampFirstPeriodPct.trim(),
+      meritPeriodCode,
+      meritIncreasePct: row.meritIncreasePct.trim(),
+      status: row.status,
+    });
+  }
+
+  if (options?.allowEmpty !== true && draft.positions.length > 0 && activeCount === 0 && options?.requireScenarioName === true) {
+    issues.push('NO_ACTIVE_POSITIONS: Set at least one position status to active before committing.');
+  }
+
+  if (issues.length > 0) {
+    return { ok: false, issues };
+  }
+
+  return {
+    ok: true,
+    scenarioName,
+    scenarioKind: draft.scenarioKind,
+    positions: built,
+  };
+}
+
+export interface PvmItemDraft {
+  readonly id: string;
+  readonly key: string;
+  readonly label: string;
+  readonly planUnits: string;
+  readonly planPrice: string;
+  readonly actualUnits: string;
+  readonly actualPrice: string;
+}
+
+const NON_NEGATIVE_DECIMAL_RE = /^\d+(?:\.\d{1,6})?$/;
+const SIGNED_MONEY_DECIMAL_RE = /^-?\d+(?:\.\d{1,6})?$/;
+
+export function createEmptyPvmItemDraft(id: string): PvmItemDraft {
+  return {
+    id,
+    key: '',
+    label: '',
+    planUnits: '',
+    planPrice: '',
+    actualUnits: '',
+    actualPrice: '',
+  };
+}
+
+export type BuildPvmItemsResult =
+  | { readonly ok: true; readonly items: readonly PvmBridgeItemInput[] }
+  | { readonly ok: false; readonly issues: readonly string[] };
+
+/**
+ * Validates PVM bridge item rows strictly by decimal string shape without numeric conversion.
+ * All PVM decomposition arithmetic and residual allocation run exclusively in /core/variance.
+ */
+export function buildPvmBridgeItemsPayload(
+  rows: readonly PvmItemDraft[],
+): BuildPvmItemsResult {
+  const issues: string[] = [];
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      issues: ['NO_PVM_ITEMS: Add at least one SKU or segment row before computing the PVM bridge.'],
+    };
+  }
+
+  const seenKeys = new Set<string>();
+  const built: PvmBridgeItemInput[] = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    const labelPrefix = `Segment ${String(i + 1)}`;
+    const key = row.key.trim().replace(/\s+/g, ' ');
+    const label = row.label.trim();
+    const planUnits = row.planUnits.trim();
+    const planPrice = row.planPrice.trim();
+    const actualUnits = row.actualUnits.trim();
+    const actualPrice = row.actualPrice.trim();
+
+    if (key.length === 0) {
+      issues.push(`${labelPrefix}: segment key is required.`);
+    } else if (seenKeys.has(key)) {
+      issues.push(`DUPLICATE_ITEM_KEY:${key}`);
+    } else {
+      seenKeys.add(key);
+    }
+
+    if (label.length === 0) {
+      issues.push(`${labelPrefix}: segment label is required.`);
+    }
+    if (!NON_NEGATIVE_DECIMAL_RE.test(planUnits)) {
+      issues.push(`${labelPrefix}: plan units must be a non-negative decimal string (e.g. 100).`);
+    }
+    if (!SIGNED_MONEY_DECIMAL_RE.test(planPrice)) {
+      issues.push(`${labelPrefix}: plan price must be a canonical decimal string (e.g. 10.00).`);
+    }
+    if (!NON_NEGATIVE_DECIMAL_RE.test(actualUnits)) {
+      issues.push(`${labelPrefix}: actual units must be a non-negative decimal string (e.g. 120).`);
+    }
+    if (!SIGNED_MONEY_DECIMAL_RE.test(actualPrice)) {
+      issues.push(`${labelPrefix}: actual price must be a canonical decimal string (e.g. 11.00).`);
+    }
+
+    if (
+      key.length > 0 &&
+      label.length > 0 &&
+      NON_NEGATIVE_DECIMAL_RE.test(planUnits) &&
+      SIGNED_MONEY_DECIMAL_RE.test(planPrice) &&
+      NON_NEGATIVE_DECIMAL_RE.test(actualUnits) &&
+      SIGNED_MONEY_DECIMAL_RE.test(actualPrice)
+    ) {
+      built.push({
+        key,
+        label,
+        planUnits,
+        planPrice,
+        actualUnits,
+        actualPrice,
+      });
+    }
+  }
+
+  if (issues.length > 0) {
+    return { ok: false, issues };
+  }
+
+  return { ok: true, items: built };
+}
+
 
 

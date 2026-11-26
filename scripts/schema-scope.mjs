@@ -30,7 +30,7 @@ export const APPROVED_M1_TABLES = [
   'audit_log',
 ];
 
-/** Opened in M2 under DEC-014 & DEC-017 (§11.2, §11.9). Workforce/CapEx/FX/Consolidation remain blocked. */
+/** Opened in M2 under DEC-014 & DEC-017 (§11.2, §11.9). CapEx/FX/Consolidation remain blocked. */
 export const APPROVED_M2_COLLABORATION_TABLES = [
   'approval_task',
   'comment',
@@ -38,9 +38,15 @@ export const APPROVED_M2_COLLABORATION_TABLES = [
   'notification',
 ];
 
+/** Opened in M2 under DEC-018 (§2.4 One-Engine Module proof: Workforce). */
+export const APPROVED_M2_WORKFORCE_TABLES = [
+  'workforce_position',
+];
+
 const APPROVED_SET = new Set([
   ...APPROVED_M1_TABLES,
   ...APPROVED_M2_COLLABORATION_TABLES,
+  ...APPROVED_M2_WORKFORCE_TABLES,
 ]);
 
 export function checkSchemaScope(rootDir = process.cwd(), { requireComplete = false } = {}) {

@@ -689,6 +689,17 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
       `/api/companies/${String(COMPANY['companyId'])}/board-pack/export?period=P12&format=pdf`,
     );
     expect(calls[0]?.headers['authorization']).toBe('Bearer token-123');
+
+    const pptxBlob = await client.downloadBoardPack(String(COMPANY['companyId']), {
+      period: 'P12',
+      fiscalYear: 2026,
+      format: 'pptx',
+    });
+    expect(await pptxBlob.text()).toBe('%PDF-1.3 board pack');
+    expect(calls[1]?.url).toBe(
+      `/api/companies/${String(COMPANY['companyId'])}/board-pack/export?period=P12&year=2026&format=pptx`,
+    );
+    expect(calls[1]?.headers['authorization']).toBe('Bearer token-123');
   });
 
   it('reads and commits versioned source mappings through tenant-scoped relative URLs', async () => {
@@ -1092,5 +1103,353 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(calls[5]?.url).toBe(
       `/api/companies/${companyId}/workflow/notifications/${notifId}/read`,
     );
+  });
+
+  it('calls the Workforce workspace, save, preview, and commit routes with canonical string decimal payloads (WI-0035)', async () => {
+    const companyId = String(COMPANY['companyId']);
+    const posId = '44444444-4444-4444-8444-444444444444';
+    const scenarioId = '55555555-5555-4555-8555-555555555555';
+    const planVersionId = '66666666-6666-4666-8666-666666666666';
+
+    const sampleWorkspace = {
+      companyId,
+      fiscalYear: 2026,
+      currency: 'USD',
+      currencyScale: 2,
+      actorRole: 'owner',
+      moduleSpec: {
+        moduleKey: 'workforce',
+        moduleName: 'Workforce & Headcount Compensation',
+        version: '2.0.0',
+        dimensions: ['department', 'position', 'account'],
+        driverKinds: ['fixed'],
+        recommendedStatementLineKeys: ['pl.opex.payroll'],
+        inputColumns: [],
+        reportPackSections: ['headcount_fte'],
+      },
+      periods: ['P01', 'P02'],
+      accounts: [{ code: '5100', name: 'Direct Engineering Payroll', type: 'expense' }],
+      positions: [
+        {
+          id: posId,
+          positionCode: 'ENG-001',
+          title: 'Senior Engineer',
+          departmentName: 'Engineering',
+          accountCode: '5100',
+          accountName: 'Direct Engineering Payroll',
+          startPeriodCode: 'P01',
+          endPeriodCode: null,
+          fte: '1.00',
+          annualSalary: '120000.00',
+          burdenRate: '0.20',
+          bonusRate: '0.00',
+          rampFirstPeriodPct: '1.00',
+          meritPeriodCode: null,
+          meritIncreasePct: '0.00',
+          status: 'active',
+          createdAt: '2026-11-25T12:00:00.000Z',
+          updatedAt: '2026-11-25T12:00:00.000Z',
+        },
+      ],
+    };
+
+    const samplePreview = {
+      companyId,
+      fiscalYear: 2026,
+      currency: 'USD',
+      currencyScale: 2,
+      periods: ['P01', 'P02'],
+      positionPeriodRows: [],
+      positionSummaries: [],
+      departmentSummaries: [],
+      fteByPeriod: { P01: '1.00', P02: '1.00' },
+      costByPeriod: { P01: '12000.00', P02: '12000.00' },
+      grandTotalFteMonths: '2.00',
+      grandTotalCost: '24000.00',
+      compiledDrivers: [],
+      driverPlan: {
+        fiscalYear: 2026,
+        currencyScale: 2,
+        periods: ['P01', 'P02'],
+        lines: [],
+        totalsByAccount: { '5100': '24000.00' },
+        totalsByPeriod: { P01: '12000.00', P02: '12000.00' },
+        grandTotal: '24000.00',
+      },
+    };
+
+    const { fetchImpl, calls } = fakeFetch((req) => {
+      if (req.url.includes('/workforce/commit')) {
+        return {
+          status: 201,
+          body: {
+            preview: samplePreview,
+            commit: {
+              scenarioId,
+              scenarioName: 'Budget FY2026',
+              scenarioKind: 'budget',
+              planVersionId,
+              versionNo: 1,
+              lineCount: 2,
+              grandTotal: '24000.00',
+              totalsByAccount: { '5100': '24000.00' },
+            },
+          },
+        };
+      }
+      if (req.url.includes('/workforce/preview')) {
+        return { status: 200, body: samplePreview };
+      }
+      return { status: 200, body: sampleWorkspace };
+    });
+
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const ws = await client.getWorkforceWorkspace(companyId, { year: 2026 });
+    expect(ws.fiscalYear).toBe(2026);
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/workforce?year=2026`);
+
+    const saved = await client.saveWorkforcePositions(companyId, {
+      fiscalYear: 2026,
+      positions: ws.positions.map(({ id: _id, accountName: _an, createdAt: _c, updatedAt: _u, ...p }) => p),
+    });
+    expect(saved.positions[0]?.annualSalary).toBe('120000.00');
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/workforce/positions`);
+
+    const preview = await client.previewWorkforcePlan(companyId, { fiscalYear: 2026 });
+    expect(preview.grandTotalCost).toBe('24000.00');
+    expect(calls[2]?.url).toBe(`/api/companies/${companyId}/workforce/preview`);
+
+    const committed = await client.commitWorkforcePlan(companyId, {
+      fiscalYear: 2026,
+      scenarioName: 'Budget FY2026',
+      scenarioKind: 'budget',
+      saveRoster: true,
+    });
+    expect(committed.commit.grandTotal).toBe('24000.00');
+    expect(calls[3]?.url).toBe(`/api/companies/${companyId}/workforce/commit`);
+  });
+
+  it('calls M2 Flux Analysis and PVM Bridge endpoints with relative URLs and canonical decimal strings (WI-0036)', async () => {
+    const companyId = String(COMPANY['companyId']);
+    let step = 0;
+    const { fetchImpl, calls } = fakeFetch(() => {
+      step += 1;
+      if (step === 1) {
+        return {
+          status: 200,
+          body: {
+            companyId,
+            fiscalYear: 2026,
+            throughPeriodCode: 'P01',
+            scenarioId: null,
+            scenarioName: 'Budget FY2026',
+            planVersionId: null,
+            versionNo: 1,
+            hasPlan: true,
+            minAbsVariance: '100.00',
+            topN: 5,
+            totalPlannedAccounts: 2,
+            materialCount: 1,
+            otherPlannedCount: 1,
+            drivers: [
+              {
+                rank: 1,
+                accountCode: '4000',
+                accountName: 'Service revenue',
+                accountType: 'revenue',
+                actual: '11850.00',
+                plan: '10000.00',
+                varianceAmount: '1850.00',
+                absVarianceAmount: '1850.00',
+                variancePctKind: 'computed',
+                variancePctFormatted: '18.50%',
+                shareOfAbsVariancePct: '75.00%',
+                favorability: 'favorable',
+                isMaterial: true,
+              },
+            ],
+            unplannedAccounts: [],
+            bridge: {
+              planTotal: '16000.00',
+              topDriversVariance: '1850.00',
+              otherPlannedVariance: '-100.00',
+              plannedVarianceTotal: '1750.00',
+              plannedActualTotal: '17750.00',
+              unplannedActualTotal: '0.00',
+              actualTotal: '17750.00',
+              totalAbsPlannedVariance: '1950.00',
+              revenueVariance: '1850.00',
+              expenseVariance: '-100.00',
+              netOperatingVariance: '1950.00',
+              tieOutValid: true,
+            },
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          companyId,
+          fiscalYear: 2026,
+          periodCode: 'P01',
+          baseCurrency: 'USD',
+          scenarioName: null,
+          totalPlanUnits: '200.00',
+          totalActualUnits: '230.00',
+          totalPlanRevenue: '3000.00',
+          totalActualRevenue: '3410.00',
+          totalVariance: '410.00',
+          variancePct: '13.67%',
+          variancePctStatus: 'computed',
+          priceVariance: '10.00',
+          volumeVariance: '450.00',
+          mixVariance: '-50.00',
+          invariantPassed: true,
+          invariantDelta: '0',
+          items: [
+            {
+              key: 'SKU_A',
+              label: 'Enterprise Seat',
+              planUnits: '100.00',
+              planPrice: '10.00',
+              actualUnits: '120.00',
+              actualPrice: '11.00',
+              planRevenue: '1000.00',
+              actualRevenue: '1320.00',
+              totalVariance: '320.00',
+              priceEffect: '120.00',
+              volumeAtPlanPrice: '200.00',
+              mixContribution: '-25.00',
+              favorability: 'favorable',
+            },
+          ],
+        },
+      };
+    });
+
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+    const flux = await client.getFluxAnalysis(companyId, {
+      period: 'P01',
+      fiscalYear: 2026,
+      minAbs: '100.00',
+      topN: 5,
+    });
+    expect(calls[0]?.url).toBe(
+      `/api/companies/${companyId}/variance/flux?period=P01&year=2026&minAbs=100.00&topN=5`,
+    );
+    expect(flux.bridge.tieOutValid).toBe(true);
+    expect(flux.drivers[0]?.shareOfAbsVariancePct).toBe('75.00%');
+
+    const pvm = await client.computePvmBridge(companyId, {
+      periodCode: 'P01',
+      fiscalYear: 2026,
+      items: [
+        {
+          key: 'SKU_A',
+          label: 'Enterprise Seat',
+          planUnits: '100',
+          planPrice: '10.00',
+          actualUnits: '120',
+          actualPrice: '11.00',
+        },
+      ],
+    });
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/variance/pvm`);
+    expect(calls[1]?.method).toBe('POST');
+    expect(pvm.invariantPassed).toBe(true);
+    expect(pvm.priceVariance).toBe('10.00');
+    expect(pvm.mixVariance).toBe('-50.00');
+  });
+
+  it('fetches Dashboards v1 summary with period/year/template query params and preserves money strings', async () => {
+    const companyId = String(COMPANY['companyId']);
+    const { fetchImpl, calls } = fakeFetch(() => ({
+      status: 200,
+      body: {
+        companyId,
+        companyName: 'Northwind Holdings Inc.',
+        baseCurrency: 'USD',
+        currencyScale: 2,
+        range: { fromPeriodCode: 'P01', throughPeriodCode: 'P04', fiscalYear: 2026 },
+        hasActuals: true,
+        hasPlan: true,
+        scenarioName: 'Budget FY2026',
+        versionNo: 1,
+        articulation: { valid: true, checks: [] },
+        kpis: [
+          {
+            key: 'pnl.revenue',
+            label: 'Revenue (YTD)',
+            category: 'profitability',
+            formula: 'SUM(pl.revenue.*)',
+            sourceKeys: ['pl.revenue.product'],
+            boardPackKey: 'statement:pnl.revenue',
+            unit: 'currency',
+            format: 'currency',
+            basis: 'ytd',
+            phase: 'M2',
+            value: '1200.00',
+            formattedValue: '1200.00',
+            status: 'computed',
+          },
+        ],
+        trend: [
+          {
+            periodCode: 'P01',
+            periodNo: 1,
+            fiscalYear: 2026,
+            revenue: '300.00',
+            ebitda: '90.00',
+            netIncome: '63.00',
+            operatingCashFlow: '75.00',
+            endingCash: '500.00',
+            revenueBarPct: 60,
+            ebitdaBarPct: 18,
+            cashBarPct: 100,
+            ebitdaPositive: true,
+            cashPositive: true,
+          },
+        ],
+        reportBuilder: {
+          templateId: 'cash_and_runway',
+          templateLabel: 'Cash & Liquidity Brief',
+          blockCount: 1,
+          citedBlockCount: 1,
+          unlinkedBlockCount: 0,
+          citationCoveragePct: '100.00%',
+          blocks: [
+            {
+              id: 'cash-end',
+              kind: 'metric',
+              title: 'Ending Cash Balance',
+              citationKey: 'cf.ending_cash',
+              unit: 'currency',
+              value: '500.00',
+              formattedValue: '500.00',
+              status: 'computed',
+              cited: true,
+            },
+          ],
+        },
+        sources: [],
+      },
+    }));
+
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+    const summary = await client.getDashboardSummary(companyId, {
+      period: 'P04',
+      fiscalYear: 2026,
+      template: 'cash_and_runway',
+    });
+
+    expect(calls[0]?.method).toBe('GET');
+    expect(calls[0]?.url).toBe(
+      `/api/companies/${companyId}/dashboards?period=P04&year=2026&template=cash_and_runway`,
+    );
+    expect(calls[0]?.headers['authorization']).toBe('Bearer token-123');
+    expect(typeof summary.kpis[0]?.value).toBe('string');
+    expect(summary.kpis[0]?.formattedValue).toBe('1200.00');
+    expect(summary.reportBuilder.citationCoveragePct).toBe('100.00%');
   });
 });

@@ -9,7 +9,7 @@ import {
 /**
  * Board-pack wire contract (MASTER_PROMPT §5.6 A6, §9.3.7; Spine Gates G7/U5).
  *
- * There is ONE canonical pack model. The preview, the XLSX renderer and the PDF renderer consume
+ * There is ONE canonical pack model. The preview, XLSX, PDF, and PPTX renderers consume
  * the same `rows[]`; every `value` is a decimal string already produced by /core, never a number
  * formatted by the browser or recalculated by a renderer. The key namespaces below are declared
  * once here so UI, exports and tests cannot invent a second financial vocabulary (§4.5, K3).
@@ -36,7 +36,7 @@ export const BoardPackRowSchema = z.object({
 });
 export type BoardPackRow = z.infer<typeof BoardPackRowSchema>;
 
-export const BoardPackExportFormatSchema = z.enum(['xlsx', 'pdf']);
+export const BoardPackExportFormatSchema = z.enum(['xlsx', 'pdf', 'pptx']);
 export type BoardPackExportFormat = z.infer<typeof BoardPackExportFormatSchema>;
 
 export const BoardPackReportSchema = z.object({

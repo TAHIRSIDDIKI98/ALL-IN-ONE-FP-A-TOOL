@@ -439,3 +439,433 @@ export function buildBudgetVariance(params: {
     byType,
   };
 }
+
+// ============================================================================
+// M2 Flux Analysis (Material Variance Waterfall Bridge, §5.7)
+// ============================================================================
+
+export interface FluxDriverRow {
+  readonly rank: number;
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly accountType: AccountType;
+  readonly actual: string;
+  readonly plan: string;
+  readonly varianceAmount: string;
+  readonly absVarianceAmount: string;
+  readonly variancePctKind: VariancePctKind;
+  readonly variancePctFormatted: string | null;
+  readonly shareOfAbsVariancePct: string;
+  readonly favorability: Favorability;
+  readonly isMaterial: boolean;
+}
+
+export interface FluxUnplannedAccount {
+  readonly accountCode: string;
+  readonly accountName: string;
+  readonly accountType: AccountType;
+  readonly actual: string;
+}
+
+export interface FluxBridgeSummary {
+  readonly planTotal: string;
+  readonly topDriversVariance: string;
+  readonly otherPlannedVariance: string;
+  readonly plannedVarianceTotal: string;
+  readonly plannedActualTotal: string;
+  readonly unplannedActualTotal: string;
+  readonly actualTotal: string;
+  readonly totalAbsPlannedVariance: string;
+  readonly revenueVariance: string;
+  readonly expenseVariance: string;
+  readonly netOperatingVariance: string;
+  readonly tieOutValid: boolean;
+}
+
+export interface FluxAnalysisResult {
+  readonly drivers: readonly FluxDriverRow[];
+  readonly unplannedAccounts: readonly FluxUnplannedAccount[];
+  readonly totalPlannedAccounts: number;
+  readonly materialCount: number;
+  readonly otherPlannedCount: number;
+  readonly minAbsVariance: string;
+  readonly topN: number;
+  readonly bridge: FluxBridgeSummary;
+}
+
+export type AnalyzeFluxOutcome =
+  | { readonly ok: true; readonly result: FluxAnalysisResult }
+  | { readonly ok: false; readonly issues: readonly string[] };
+
+export function analyzeFlux(params: {
+  readonly rows: readonly BudgetVarianceRow[];
+  readonly minAbsVariance?: string;
+  readonly topN?: number;
+  readonly scale?: number;
+}): AnalyzeFluxOutcome {
+  const scale = params.scale ?? 2;
+  const minAbsRaw = (params.minAbsVariance ?? '0').trim();
+  const topN = params.topN ?? 10;
+  const issues: string[] = [];
+
+  let minAbsThreshold = money('0');
+  try {
+    minAbsThreshold = money(minAbsRaw.length === 0 ? '0' : minAbsRaw);
+    if (minAbsThreshold.isNegative()) {
+      issues.push('NEGATIVE_THRESHOLD:minAbsVariance');
+    }
+  } catch {
+    issues.push('INVALID_THRESHOLD:minAbsVariance');
+  }
+
+  if (!Number.isInteger(topN) || topN < 1 || topN > 100) {
+    issues.push('INVALID_TOP_N');
+  }
+
+  if (issues.length > 0) {
+    return { ok: false, issues };
+  }
+
+  const unplannedAccounts: FluxUnplannedAccount[] = [];
+  const plannedCandidates: {
+    readonly row: BudgetVarianceRow;
+    readonly actual: Decimal;
+    readonly plan: Decimal;
+    readonly variance: Decimal;
+    readonly absVariance: Decimal;
+  }[] = [];
+
+  for (const row of params.rows) {
+    if (row.plan === null || row.varianceAmount === null) {
+      unplannedAccounts.push({
+        accountCode: row.accountCode,
+        accountName: row.accountName,
+        accountType: row.accountType,
+        actual: serialize(row.actual === null ? money('0') : money(row.actual), scale),
+      });
+      continue;
+    }
+    const actual = row.actual === null ? money('0') : money(row.actual);
+    const plan = money(row.plan);
+    const variance = money(row.varianceAmount);
+    plannedCandidates.push({
+      row,
+      actual,
+      plan,
+      variance,
+      absVariance: magnitudeWithoutAbs(variance),
+    });
+  }
+
+  unplannedAccounts.sort((a, b) =>
+    a.accountCode < b.accountCode ? -1 : a.accountCode > b.accountCode ? 1 : 0,
+  );
+
+  plannedCandidates.sort((a, b) => {
+    const cmp = b.absVariance.comparedTo(a.absVariance);
+    if (cmp !== 0) return cmp;
+    return a.row.accountCode < b.row.accountCode ? -1 : a.row.accountCode > b.row.accountCode ? 1 : 0;
+  });
+
+  let planTotal = money('0');
+  let plannedActualTotal = money('0');
+  let plannedVarianceTotal = money('0');
+  let totalAbsPlannedVariance = money('0');
+  let revenueVariance = money('0');
+  let expenseVariance = money('0');
+
+  for (const item of plannedCandidates) {
+    planTotal = add(planTotal, item.plan);
+    plannedActualTotal = add(plannedActualTotal, item.actual);
+    plannedVarianceTotal = add(plannedVarianceTotal, item.variance);
+    totalAbsPlannedVariance = add(totalAbsPlannedVariance, item.absVariance);
+    if (item.row.accountType === 'revenue') {
+      revenueVariance = add(revenueVariance, item.variance);
+    } else if (item.row.accountType === 'expense') {
+      expenseVariance = add(expenseVariance, item.variance);
+    }
+  }
+
+  let unplannedActualTotal = money('0');
+  for (const item of unplannedAccounts) {
+    unplannedActualTotal = add(unplannedActualTotal, money(item.actual));
+  }
+
+  const materialCandidates = plannedCandidates.filter(
+    (item) => item.absVariance.comparedTo(minAbsThreshold) >= 0,
+  );
+  const selected = materialCandidates.slice(0, topN);
+  const selectedSet = new Set(selected.map((item) => item.row.accountCode));
+
+  let topDriversVariance = money('0');
+  const drivers: FluxDriverRow[] = selected.map((item, idx) => {
+    topDriversVariance = add(topDriversVariance, item.variance);
+    let shareFormatted = '0.00%';
+    if (!totalAbsPlannedVariance.isZero()) {
+      const shareRatio = div(item.absVariance, totalAbsPlannedVariance, 6, 'HALF_UP');
+      if (shareRatio !== null) {
+        const sharePct = mul(shareRatio, '100').toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+        shareFormatted = `${sharePct.toFixed(2)}%`;
+      }
+    }
+    return {
+      rank: idx + 1,
+      accountCode: item.row.accountCode,
+      accountName: item.row.accountName,
+      accountType: item.row.accountType,
+      actual: serialize(item.actual, scale),
+      plan: serialize(item.plan, scale),
+      varianceAmount: serialize(item.variance, scale),
+      absVarianceAmount: serialize(item.absVariance, scale),
+      variancePctKind: item.row.variancePctKind,
+      variancePctFormatted: item.row.variancePctFormatted,
+      shareOfAbsVariancePct: shareFormatted,
+      favorability: item.row.favorability,
+      isMaterial: true,
+    };
+  });
+
+  let otherPlannedVariance = money('0');
+  let otherPlannedCount = 0;
+  for (const item of plannedCandidates) {
+    if (!selectedSet.has(item.row.accountCode)) {
+      otherPlannedVariance = add(otherPlannedVariance, item.variance);
+      otherPlannedCount += 1;
+    }
+  }
+
+  const reconstructedPlannedActual = add(
+    planTotal,
+    add(topDriversVariance, otherPlannedVariance),
+  );
+  const actualTotal = add(plannedActualTotal, unplannedActualTotal);
+  const tieOutValid =
+    reconstructedPlannedActual.equals(plannedActualTotal) &&
+    add(topDriversVariance, otherPlannedVariance).equals(plannedVarianceTotal);
+
+  return {
+    ok: true,
+    result: {
+      drivers,
+      unplannedAccounts,
+      totalPlannedAccounts: plannedCandidates.length,
+      materialCount: materialCandidates.length,
+      otherPlannedCount,
+      minAbsVariance: serialize(minAbsThreshold, scale),
+      topN,
+      bridge: {
+        planTotal: serialize(planTotal, scale),
+        topDriversVariance: serialize(topDriversVariance, scale),
+        otherPlannedVariance: serialize(otherPlannedVariance, scale),
+        plannedVarianceTotal: serialize(plannedVarianceTotal, scale),
+        plannedActualTotal: serialize(plannedActualTotal, scale),
+        unplannedActualTotal: serialize(unplannedActualTotal, scale),
+        actualTotal: serialize(actualTotal, scale),
+        totalAbsPlannedVariance: serialize(totalAbsPlannedVariance, scale),
+        revenueVariance: serialize(revenueVariance, scale),
+        expenseVariance: serialize(expenseVariance, scale),
+        netOperatingVariance: serialize(sub(revenueVariance, expenseVariance), scale),
+        tieOutValid,
+      },
+    },
+  };
+}
+
+// ============================================================================
+// M2 PVM Bridge Contract (String-serialized Price-Volume-Mix Bridge, §5.7)
+// ============================================================================
+
+export interface PvmBridgeItemInput {
+  readonly key: string;
+  readonly label: string;
+  readonly planUnits: string;
+  readonly planPrice: string;
+  readonly actualUnits: string;
+  readonly actualPrice: string;
+}
+
+export interface PvmBridgeItemRow {
+  readonly key: string;
+  readonly label: string;
+  readonly planUnits: string;
+  readonly planPrice: string;
+  readonly actualUnits: string;
+  readonly actualPrice: string;
+  readonly planRevenue: string;
+  readonly actualRevenue: string;
+  readonly totalVariance: string;
+  readonly priceEffect: string;
+  readonly volumeAtPlanPrice: string;
+  readonly mixContribution: string;
+  readonly favorability: Favorability;
+}
+
+export interface PvmBridgeResult {
+  readonly totalPlanUnits: string;
+  readonly totalActualUnits: string;
+  readonly totalPlanRevenue: string;
+  readonly totalActualRevenue: string;
+  readonly totalVariance: string;
+  readonly variancePct: string | null;
+  readonly variancePctStatus: VariancePctKind;
+  readonly priceVariance: string;
+  readonly volumeVariance: string;
+  readonly mixVariance: string;
+  readonly invariantPassed: boolean;
+  readonly invariantDelta: string;
+  readonly items: readonly PvmBridgeItemRow[];
+}
+
+export type BuildPvmBridgeOutcome =
+  | { readonly ok: true; readonly bridge: PvmBridgeResult }
+  | { readonly ok: false; readonly issues: readonly string[] };
+
+export function buildPvmBridge(params: {
+  readonly items: readonly PvmBridgeItemInput[];
+  readonly basis: VarianceBasis;
+  readonly scale?: number;
+}): BuildPvmBridgeOutcome {
+  const scale = params.scale ?? 2;
+  if (params.items.length === 0) {
+    return { ok: false, issues: ['EMPTY_PVM_ITEMS'] };
+  }
+
+  const issues: string[] = [];
+  const seenKeys = new Set<string>();
+  const parsedItems: {
+    readonly key: string;
+    readonly label: string;
+    readonly planUnits: Decimal;
+    readonly planPrice: Decimal;
+    readonly actualUnits: Decimal;
+    readonly actualPrice: Decimal;
+  }[] = [];
+
+  for (let idx = 0; idx < params.items.length; idx += 1) {
+    const raw = params.items[idx]!;
+    const key = raw.key.trim().replace(/\s+/g, ' ');
+    const label = raw.label.trim();
+    if (!key) {
+      issues.push(`EMPTY_ITEM_KEY:${idx + 1}`);
+      continue;
+    }
+    if (seenKeys.has(key)) {
+      issues.push(`DUPLICATE_ITEM_KEY:${key}`);
+      continue;
+    }
+    if (!label) {
+      issues.push(`EMPTY_ITEM_LABEL:${key}`);
+    }
+
+    let planUnits: Decimal | null = null;
+    let actualUnits: Decimal | null = null;
+    let planPrice: Decimal | null = null;
+    let actualPrice: Decimal | null = null;
+
+    try {
+      planUnits = money(raw.planUnits);
+      if (planUnits.isNegative()) issues.push(`NEGATIVE_UNITS:${key}:planUnits`);
+    } catch {
+      issues.push(`INVALID_UNITS:${key}:planUnits`);
+    }
+    try {
+      actualUnits = money(raw.actualUnits);
+      if (actualUnits.isNegative()) issues.push(`NEGATIVE_UNITS:${key}:actualUnits`);
+    } catch {
+      issues.push(`INVALID_UNITS:${key}:actualUnits`);
+    }
+    try {
+      planPrice = money(raw.planPrice);
+    } catch {
+      issues.push(`INVALID_PRICE:${key}:planPrice`);
+    }
+    try {
+      actualPrice = money(raw.actualPrice);
+    } catch {
+      issues.push(`INVALID_PRICE:${key}:actualPrice`);
+    }
+
+    seenKeys.add(key);
+    if (planUnits !== null && actualUnits !== null && planPrice !== null && actualPrice !== null) {
+      parsedItems.push({ key, label, planUnits, planPrice, actualUnits, actualPrice });
+    }
+  }
+
+  if (issues.length > 0) {
+    return { ok: false, issues };
+  }
+
+  const decomp = computePvmDecomposition(parsedItems, scale);
+  const check = verifyPvmInvariant(
+    decomp.totalVariance,
+    decomp.priceVariance,
+    decomp.volumeVariance,
+    decomp.mixVariance,
+  );
+
+  const totalPlanUnits = sum(parsedItems.map((i) => i.planUnits));
+  const totalActualUnits = sum(parsedItems.map((i) => i.actualUnits));
+  const totalPlanRev = sum(parsedItems.map((i) => mul(i.planUnits, i.planPrice)));
+  const totalActualRev = sum(parsedItems.map((i) => mul(i.actualUnits, i.actualPrice)));
+  const avgPlanPrice = totalPlanUnits.isZero()
+    ? money('0')
+    : totalPlanRev.dividedBy(totalPlanUnits);
+
+  const portfolioVar = computeVariance({
+    accountType: 'revenue',
+    actual: totalActualRev.toDecimalPlaces(scale, Decimal.ROUND_HALF_UP),
+    plan: totalPlanRev.toDecimalPlaces(scale, Decimal.ROUND_HALF_UP),
+    basis: params.basis,
+  });
+
+  const itemRows: PvmBridgeItemRow[] = parsedItems.map((item) => {
+    const planRev = mul(item.planUnits, item.planPrice);
+    const actualRev = mul(item.actualUnits, item.actualPrice);
+    const totalVar = sub(actualRev, planRev);
+    const priceEff = mul(item.actualUnits, sub(item.actualPrice, item.planPrice));
+    const volAtPlan = mul(sub(item.actualUnits, item.planUnits), item.planPrice);
+
+    const planShare = totalPlanUnits.isZero()
+      ? money('0')
+      : item.planUnits.dividedBy(totalPlanUnits);
+    const expectedAtMixNeutral = mul(planShare, totalActualUnits);
+    const mixUnitDelta = sub(item.actualUnits, expectedAtMixNeutral);
+    const mixContrib = mul(mixUnitDelta, sub(item.planPrice, avgPlanPrice));
+
+    const roundedTotal = totalVar.toDecimalPlaces(scale, Decimal.ROUND_HALF_UP);
+    return {
+      key: item.key,
+      label: item.label,
+      planUnits: serialize(item.planUnits, scale),
+      planPrice: serialize(item.planPrice, scale),
+      actualUnits: serialize(item.actualUnits, scale),
+      actualPrice: serialize(item.actualPrice, scale),
+      planRevenue: serialize(planRev, scale),
+      actualRevenue: serialize(actualRev, scale),
+      totalVariance: serialize(roundedTotal, scale),
+      priceEffect: serialize(priceEff, scale),
+      volumeAtPlanPrice: serialize(volAtPlan, scale),
+      mixContribution: serialize(mixContrib, scale),
+      favorability: deriveFavorability('revenue', roundedTotal),
+    };
+  });
+
+  return {
+    ok: true,
+    bridge: {
+      totalPlanUnits: serialize(totalPlanUnits, scale),
+      totalActualUnits: serialize(totalActualUnits, scale),
+      totalPlanRevenue: serialize(totalPlanRev, scale),
+      totalActualRevenue: serialize(totalActualRev, scale),
+      totalVariance: serialize(decomp.totalVariance, scale),
+      variancePct: portfolioVar.variancePctFormatted,
+      variancePctStatus: portfolioVar.variancePctKind,
+      priceVariance: serialize(decomp.priceVariance, scale),
+      volumeVariance: serialize(decomp.volumeVariance, scale),
+      mixVariance: serialize(decomp.mixVariance, scale),
+      invariantPassed: decomp.invariantPassed,
+      invariantDelta: check.delta,
+      items: itemRows,
+    },
+  };
+}
