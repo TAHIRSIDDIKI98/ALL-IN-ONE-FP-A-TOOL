@@ -1,0 +1,163 @@
+{
+  "meta": {
+    "id": "CONSOL-GROUP-01",
+    "derivation": "Hand-computed ASC 830 / IAS 21 multi-entity consolidation & FX revaluation oracle (MASTER_PROMPT §7.5, §11.6 FX1-FX5)",
+    "approvedDate": "2026-11-27"
+  },
+  "input": {
+    "reportingCurrency": "USD",
+    "asOfDate": "2026-03-31",
+    "fxRates": [
+      { "baseCurrency": "GBP", "quoteCurrency": "USD", "rateType": "closing", "asOfDate": "2026-03-31", "rate": "1.2800", "source": "ecb" },
+      { "baseCurrency": "GBP", "quoteCurrency": "USD", "rateType": "average", "asOfDate": "2026-03-31", "rate": "1.2500", "source": "ecb" },
+      { "baseCurrency": "GBP", "quoteCurrency": "USD", "rateType": "historical", "asOfDate": "2026-01-01", "rate": "1.2000", "source": "manual" },
+      { "baseCurrency": "EUR", "quoteCurrency": "USD", "rateType": "closing", "asOfDate": "2026-03-31", "rate": "1.1000", "source": "ecb" },
+      { "baseCurrency": "EUR", "quoteCurrency": "USD", "rateType": "average", "asOfDate": "2026-03-31", "rate": "1.0800", "source": "ecb" },
+      { "baseCurrency": "EUR", "quoteCurrency": "USD", "rateType": "historical", "asOfDate": "2026-01-01", "rate": "1.0500", "source": "manual" }
+    ],
+    "entities": [
+      {
+        "entityId": "ent-us",
+        "entityCode": "ENT-US",
+        "entityName": "Parent US Corp",
+        "functionalCurrency": "USD",
+        "lines": [
+          { "accountCode": "1000", "accountName": "Cash", "accountType": "asset", "normalSide": "debit", "statementLineKey": "bs.asset.cash", "debit": "50000.00", "credit": "0.00" },
+          { "accountCode": "1150", "accountName": "IC Receivable UK", "accountType": "asset", "normalSide": "debit", "statementLineKey": "bs.asset.ar", "debit": "12000.00", "credit": "0.00" },
+          { "accountCode": "1160", "accountName": "IC Receivable DE", "accountType": "asset", "normalSide": "debit", "statementLineKey": "bs.asset.ar", "debit": "5000.00", "credit": "0.00" },
+          { "accountCode": "2000", "accountName": "Accounts Payable", "accountType": "liability", "normalSide": "credit", "statementLineKey": "bs.liability.ap", "debit": "0.00", "credit": "10000.00" },
+          { "accountCode": "3000", "accountName": "Common Stock", "accountType": "equity", "normalSide": "credit", "statementLineKey": "bs.equity.common_stock", "debit": "0.00", "credit": "45000.00" },
+          { "accountCode": "4000", "accountName": "Product Revenue", "accountType": "revenue", "normalSide": "credit", "statementLineKey": "pl.revenue.product", "debit": "0.00", "credit": "30000.00" },
+          { "accountCode": "5000", "accountName": "COGS", "accountType": "expense", "normalSide": "debit", "statementLineKey": "pl.cogs.direct", "debit": "18000.00", "credit": "0.00" }
+        ]
+      },
+      {
+        "entityId": "ent-uk",
+        "entityCode": "ENT-UK",
+        "entityName": "Subsidiary UK Ltd",
+        "functionalCurrency": "GBP",
+        "lines": [
+          { "accountCode": "1000", "accountName": "Cash", "accountType": "asset", "normalSide": "debit", "statementLineKey": "bs.asset.cash", "debit": "25000.00", "credit": "0.00" },
+          { "accountCode": "2150", "accountName": "IC Payable US", "accountType": "liability", "normalSide": "credit", "statementLineKey": "bs.liability.ap", "debit": "0.00", "credit": "9375.00" },
+          { "accountCode": "3000", "accountName": "Common Stock", "accountType": "equity", "normalSide": "credit", "statementLineKey": "bs.equity.common_stock", "debit": "0.00", "credit": "10000.00" },
+          { "accountCode": "4000", "accountName": "Product Revenue", "accountType": "revenue", "normalSide": "credit", "statementLineKey": "pl.revenue.product", "debit": "0.00", "credit": "12000.00" },
+          { "accountCode": "5000", "accountName": "COGS", "accountType": "expense", "normalSide": "debit", "statementLineKey": "pl.cogs.direct", "debit": "6375.00", "credit": "0.00" }
+        ]
+      },
+      {
+        "entityId": "ent-de",
+        "entityCode": "ENT-DE",
+        "entityName": "Subsidiary DE GmbH",
+        "functionalCurrency": "EUR",
+        "lines": [
+          { "accountCode": "1000", "accountName": "Cash", "accountType": "asset", "normalSide": "debit", "statementLineKey": "bs.asset.cash", "debit": "14000.00", "credit": "0.00" },
+          { "accountCode": "2160", "accountName": "IC Payable US", "accountType": "liability", "normalSide": "credit", "statementLineKey": "bs.liability.ap", "debit": "0.00", "credit": "4400.00" },
+          { "accountCode": "3000", "accountName": "Common Stock", "accountType": "equity", "normalSide": "credit", "statementLineKey": "bs.equity.common_stock", "debit": "0.00", "credit": "8000.00" },
+          { "accountCode": "4000", "accountName": "Product Revenue", "accountType": "revenue", "normalSide": "credit", "statementLineKey": "pl.revenue.product", "debit": "0.00", "credit": "5000.00" },
+          { "accountCode": "5000", "accountName": "COGS", "accountType": "expense", "normalSide": "debit", "statementLineKey": "pl.cogs.direct", "debit": "3400.00", "credit": "0.00" }
+        ]
+      }
+    ],
+    "ownerships": [
+      { "parentEntityId": "ent-us", "childEntityId": "ent-uk", "ownershipPct": "80.00", "method": "full" },
+      { "parentEntityId": "ent-us", "childEntityId": "ent-de", "ownershipPct": "100.00", "method": "full" }
+    ],
+    "icRules": [
+      {
+        "ruleId": "ic-us-uk",
+        "fromEntityId": "ent-us",
+        "fromEntityCode": "ENT-US",
+        "fromAccountCode": "1150",
+        "toEntityId": "ent-uk",
+        "toEntityCode": "ENT-UK",
+        "toAccountCode": "2150",
+        "ruleType": "ic_receivable_payable",
+        "description": "US-UK Intercompany Receivable/Payable"
+      },
+      {
+        "ruleId": "ic-us-de",
+        "fromEntityId": "ent-us",
+        "fromEntityCode": "ENT-US",
+        "fromAccountCode": "1160",
+        "toEntityId": "ent-de",
+        "toEntityCode": "ENT-DE",
+        "toAccountCode": "2160",
+        "ruleType": "ic_receivable_payable",
+        "description": "US-DE Intercompany Receivable/Payable (with 160.00 residual)"
+      }
+    ]
+  },
+  "expected": {
+    "status": "quarantined_residuals",
+    "totalAssets": "97560.00",
+    "totalLiabilities": "10000.00",
+    "totalEquityBeforeNci": "86159.25",
+    "totalCta": "1400.75",
+    "totalGroupEquity": "87560.00",
+    "minorityInterest": "4000.00",
+    "controllingEquity": "83560.00",
+    "totalRevenue": "50400.00",
+    "totalExpenses": "29640.75",
+    "consolidatedNetIncome": "20759.25",
+    "nciNetIncome": "1406.25",
+    "controllingNetIncome": "19353.00",
+    "totalEliminations": "16840.00",
+    "unmatchedIcCount": 1,
+    "groupTbBalanced": true,
+    "groupBsBalanced": true,
+    "accountingEquationImbalance": "0.00",
+    "entityCta": {
+      "ENT-US": { "totalCta": "0.00", "openingEquityRateEffect": "0.00", "netIncomeRateEffect": "0.00" },
+      "ENT-UK": { "totalCta": "968.75", "openingEquityRateEffect": "800.00", "netIncomeRateEffect": "168.75" },
+      "ENT-DE": { "totalCta": "432.00", "openingEquityRateEffect": "400.00", "netIncomeRateEffect": "32.00" }
+    },
+    "ukMinorityInterest": {
+      "ownershipPct": "80.00",
+      "minorityPct": "20.00",
+      "subsidiaryNetEquity": "20000.00",
+      "nciNetIncomeShare": "1406.25",
+      "nciEquityShare": "2593.75",
+      "nciTotalBalance": "4000.00"
+    },
+    "ic": {
+      "ic-us-uk": { "eliminatedAmount": "12000.00", "unmatchedDifference": "0.00", "status": "matched" },
+      "ic-us-de": { "eliminatedAmount": "4840.00", "unmatchedDifference": "160.00", "status": "unmatched_difference" }
+    }
+  },
+  "revaluationInput": {
+    "functionalCurrency": "USD",
+    "items": [
+      {
+        "itemKey": "ar-eur-open",
+        "entityCode": "ENT-US",
+        "accountCode": "1100",
+        "accountType": "asset",
+        "foreignCurrency": "EUR",
+        "functionalCurrency": "USD",
+        "foreignAmount": "10000.00",
+        "bookingRate": "1.0800",
+        "periodEndRate": "1.1000",
+        "settled": false
+      },
+      {
+        "itemKey": "ap-gbp-settled",
+        "entityCode": "ENT-US",
+        "accountCode": "2000",
+        "accountType": "liability",
+        "foreignCurrency": "GBP",
+        "functionalCurrency": "USD",
+        "foreignAmount": "5000.00",
+        "bookingRate": "1.2500",
+        "periodEndRate": "1.2700",
+        "settled": true,
+        "settlementRate": "1.2800"
+      }
+    ]
+  },
+  "revaluationExpected": {
+    "realizedTotal": "-150.00",
+    "unrealizedTotal": "200.00",
+    "netRevaluationTotal": "50.00",
+    "journalBalanced": true
+  }
+}

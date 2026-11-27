@@ -14,6 +14,10 @@ import type { FluxAnalysisResponse, PvmBridgeResponse } from '../shared/variance
 import type { DashboardSummaryResponse } from '../shared/dashboards.js';
 import type { ChartAccountPayload } from './api/client.js';
 import { DashboardsPanel } from './components/DashboardsPanel.js';
+import { CloseManagementPanel } from './components/CloseManagementPanel.js';
+import { ExceptionsInboxPanel } from './components/ExceptionsInboxPanel.js';
+import { ConsolidationPanel } from './components/ConsolidationPanel.js';
+import StatementsPage from './pages/StatementsPage.js';
 import { FluxPvmPanel } from './components/FluxPvmPanel.js';
 import {
   DriverAuthoringPanel,
@@ -1556,6 +1560,181 @@ describe('M2 Flux Waterfall & PVM Bridge view inside StatementsPage (WI-0036)', 
     );
     expect(errorHtml).toContain('PERIOD_NOT_FOUND');
     expect(errorHtml).toContain('Period P99 does not exist.');
+  });
+
+  it('renders Close tab inside Model Grid preserving 1 h1 and five UI states without client math (WI-0045)', () => {
+    const closeRouteHtml = renderToStaticMarkup(
+      createElement(ModelGridPage, { onNavigate: noop, initialView: 'close' }),
+    );
+    expect(closeRouteHtml.match(/<h1\b/g)?.length ?? 0).toBe(1);
+    expect(closeRouteHtml).toContain('Model Grid');
+    expect(closeRouteHtml).toContain('Close view');
+    expect(closeRouteHtml).toContain('No active company workspace');
+
+    const loadingHtml = renderToStaticMarkup(
+      createElement(CloseManagementPanel, {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        authToken: 'tok',
+        fiscalYear: 2026,
+        onNavigate: noop,
+        forcedState: 'loading',
+      }),
+    );
+    expect(loadingHtml).toContain('Loading close checklist');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(CloseManagementPanel, {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        authToken: 'tok',
+        fiscalYear: 2026,
+        onNavigate: noop,
+        forcedState: 'error',
+      }),
+    );
+    expect(errorHtml).toContain('Close management workspace could not be loaded.');
+    expect(errorHtml).toContain('Retry failed action');
+  });
+
+  it('renders Exceptions tab inside Model Grid preserving 1 h1 and five UI states without client math (WI-0046)', () => {
+    const exceptionsRouteHtml = renderToStaticMarkup(
+      createElement(ModelGridPage, { onNavigate: noop, initialView: 'exceptions' }),
+    );
+    expect(exceptionsRouteHtml.match(/<h1\b/g)?.length ?? 0).toBe(1);
+    expect(exceptionsRouteHtml).toContain('Model Grid');
+    expect(exceptionsRouteHtml).toContain('Exceptions view');
+    expect(exceptionsRouteHtml).toContain('Go to Import Wizard');
+
+    const loadingHtml = renderToStaticMarkup(
+      createElement(ExceptionsInboxPanel, {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        authToken: 'tok',
+        fiscalYear: 2026,
+        onNavigate: noop,
+        forcedState: 'loading',
+      }),
+    );
+    expect(loadingHtml).toContain('Loading exception rules');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(ExceptionsInboxPanel, {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        authToken: 'tok',
+        fiscalYear: 2026,
+        onNavigate: noop,
+        forcedState: 'error',
+      }),
+    );
+    expect(errorHtml).toContain('Unable to load exception inbox.');
+    expect(errorHtml).toContain('Retry failed action');
+  });
+
+  it('renders Consolidation tab inside Financial Statements preserving 1 h1 and five UI states without client math (WI-0047)', () => {
+    const emptyRouteHtml = renderToStaticMarkup(
+      createElement(StatementsPage, { onNavigate: noop }),
+    );
+    expect(emptyRouteHtml.match(/<h1\b/g)?.length ?? 0).toBe(1);
+    expect(emptyRouteHtml).toContain('Financial Statements');
+
+    const loadingHtml = renderToStaticMarkup(
+      createElement(ConsolidationPanel, {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        authToken: 'tok',
+        periodCode: 'P01',
+        fiscalYear: 2026,
+        forcedState: 'loading',
+      }),
+    );
+    expect(loadingHtml).toContain('Loading multi-entity consolidation workspace');
+
+    const errorHtml = renderToStaticMarkup(
+      createElement(ConsolidationPanel, {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        authToken: 'tok',
+        periodCode: 'P01',
+        fiscalYear: 2026,
+        forcedState: 'error',
+      }),
+    );
+    expect(errorHtml).toContain('Unable to load consolidation workspace.');
+    expect(errorHtml).toContain('Retry failed action');
+
+    const populatedHtml = renderToStaticMarkup(
+      createElement(ConsolidationPanel, {
+        companyId: '11111111-1111-4111-8111-111111111111',
+        authToken: 'tok',
+        periodCode: 'P01',
+        fiscalYear: 2026,
+        initialWorkspace: {
+          companyId: '11111111-1111-4111-8111-111111111111',
+          baseCurrency: 'USD',
+          entities: [
+            {
+              id: '22222222-2222-4222-8222-222222222221',
+              code: 'ENT-US',
+              name: 'US Parent',
+              currency: 'USD',
+              parentId: null,
+              active: true,
+            },
+            {
+              id: '22222222-2222-4222-8222-222222222222',
+              code: 'ENT-UK',
+              name: 'UK Sub',
+              currency: 'GBP',
+              parentId: '22222222-2222-4222-8222-222222222221',
+              active: true,
+            },
+          ],
+          ownerships: [],
+          fxRates: [],
+          icRules: [],
+          latestRun: {
+            runId: '33333333-3333-4333-8333-333333333333',
+            fiscalYear: 2026,
+            periodId: '44444444-4444-4444-8444-444444444444',
+            periodCode: 'P01',
+            asOfDate: '2026-01-31',
+            reportingCurrency: 'USD',
+            status: 'quarantined_residuals',
+            groupTbBalanced: true,
+            groupBsBalanced: true,
+            totalAssets: '97560.00',
+            totalLiabilities: '10000.00',
+            totalEquityBeforeNci: '86159.25',
+            controllingEquity: '83560.00',
+            minorityInterest: '4000.00',
+            totalGroupEquity: '87560.00',
+            totalCta: '1400.75',
+            totalRevenue: '50400.00',
+            totalExpenses: '29640.75',
+            consolidatedNetIncome: '20759.25',
+            controllingNetIncome: '19353.00',
+            nciNetIncome: '1406.25',
+            totalEliminations: '16840.00',
+            unmatchedIcCount: 1,
+            hasUnmatchedIc: true,
+            groupTbTotalDebit: '139200.75',
+            groupTbTotalCredit: '139200.75',
+            accountingEquationImbalance: '0.00',
+            ctaAccountCode: '3900',
+            ctaAccountName: 'Cumulative Translation Adjustment (CTA)',
+            entityTranslations: [],
+            minorityInterests: [],
+            icReconciliations: [],
+            eliminationLines: [],
+            consolidatedTrialBalance: [],
+            createdAt: '2026-11-26T00:00:00.000Z',
+          },
+          recentRuns: [],
+        },
+      }),
+    );
+    expect(populatedHtml).not.toContain('<h1');
+    expect(populatedHtml).toContain('USD 97560.00');
+    expect(populatedHtml).toContain('USD 1400.75');
+    expect(populatedHtml).toContain('USD 4000.00');
+    expect(populatedHtml).toContain('A - (L + E) = 0.00');
+    expect(populatedHtml).toContain('quarantined_residuals');
   });
 });
 

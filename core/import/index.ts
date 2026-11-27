@@ -154,6 +154,7 @@ export interface ImportedGlRow {
   readonly entryRef: string;
   readonly postingDate: string;
   readonly accountCode: string;
+  readonly entityCode?: string;
   readonly description: string;
   readonly debit: Decimal;
   readonly credit: Decimal;
@@ -201,6 +202,7 @@ export function evaluateMessyGlCsv(params: {
   const idxDate = colIndex.get('date') ?? colIndex.get('posting_date') ?? 1;
   const idxCode = colIndex.get('account_code') ?? colIndex.get('account') ?? 2;
   const idxDesc = colIndex.get('description') ?? colIndex.get('memo') ?? 3;
+  const idxEntity = colIndex.get('entity_code') ?? colIndex.get('entity');
   const idxDebit = colIndex.get('debit');
   const idxCredit = colIndex.get('credit');
   const idxSigned = colIndex.get('amount');
@@ -239,6 +241,8 @@ export function evaluateMessyGlCsv(params: {
     const entryRef = (cells[idxRef] ?? '').trim();
     const rawDate = (cells[idxDate] ?? '').trim();
     const rawCode = (cells[idxCode] ?? '').trim();
+    const rawEntity = idxEntity === undefined ? '' : (cells[idxEntity] ?? '').trim();
+    const entityCode = rawEntity.length === 0 ? undefined : normalizeCode(rawEntity);
     const description = (cells[idxDesc] ?? '').replace(/\s+/g, ' ').trim();
 
     if (entryRef.length === 0) {
@@ -328,6 +332,7 @@ export function evaluateMessyGlCsv(params: {
     const fingerprint = [
       entryRef,
       dateRes.isoDate,
+      entityCode ?? '',
       canonicalCode,
       serialize(debit, 2),
       serialize(credit, 2),
@@ -345,6 +350,7 @@ export function evaluateMessyGlCsv(params: {
       entryRef,
       postingDate: dateRes.isoDate,
       accountCode: canonicalCode,
+      ...(entityCode === undefined ? {} : { entityCode }),
       description,
       debit,
       credit,

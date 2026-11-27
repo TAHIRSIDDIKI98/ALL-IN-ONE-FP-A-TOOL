@@ -3,7 +3,16 @@
 All notable changes to OneFP&A are recorded here under Semantic Versioning (`MASTER_PROMPT §12.15`).
 Every claim maps to a `VERIFIED` gate in `TASKBOARD.md` (`Q6`).
 
-## [0.2.0] - 2026-11-25 (M1 The Spine — in progress)
+## [0.3.0] - 2026-11-26 (M3 xP&A + Intelligence — in progress)
+
+Milestone M3 is opened under `DEC-022` following verified M2 completion (`docs/m2-gate-review.md`, `WI-0044`).
+
+### Added
+- M3 Multi-Entity, Multi-Currency & Consolidation/Eliminations with Tie-Out Proof (`WI-0047`, `DEC-024`, `§2.5`, `§2.6`, `§6.6`, `§7.8`, `§11.6 FX1–FX5`): `0007_m3_consolidation.sql` (`fx_rate`, `entity_ownership`, `intercompany_rule`, immutable `consolidation_run` trigger), pure `/core/consolidation` (`P25`) with hand-computed oracle `/fixtures/oracles/consolidation/consolidation_oracle.json`, `entity_code` multi-entity routing through the single GL import path (`core/import` + `server/db/repositories/import.ts`), `/shared/consolidation.ts`, 7 company-scoped `/api/companies/:companyId/consolidation*` endpoints, and `ConsolidationPanel` inside `/statements?tab=consolidation` (`DEC-015`).
+- M3 Exception-Rule Catalog, Owner Exception Inbox & Reversal-Only Rectification Journal (`WI-0046`, `DEC-023`, `§2.6`, `§6.6`, `§7.4`, `§12.6`): `0006_m3_exceptions.sql` (`exception_finding`, immutable `exception_finding_event` trigger, `rectification_journal`), pure `/core/exceptions` 28-rule catalog (`EXC-001`..`EXC-028`) with golden oracle `/fixtures/oracles/exceptions/exceptions_oracle.json`, `shared/exceptions.ts`, 4 company-scoped `/api/companies/:companyId/exceptions*` endpoints posting reversals atomically through `commitImport` (`409 PERIOD_LOCKED` & `SOFT_CLOSE_WRITE_WARNING`), and `ExceptionsInboxPanel` inside `/model-grid?tab=exceptions` (`DEC-015`).
+- M3 Close Management & Period Locks (`WI-0045`, `DEC-022`, `§12.6 CLS1–CLS4`): `0005_m3_close_management.sql` (`fiscal_period` lock status + `close_task_template`, `close_cycle`, `close_task`, immutable `period_lock_event` trigger), pure `/core/close` DAG validation, live reconciliation gating, derived close status & period write guard, `409 PERIOD_LOCKED` + `PeriodWriteAdvisorySchema` on GL imports, 5 company-scoped `/api/companies/:companyId/close*` endpoints with RBAC & chained audit, and `CloseManagementPanel` inside `/model-grid?tab=close` (`DEC-015`) plus soft-close advisory banners on `/import`.
+
+## [0.2.0] - 2026-11-25 (M1–M2 The Spine & Planning Suite — verified)
 
 Milestone M1 is **not** complete; these are the verified increments so far (evidence in `TASKBOARD.md`).
 

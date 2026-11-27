@@ -9,6 +9,7 @@ import {
 import type { FluxAnalysisResponse, PvmBridgeResponse } from '../../shared/variance.js';
 import type { DashboardReportTemplateId, DashboardSummaryResponse } from '../../shared/dashboards.js';
 import { DashboardsPanel } from '../components/DashboardsPanel.js';
+import { ConsolidationPanel } from '../components/ConsolidationPanel.js';
 import { FluxPvmPanel } from '../components/FluxPvmPanel.js';
 import { EmptyState, ErrorState, LoadingState, PartialBanner } from '../components/StateFrame.js';
 import {
@@ -19,7 +20,7 @@ import {
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
-type StatementTab = 'pl' | 'bs' | 'cf' | 'bva' | 'flux' | 'dashboards';
+type StatementTab = 'pl' | 'bs' | 'cf' | 'bva' | 'flux' | 'dashboards' | 'consolidation';
 
 interface StatementLine {
   readonly label: string;
@@ -71,7 +72,14 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
   const initialTab = (() => {
     if (typeof window === 'undefined') return 'pl' as StatementTab;
     const param = new URLSearchParams(window.location.search).get('tab');
-    if (param === 'bs' || param === 'cf' || param === 'bva' || param === 'flux' || param === 'dashboards') {
+    if (
+      param === 'bs' ||
+      param === 'cf' ||
+      param === 'bva' ||
+      param === 'flux' ||
+      param === 'dashboards' ||
+      param === 'consolidation'
+    ) {
       return param;
     }
     return 'pl' as StatementTab;
@@ -304,11 +312,11 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
 
   const navigate = (path: SpineRoutePath): void => onNavigate(path);
 
-  if (forcedState === 'loading' || loadState === 'loading') {
+  if (forcedState === 'loading' || (activeTab !== 'consolidation' && loadState === 'loading')) {
     return <LoadingState label="Loading articulating statements from the server..." />;
   }
 
-  if (forcedState === 'error' || loadState === 'error') {
+  if (forcedState === 'error' || (activeTab !== 'consolidation' && loadState === 'error')) {
     return (
       <ErrorState
         title="Financial Statements"
@@ -331,7 +339,7 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
     );
   }
 
-  if (payload === null) {
+  if (activeTab !== 'consolidation' && payload === null) {
     return (
       <EmptyState
         title="Financial Statements"
@@ -344,13 +352,15 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
   }
 
   const lines =
-    activeTab === 'pl'
-      ? pnlLines(payload)
-      : activeTab === 'bs'
-        ? balanceSheetLines(payload)
-        : activeTab === 'cf'
-          ? cashFlowLines(payload)
-          : [];
+    payload === null
+      ? []
+      : activeTab === 'pl'
+        ? pnlLines(payload)
+        : activeTab === 'bs'
+          ? balanceSheetLines(payload)
+          : activeTab === 'cf'
+            ? cashFlowLines(payload)
+            : [];
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-6 space-y-4">
@@ -386,6 +396,7 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
                 { id: 'bva', label: 'BvA View' },
                 { id: 'flux', label: 'Flux & PVM' },
                 { id: 'dashboards', label: 'Dashboards & KPIs' },
+                { id: 'consolidation', label: 'Consolidation' },
               ] as const
             ).map((t) => (
               <button
@@ -407,17 +418,26 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
         </div>
       </div>
 
-      <p className="text-sm text-slate-600">
-        {payload.range.fromPeriodCode}–{payload.range.throughPeriodCode} of FY{payload.range.fiscalYear} ·{' '}
-        {payload.sources.length} committed source file(s) · every figure is a canonical decimal string from the
-        server.
-      </p>
+      {payload !== null && (
+        <p className="text-sm text-slate-600">
+          {payload.range.fromPeriodCode}–{payload.range.throughPeriodCode} of FY{payload.range.fiscalYear} ·{' '}
+          {payload.sources.length} committed source file(s) · every figure is a canonical decimal string from the
+          server.
+        </p>
+      )}
 
-      {!payload.articulation.valid && (
+      {payload !== null && !payload.articulation.valid && (
         <PartialBanner detail="Statement articulation (A1–A5) did not tie; treat these figures as provisional." />
       )}
 
-      {activeTab === 'dashboards' ? (
+      {activeTab === 'consolidation' ? (
+        <ConsolidationPanel
+          companyId={companyId}
+          authToken={authToken}
+          periodCode={period}
+          fiscalYear={payload?.range.fiscalYear ?? 2026}
+        />
+      ) : activeTab === 'dashboards' ? (
         <DashboardsPanel
           dashboard={dashboard}
           loadState={dashboardState}
@@ -598,32 +618,34 @@ export default function StatementsPage({ onNavigate, forcedState }: SpinePagePro
         </div>
       )}
 
-      <div className="rounded border border-slate-200 bg-slate-50 p-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-          Articulation checks (A1–A5)
-        </h2>
-        <ul className="mt-2 space-y-1 text-xs">
-          {payload.articulation.checks.map((check) => (
-            <li key={check.id} className="flex flex-wrap items-center gap-2">
-              <span
-                className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
-                  check.passed ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900'
-                }`}
-              >
-                {check.id} {check.passed ? 'pass' : 'fail'}
-              </span>
-              <span className="text-slate-700">{check.name}</span>
-              <span className="font-mono text-slate-500">{check.detail}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 text-xs text-slate-600">
-          Retained earnings: opening {payload.retainedEarnings.opening} + net income{' '}
-          {payload.retainedEarnings.netIncome} − distributions {payload.retainedEarnings.distributions} ={' '}
-          {payload.retainedEarnings.closingTotal}{' '}
-          {payload.retainedEarnings.rollForwardValid ? '(roll-forward holds)' : '(roll-forward broken)'}
-        </p>
-      </div>
+      {payload !== null && activeTab !== 'consolidation' && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Articulation checks (A1–A5)
+          </h2>
+          <ul className="mt-2 space-y-1 text-xs">
+            {payload.articulation.checks.map((check) => (
+              <li key={check.id} className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
+                    check.passed ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900'
+                  }`}
+                >
+                  {check.id} {check.passed ? 'pass' : 'fail'}
+                </span>
+                <span className="text-slate-700">{check.name}</span>
+                <span className="font-mono text-slate-500">{check.detail}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-slate-600">
+            Retained earnings: opening {payload.retainedEarnings.opening} + net income{' '}
+            {payload.retainedEarnings.netIncome} − distributions {payload.retainedEarnings.distributions} ={' '}
+            {payload.retainedEarnings.closingTotal}{' '}
+            {payload.retainedEarnings.rollForwardValid ? '(roll-forward holds)' : '(roll-forward broken)'}
+          </p>
+        </div>
+      )}
     </section>
   );
 }

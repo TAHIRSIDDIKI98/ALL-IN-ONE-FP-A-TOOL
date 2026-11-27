@@ -74,20 +74,100 @@ import type {
   OnboardingValidateRequest,
   OnboardingValidationReport,
 } from '../../shared/onboarding.js';
+import type {
+  CloseCycleSummary,
+  CloseDerivedStatus,
+  CloseOwnerRole,
+  CloseReconciliationSummary,
+  CloseTaskCategory,
+  CloseTaskStatus,
+  CloseTaskSummary,
+  CloseTaskTemplateInput,
+  CloseTaskTemplateSummary,
+  CloseWorkspaceResponse,
+  DerivedCloseStatusSummary,
+  InitializeCloseCycleRequest,
+  PeriodCloseOverviewItem,
+  PeriodLockEventSummary,
+  PeriodLockStatus,
+  TransitionCloseTaskRequest,
+  TransitionPeriodLockRequest,
+  UpsertCloseTemplatesRequest,
+  UpsertCloseTemplatesResponse,
+} from '../../shared/close.js';
+import type {
+  ExceptionScanRequest,
+  ExceptionTransitionRequest,
+  ExceptionWorkspaceResponse,
+  RectifyExceptionRequest,
+} from '../../shared/exceptions.js';
+import type { PeriodWriteAdvisory } from '../../shared/import.js';
 import type { BoardPackExportFormat } from '../../shared/boardPack.js';
+import type {
+  ConsolidationEntitySummary,
+  ConsolidationRunSummary,
+  ConsolidationWorkspaceResponse,
+  CreateEntityRequest,
+  CreateIntercompanyRuleRequest,
+  EntityOwnershipSummary,
+  FxRateSummary,
+  IntercompanyRuleSummary,
+  MonetaryRevaluationRequest,
+  MonetaryRevaluationResponse,
+  RunConsolidationRequest,
+  UpsertEntityOwnershipRequest,
+  UpsertFxRateRequest,
+} from '../../shared/consolidation.js';
 export type {
   BoardPackExportFormat,
+  ConsolidationEntitySummary,
+  ConsolidationRunSummary,
+  ConsolidationWorkspaceResponse,
+  CreateEntityRequest,
+  CreateIntercompanyRuleRequest,
+  EntityOwnershipSummary,
+  FxRateSummary,
+  IntercompanyRuleSummary,
+  MonetaryRevaluationRequest,
+  MonetaryRevaluationResponse,
+  RunConsolidationRequest,
+  UpsertEntityOwnershipRequest,
+  UpsertFxRateRequest,
+  ExceptionScanRequest,
+  ExceptionTransitionRequest,
+  ExceptionWorkspaceResponse,
+  RectifyExceptionRequest,
+  CloseCycleSummary,
+  CloseDerivedStatus,
+  CloseOwnerRole,
+  CloseReconciliationSummary,
+  CloseTaskCategory,
+  CloseTaskStatus,
+  CloseTaskSummary,
+  CloseTaskTemplateInput,
+  CloseTaskTemplateSummary,
+  CloseWorkspaceResponse,
   ConnectorConfigSummary,
   ConnectorSourceSystem,
   ConnectorsOverviewResponse,
   CreateConnectorRequest,
+  DerivedCloseStatusSummary,
   IndustryPackDetail,
   IndustryPackKey,
+  InitializeCloseCycleRequest,
   NormalizedJournalEntry,
   OnboardingApproveMappingsRequest,
   OnboardingApproveMappingsResponse,
   OnboardingChecklistResponse,
   OnboardingMappingSuggestionDto,
+  PeriodCloseOverviewItem,
+  PeriodLockEventSummary,
+  PeriodLockStatus,
+  PeriodWriteAdvisory,
+  TransitionCloseTaskRequest,
+  TransitionPeriodLockRequest,
+  UpsertCloseTemplatesRequest,
+  UpsertCloseTemplatesResponse,
   OnboardingRehearseMode,
   OnboardingRehearseRequest,
   OnboardingRehearseResponse,
@@ -352,6 +432,69 @@ export interface ApiClient {
   ): Promise<OnboardingRehearseResponse>;
   getOnboardingChecklist(companyId: string): Promise<OnboardingChecklistResponse>;
   signOffOnboardingChecklist(companyId: string): Promise<OnboardingChecklistResponse>;
+  getCloseWorkspace(
+    companyId: string,
+    query?: { readonly year?: number | null; readonly period?: string | null },
+  ): Promise<CloseWorkspaceResponse>;
+  upsertCloseTemplates(
+    companyId: string,
+    request: UpsertCloseTemplatesRequest,
+  ): Promise<UpsertCloseTemplatesResponse>;
+  initializeCloseCycle(
+    companyId: string,
+    request: InitializeCloseCycleRequest,
+  ): Promise<CloseWorkspaceResponse>;
+  transitionCloseTask(
+    companyId: string,
+    cycleId: string,
+    taskId: string,
+    request: TransitionCloseTaskRequest,
+  ): Promise<CloseWorkspaceResponse>;
+  transitionPeriodLock(
+    companyId: string,
+    periodId: string,
+    request: TransitionPeriodLockRequest,
+  ): Promise<CloseWorkspaceResponse>;
+  getExceptionsWorkspace(
+    companyId: string,
+    query?: { readonly year?: number | null; readonly period?: string | null },
+  ): Promise<ExceptionWorkspaceResponse>;
+  scanCompanyExceptions(
+    companyId: string,
+    request?: ExceptionScanRequest,
+  ): Promise<ExceptionWorkspaceResponse>;
+  transitionExceptionFinding(
+    companyId: string,
+    findingId: string,
+    request: ExceptionTransitionRequest,
+  ): Promise<ExceptionWorkspaceResponse>;
+  rectifyExceptionFinding(
+    companyId: string,
+    findingId: string,
+    request: RectifyExceptionRequest,
+  ): Promise<ExceptionWorkspaceResponse>;
+  getConsolidationWorkspace(companyId: string): Promise<ConsolidationWorkspaceResponse>;
+  createConsolidationEntity(
+    companyId: string,
+    request: CreateEntityRequest,
+  ): Promise<ConsolidationEntitySummary>;
+  upsertEntityOwnership(
+    companyId: string,
+    request: UpsertEntityOwnershipRequest,
+  ): Promise<EntityOwnershipSummary>;
+  upsertFxRate(companyId: string, request: UpsertFxRateRequest): Promise<FxRateSummary>;
+  createIntercompanyRule(
+    companyId: string,
+    request: CreateIntercompanyRuleRequest,
+  ): Promise<IntercompanyRuleSummary>;
+  previewFxRevaluation(
+    companyId: string,
+    request: MonetaryRevaluationRequest,
+  ): Promise<MonetaryRevaluationResponse>;
+  runConsolidation(
+    companyId: string,
+    request: RunConsolidationRequest,
+  ): Promise<ConsolidationRunSummary>;
 }
 
 function boardPackQuery(period: string, fiscalYear?: number | null): string {
@@ -380,7 +523,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   const doFetch = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
 
   async function request<T>(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     path: string,
     body?: unknown,
     requireAuth = true,
@@ -778,6 +921,109 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         `/api/companies/${encodeURIComponent(companyId)}/onboarding/checklist/signoff`,
         {},
       ),
+    getCloseWorkspace: (companyId, query) => {
+      const params = new URLSearchParams();
+      if (query?.year !== undefined && query.year !== null) params.set('year', String(query.year));
+      if (query?.period !== undefined && query.period !== null) params.set('period', query.period);
+      const suffix = params.toString();
+      return request<CloseWorkspaceResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/close${suffix.length > 0 ? `?${suffix}` : ''}`,
+      );
+    },
+    upsertCloseTemplates: (companyId, body) =>
+      request<UpsertCloseTemplatesResponse>(
+        'PUT',
+        `/api/companies/${encodeURIComponent(companyId)}/close/templates`,
+        body,
+      ),
+    initializeCloseCycle: (companyId, body) =>
+      request<CloseWorkspaceResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/close/cycles`,
+        body,
+      ),
+    transitionCloseTask: (companyId, cycleId, taskId, body) =>
+      request<CloseWorkspaceResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/close/cycles/${encodeURIComponent(cycleId)}/tasks/${encodeURIComponent(taskId)}/transition`,
+        body,
+      ),
+    transitionPeriodLock: (companyId, periodId, body) =>
+      request<CloseWorkspaceResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/close/periods/${encodeURIComponent(periodId)}/lock`,
+        body,
+      ),
+    getExceptionsWorkspace: (companyId, query) => {
+      const params = new URLSearchParams();
+      if (query?.year !== undefined && query.year !== null) params.set('year', String(query.year));
+      if (query?.period !== undefined && query.period !== null) params.set('period', query.period);
+      const suffix = params.toString();
+      return request<ExceptionWorkspaceResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/exceptions${suffix.length > 0 ? `?${suffix}` : ''}`,
+      );
+    },
+    scanCompanyExceptions: (companyId, body) =>
+      request<ExceptionWorkspaceResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/exceptions/scan`,
+        body ?? {},
+      ),
+    transitionExceptionFinding: (companyId, findingId, body) =>
+      request<ExceptionWorkspaceResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/exceptions/${encodeURIComponent(findingId)}/transition`,
+        body,
+      ),
+    rectifyExceptionFinding: (companyId, findingId, body) =>
+      request<ExceptionWorkspaceResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/exceptions/${encodeURIComponent(findingId)}/rectify`,
+        body,
+      ),
+    getConsolidationWorkspace: (companyId) =>
+      request<ConsolidationWorkspaceResponse>(
+        'GET',
+        `/api/companies/${encodeURIComponent(companyId)}/consolidation`,
+      ),
+    createConsolidationEntity: (companyId, body) =>
+      request<ConsolidationEntitySummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/consolidation/entities`,
+        body,
+      ),
+    upsertEntityOwnership: (companyId, body) =>
+      request<EntityOwnershipSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/consolidation/ownerships`,
+        body,
+      ),
+    upsertFxRate: (companyId, body) =>
+      request<FxRateSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/consolidation/fx-rates`,
+        body,
+      ),
+    createIntercompanyRule: (companyId, body) =>
+      request<IntercompanyRuleSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/consolidation/ic-rules`,
+        body,
+      ),
+    previewFxRevaluation: (companyId, body) =>
+      request<MonetaryRevaluationResponse>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/consolidation/fx-revaluation`,
+        body,
+      ),
+    runConsolidation: (companyId, body) =>
+      request<ConsolidationRunSummary>(
+        'POST',
+        `/api/companies/${encodeURIComponent(companyId)}/consolidation/runs`,
+        body,
+      ),
   };
 }
 
@@ -896,6 +1142,7 @@ export interface ImportPreviewPayload {
   readonly totalCredits: string;
   readonly imported: readonly ImportPreviewRow[];
   readonly quarantined: readonly QuarantineReason[];
+  readonly periodAdvisories?: readonly PeriodWriteAdvisory[];
 }
 
 export interface ImportCommitRequest {
@@ -916,6 +1163,7 @@ export interface ImportCommitPayload {
   readonly entryCount: number;
   readonly sourceHash: string;
   readonly quarantined: readonly QuarantineReason[];
+  readonly periodAdvisories?: readonly PeriodWriteAdvisory[];
 }
 
 /** Trial-balance read model (shared/reports.ts `TrialBalanceReportSchema`). */

@@ -4,6 +4,7 @@ import { generateFiscalYears, type CalendarGenerateOptions } from '../core/calen
 import { evaluateMessyGlCsv } from '../core/import/index.js';
 import { serialize } from '../core/money/index.js';
 import { AppError } from '../shared/errors.js';
+import { UtcInstantSchema } from '../shared/temporal.js';
 import {
   CalendarPreviewRequestSchema,
   ImportPreviewRequestSchema,
@@ -153,6 +154,57 @@ import {
   signOffCompanyOnboardingChecklist,
   validateCompanyOnboarding,
 } from './db/repositories/onboarding.js';
+import {
+  CloseWorkspaceResponseSchema,
+  InitializeCloseCycleRequestSchema,
+  TransitionCloseTaskRequestSchema,
+  TransitionPeriodLockRequestSchema,
+  UpsertCloseTemplatesRequestSchema,
+  UpsertCloseTemplatesResponseSchema,
+} from '../shared/close.js';
+import {
+  getCloseWorkspace,
+  initializeCloseCycle,
+  transitionCloseTaskRecord,
+  transitionPeriodLockRecord,
+  upsertCloseTemplates,
+} from './db/repositories/close.js';
+import {
+  ConsolidationEntitySummarySchema,
+  ConsolidationRunSummarySchema,
+  ConsolidationWorkspaceResponseSchema,
+  CreateEntityRequestSchema,
+  CreateIntercompanyRuleRequestSchema,
+  EntityOwnershipSummarySchema,
+  FxRateSummarySchema,
+  IntercompanyRuleSummarySchema,
+  MonetaryRevaluationRequestSchema,
+  MonetaryRevaluationResponseSchema,
+  RunConsolidationRequestSchema,
+  UpsertEntityOwnershipRequestSchema,
+  UpsertFxRateRequestSchema,
+} from '../shared/consolidation.js';
+import {
+  createCompanyEntity,
+  createIntercompanyRule,
+  executeConsolidationRun,
+  getConsolidationWorkspace,
+  previewFxRevaluation,
+  upsertEntityOwnership,
+  upsertFxRate,
+} from './db/repositories/consolidation.js';
+import {
+  ExceptionScanRequestSchema,
+  ExceptionTransitionRequestSchema,
+  ExceptionWorkspaceResponseSchema,
+  RectifyExceptionRequestSchema,
+} from '../shared/exceptions.js';
+import {
+  getExceptionsWorkspace,
+  rectifyExceptionFinding,
+  scanCompanyExceptions,
+  transitionExceptionFinding,
+} from './db/repositories/exceptions.js';
 import {
   createCompanyWorkspace,
   findAppUserByFirebaseUid,
@@ -1532,6 +1584,355 @@ export function createSpineApp(context: SpineContext) {
           }),
         );
         res.status(201).json(OnboardingChecklistResponseSchema.parse(checklist));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M3 Close Management & Period Locks (§12.6, CLS1–CLS4, WI-0045):
+   * Close task DAG templates, per-period close cycles, prerequisite-enforced sign-offs,
+   * derived close status, and audited soft/hard-close period lock transitions.
+   */
+  app.get(
+    '/api/companies/:companyId/close',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const year = readFiscalYearQuery(req.query['year']);
+        const period = readPeriodQuery(req.query['period']);
+        const workspace = await getCloseWorkspace(db, {
+          companyId,
+          actorId: userId,
+          ...(year !== null ? { fiscalYear: year } : {}),
+          ...(period !== null ? { periodCode: period } : {}),
+        });
+        res.status(200).json(CloseWorkspaceResponseSchema.parse(workspace));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.put(
+    '/api/companies/:companyId/close/templates',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(UpsertCloseTemplatesRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          upsertCloseTemplates(tx, {
+            companyId,
+            actorId: userId,
+            templates: body.templates,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(200).json(UpsertCloseTemplatesResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/close/cycles',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(InitializeCloseCycleRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          initializeCloseCycle(tx, {
+            companyId,
+            actorId: userId,
+            fiscalYear: body.fiscalYear,
+            periodCode: body.periodCode,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(201).json(CloseWorkspaceResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/close/cycles/:cycleId/tasks/:taskId/transition',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const cycleId = readEntityUuidParam(req.params['cycleId'], 'cycleId');
+        const taskId = readEntityUuidParam(req.params['taskId'], 'taskId');
+        const body = parseBody(TransitionCloseTaskRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          transitionCloseTaskRecord(tx, {
+            companyId,
+            actorId: userId,
+            cycleId,
+            taskId,
+            action: body.action,
+            expectedVersion: body.expectedVersion,
+            note: body.note ?? null,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(200).json(CloseWorkspaceResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/close/periods/:periodId/lock',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const periodId = readEntityUuidParam(req.params['periodId'], 'periodId');
+        const body = parseBody(TransitionPeriodLockRequestSchema, req.body);
+        const result = await db.transaction((tx) =>
+          transitionPeriodLockRecord(tx, {
+            companyId,
+            actorId: userId,
+            periodId,
+            action: body.action,
+            reason: body.reason,
+            occurredAt: new Date().toISOString(),
+          }),
+        );
+        res.status(200).json(CloseWorkspaceResponseSchema.parse(result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M3 Exception-Rule Catalog, Owner Exception Inbox & Reversal-Only Rectification Journal
+   * (§2.6, §6.6, §7.4, §12.6, WI-0046).
+   */
+  app.get(
+    '/api/companies/:companyId/exceptions',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const year = readFiscalYearQuery(req.query['year']);
+        const period = readPeriodQuery(req.query['period']);
+        const workspace = await getExceptionsWorkspace(db, {
+          companyId,
+          actorId: userId,
+          ...(year !== null ? { fiscalYear: year } : {}),
+          ...(period !== null ? { periodCode: period } : {}),
+        });
+        res.status(200).json(ExceptionWorkspaceResponseSchema.parse(workspace));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/exceptions/scan',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(ExceptionScanRequestSchema, req.body ?? {});
+        const workspace = await scanCompanyExceptions(db, {
+          companyId,
+          actorId: userId,
+          occurredAt: new Date().toISOString(),
+          input: body,
+        });
+        res.status(200).json(ExceptionWorkspaceResponseSchema.parse(workspace));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/exceptions/:findingId/transition',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const findingId = readEntityUuidParam(req.params['findingId'], 'findingId');
+        const body = parseBody(ExceptionTransitionRequestSchema, req.body);
+        const workspace = await transitionExceptionFinding(db, {
+          companyId,
+          actorId: userId,
+          findingId,
+          occurredAt: new Date().toISOString(),
+          input: body,
+        });
+        res.status(200).json(ExceptionWorkspaceResponseSchema.parse(workspace));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/exceptions/:findingId/rectify',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const findingId = readEntityUuidParam(req.params['findingId'], 'findingId');
+        const body = parseBody(RectifyExceptionRequestSchema, req.body);
+        const workspace = await rectifyExceptionFinding(db, {
+          companyId,
+          actorId: userId,
+          findingId,
+          occurredAt: new Date().toISOString(),
+          input: body,
+        });
+        res.status(200).json(ExceptionWorkspaceResponseSchema.parse(workspace));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  /**
+   * M3 Multi-Entity, Multi-Currency & Consolidation/Eliminations with Tie-Out Proof
+   * (§2.5, §2.6, §6.6, §7.8, §11.6 FX1–FX5, WI-0047).
+   */
+  app.get(
+    '/api/companies/:companyId/consolidation',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const workspace = await getConsolidationWorkspace(db, companyId);
+        res.status(200).json(ConsolidationWorkspaceResponseSchema.parse(workspace));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/consolidation/entities',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(CreateEntityRequestSchema, req.body);
+        const created = await createCompanyEntity(db, {
+          companyId,
+          actorId: userId,
+          request: body,
+          occurredAt: UtcInstantSchema.parse(new Date().toISOString()),
+        });
+        res.status(201).json(ConsolidationEntitySummarySchema.parse(created));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/consolidation/ownerships',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(UpsertEntityOwnershipRequestSchema, req.body);
+        const saved = await upsertEntityOwnership(db, {
+          companyId,
+          actorId: userId,
+          request: body,
+          occurredAt: UtcInstantSchema.parse(new Date().toISOString()),
+        });
+        res.status(201).json(EntityOwnershipSummarySchema.parse(saved));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/consolidation/fx-rates',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(UpsertFxRateRequestSchema, req.body);
+        const saved = await upsertFxRate(db, {
+          companyId,
+          actorId: userId,
+          request: body,
+          occurredAt: UtcInstantSchema.parse(new Date().toISOString()),
+        });
+        res.status(201).json(FxRateSummarySchema.parse(saved));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/consolidation/ic-rules',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(CreateIntercompanyRuleRequestSchema, req.body);
+        const saved = await createIntercompanyRule(db, {
+          companyId,
+          actorId: userId,
+          request: body,
+          occurredAt: UtcInstantSchema.parse(new Date().toISOString()),
+        });
+        res.status(201).json(IntercompanyRuleSummarySchema.parse(saved));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/consolidation/fx-revaluation',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const body = parseBody(MonetaryRevaluationRequestSchema, req.body);
+        const preview = await previewFxRevaluation(db, {
+          companyId,
+          request: body,
+        });
+        res.status(200).json(MonetaryRevaluationResponseSchema.parse(preview));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/consolidation/runs',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(RunConsolidationRequestSchema, req.body);
+        const run = await executeConsolidationRun(db, {
+          companyId,
+          actorId: userId,
+          request: body,
+          occurredAt: UtcInstantSchema.parse(new Date().toISOString()),
+        });
+        res.status(201).json(ConsolidationRunSummarySchema.parse(run));
       } catch (error) {
         next(error);
       }

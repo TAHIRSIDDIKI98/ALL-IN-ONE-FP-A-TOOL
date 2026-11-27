@@ -1,8 +1,8 @@
 {
   "generator": "scripts/generate-docs.mjs",
-  "specSha256": "59c0fdcca57b46c7ac0e6c52be9418c23b5b1afd25689c1f77c93fd08af1375f",
+  "specSha256": "655c788824fad4b458df31dd96b171ca4138c76f819865f8e236d4dea3274419",
   "topLevelCount": 6,
-  "subsectionCount": 31,
+  "subsectionCount": 37,
   "sections": [
     {
       "title": "1. Repository & Stack Specification (M0 — Gates S1–S8)",
@@ -19,25 +19,25 @@
     {
       "title": "3. Financial Engine Contracts (M0–M1 — Gates E1–E11)",
       "slug": "3-financial-engine-contracts-m0-m1-gates-e1-e11",
-      "lineNo": 74,
+      "lineNo": 87,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "title": "4. Coherent Sample Corpus & Oracles (M0–M2 — Gates C1–C10, TST5)",
       "slug": "4-coherent-sample-corpus-oracles-m0-m2-gates-c1-c10-tst5",
-      "lineNo": 246,
+      "lineNo": 278,
       "sha256": "051d8cded4693053cd5b3b4fbc4b222f4ee3c062563696b6e2adf94f00a4530f"
     },
     {
       "title": "5. UX & Spine Screens (M1 — Gates U1–U10, G1–G10)",
       "slug": "5-ux-spine-screens-m1-gates-u1-u10-g1-g10",
-      "lineNo": 254,
-      "sha256": "db495b0218aac602ae176d531a4354d57e14f97c6e360887e5615260bec04857"
+      "lineNo": 286,
+      "sha256": "69db6f1b9ccd066743b56ee8e956c8e7210accf494d6458f2aea837f665a4ee9"
     },
     {
       "title": "6. M0 Acceptance Criteria Checklist (WI-0001 .. WI-0010)",
       "slug": "6-m0-acceptance-criteria-checklist-wi-0001-wi-0010",
-      "lineNo": 295,
+      "lineNo": 331,
       "sha256": "1fda2d8cdcb372e3cb3a7b4d9b0ba576da7e7b77d6a5bc63b9961b53427cd7e9"
     },
     {
@@ -77,158 +77,194 @@
       "sha256": "a440e72abeeeee1961031f4c2c9f901e34cdc796738dd9eb5d7fe66b40d1324d"
     },
     {
+      "title": "2.1e Approved M3 Close Management Tables (`0005_m3_close_management.sql`, `DEC-022`, `§12.6`, `CLS1–CLS4`)",
+      "slug": "2-1e-approved-m3-close-management-tables-0005-m3-close-management-sql-dec-022-12-6-cls1-cls4",
+      "lineNo": 64,
+      "sha256": "ada2b745729345225621c2197d4ced8642124899479b4d2f923c3db926c6d602"
+    },
+    {
+      "title": "2.1f Approved M3 Exception & Rectification Tables (`0006_m3_exceptions.sql`, `DEC-023`, `§6.6`, `§7.4`, `§12.6`)",
+      "slug": "2-1f-approved-m3-exception-rectification-tables-0006-m3-exceptions-sql-dec-023-6-6-7-4-12-6",
+      "lineNo": 71,
+      "sha256": "d05a9bb91a1ac535e9f571dccd923e6577cc420366b5aa4ab4436d2b40e7d189"
+    },
+    {
       "title": "2.2 Integrity Constraints",
       "slug": "2-2-integrity-constraints",
-      "lineNo": 64,
+      "lineNo": 77,
       "sha256": "458658fa4221218ec941c4483fa856543ac91a1410d9a331923459d0584837e6"
     },
     {
       "title": "3.1 Money Primitives (`/core/money`)",
       "slug": "3-1-money-primitives-core-money",
-      "lineNo": 76,
+      "lineNo": 89,
       "sha256": "0fd2c609c927383e10d3c1f28e4f5f43e52a858d39c4c70eb03c0463983fbdee"
     },
     {
       "title": "3.2 Amount Parsing (`/core/money/parse.ts`)",
       "slug": "3-2-amount-parsing-core-money-parse-ts",
-      "lineNo": 84,
+      "lineNo": 97,
       "sha256": "d2f9164f3187ae535d52fa3df97fda02fe80f6417809b0024dd2af096b3cbfcd"
     },
     {
       "title": "3.3 Largest-Remainder Allocation (`/core/money/allocate.ts`)",
       "slug": "3-3-largest-remainder-allocation-core-money-allocate-ts",
-      "lineNo": 89,
+      "lineNo": 102,
       "sha256": "ce6f57125269426919b6932890fdc34bc05a1e5c2cf9e13d0c114907ca34fa56"
     },
     {
       "title": "3.4 Signs & Articulation (`/core/statements`, `/core/invariants.ts`)",
       "slug": "3-4-signs-articulation-core-statements-core-invariants-ts",
-      "lineNo": 93,
+      "lineNo": 106,
       "sha256": "1a1be8f177ac8315354b2f0e45c0cbdbe61dc8e97444d736d26c5ef9051fe3c4"
     },
     {
       "title": "3.5 Variance & Favorability (`/core/variance`)",
       "slug": "3-5-variance-favorability-core-variance",
-      "lineNo": 105,
+      "lineNo": 118,
       "sha256": "5f35a16ad54e6aa3f880aa4657686c189e4d9ec931b3777e30b6fe8ad39d3355"
     },
     {
       "title": "3.6b Chart of Accounts (`/core/chart`, `account`, `coa_mapping`)",
       "slug": "3-6b-chart-of-accounts-core-chart-account-coa-mapping",
-      "lineNo": 113,
+      "lineNo": 126,
       "sha256": "5d720f249dced72d68c3531e63f8ae3ab70f2fca182a7cb3295d14ab5c7a1f70"
     },
     {
       "title": "3.6c Budget / Plan (`/core/budget`, `scenario`, `plan_version`, `plan_line`)",
       "slug": "3-6c-budget-plan-core-budget-scenario-plan-version-plan-line",
-      "lineNo": 122,
+      "lineNo": 135,
       "sha256": "61c2b16cf5b5cd99a2579548e5d8c0b6c4e47f7ee3259a02c97187d111e15d3f"
     },
     {
       "title": "3.6d Budget-vs-Actual (`/core/variance`, `GET /bva`)",
       "slug": "3-6d-budget-vs-actual-core-variance-get-bva",
-      "lineNo": 131,
+      "lineNo": 144,
       "sha256": "f8d800f9f0c565447e67ed0eb21616ca72f3ad78aef0a5ded1fe559ccd77eb29"
     },
     {
       "title": "3.6e Board Pack Export (`shared/boardPack.ts`, `server/export/boardPack.ts`, `GET /board-pack`)",
       "slug": "3-6e-board-pack-export-shared-boardpack-ts-server-export-boardpack-ts-get-board-pack",
-      "lineNo": 138,
+      "lineNo": 151,
       "sha256": "3aa380c384a216d987347c0bd9c5018421194fb3e58b21e5c846c31e63faa1e9"
     },
     {
       "title": "3.6f Versioned CoA mapping (`/core/mapping`, `coa_mapping`, `GET/POST /coa-mapping`)",
       "slug": "3-6f-versioned-coa-mapping-core-mapping-coa-mapping-get-post-coa-mapping",
-      "lineNo": 145,
+      "lineNo": 158,
       "sha256": "b440a47550d24b8294074bacce65ff303ba5e8d8c208489495b5ace1d57b86a4"
     },
     {
       "title": "3.6 Fiscal Calendars (`/core/calendar`)",
       "slug": "3-6-fiscal-calendars-core-calendar",
-      "lineNo": 155,
+      "lineNo": 168,
       "sha256": "d87f6f86af1de78918f0f4d6f873deac526cce45ebd48985c2fcdc4deac2249b"
     },
     {
       "title": "3.7 M2 Planning Engine (`/core/planning`)",
       "slug": "3-7-m2-planning-engine-core-planning",
-      "lineNo": 158,
+      "lineNo": 171,
       "sha256": "548cd9429e53238c65c7ebf23fed45dd04a0fc27fa596360416675aad9ef6980"
     },
     {
       "title": "3.8 M2 Collaboration & Workflow Engine (`/core/workflow`, `§11.9`, `WI-0034`)",
       "slug": "3-8-m2-collaboration-workflow-engine-core-workflow-11-9-wi-0034",
-      "lineNo": 166,
+      "lineNo": 179,
       "sha256": "01dedb8a49305310a85b69cd1aba9004c774ab7fa3349cbeca5b648153d232c3"
     },
     {
       "title": "3.9 M2 Workforce Module (`/core/workforce`, `§2.4 One-Engine Proof`, `WI-0035`)",
       "slug": "3-9-m2-workforce-module-core-workforce-2-4-one-engine-proof-wi-0035",
-      "lineNo": 182,
+      "lineNo": 195,
       "sha256": "e7a71cfd9a8bf4fb52d6b2dec6d6e9818cca41532bf4ecf3ad8581682e614426"
     },
     {
       "title": "3.10 M2 Flux Analysis Waterfall Bridge & PVM Decomposition Bridge (`/core/variance`, `WI-0036`)",
       "slug": "3-10-m2-flux-analysis-waterfall-bridge-pvm-decomposition-bridge-core-variance-wi-0036",
-      "lineNo": 193,
+      "lineNo": 206,
       "sha256": "746c76a8dcc370bfc84dbbe612bc45fa4df406b35ecd0f545c3c64e10ad43fc1"
     },
     {
       "title": "3.11 M2 Dashboards v1, KPI Library & Report Builder (`/core/metrics`, `§11.5`, `WI-0038`)",
       "slug": "3-11-m2-dashboards-v1-kpi-library-report-builder-core-metrics-11-5-wi-0038",
-      "lineNo": 202,
+      "lineNo": 215,
       "sha256": "7991c42873fbc3430f134b0cd833034688dca489d3c7866780ea3a11d744386f"
     },
     {
       "title": "3.12 M2 Data-Only Industry Packs (`/core/packs`, `§6.6`, `P23`, `WI-0039`)",
       "slug": "3-12-m2-data-only-industry-packs-core-packs-6-6-p23-wi-0039",
-      "lineNo": 210,
+      "lineNo": 223,
       "sha256": "d656d53d49e784d93e64ef9aab875c4777fee58aa1ee0fdbe6410418ac96e5ae"
     },
     {
       "title": "3.13 M2 Connectors Framework & Adapters (`/core/integrations`, `§11.1`, `CON1–CON5`, `WI-0040`)",
       "slug": "3-13-m2-connectors-framework-adapters-core-integrations-11-1-con1-con5-wi-0040",
-      "lineNo": 216,
+      "lineNo": 229,
       "sha256": "772cf58ee055f227aec04d0811174902f011e8e9c61571dcbed883e5e39b31d4"
     },
     {
       "title": "3.14 M2 Customer Onboarding & Data Migration Pipeline (`/core/onboarding`, `§11.12`, `ONB1–ONB3`, `WI-0042`)",
       "slug": "3-14-m2-customer-onboarding-data-migration-pipeline-core-onboarding-11-12-onb1-onb3-wi-0042",
-      "lineNo": 224,
+      "lineNo": 237,
       "sha256": "ec5a444626733d5bf9b11f814a5395d0c7100e540f6284ca4a0cf32123d3ee36"
     },
     {
       "title": "3.15 M2 End-User Guidance, Temporal & Localization Contracts (`/core/calendar`, `/shared/temporal`, `/shared/guidance`, `WI-0043`)",
       "slug": "3-15-m2-end-user-guidance-temporal-localization-contracts-core-calendar-shared-temporal-shared-guidance-wi-0043",
-      "lineNo": 230,
-      "sha256": "87115bd03be3b49d5376c8390e84ab4ad89f53e63781f03e7716d31a5a305a3b"
+      "lineNo": 243,
+      "sha256": "34c74cb204ec2e25711560384643562484fb9905689e1b3759eb2c29788a9cec"
+    },
+    {
+      "title": "3.16 M3 Close Management & Period Locks (`/core/close`, `/shared/close`, `WI-0045`, `§12.6 CLS1–CLS4`)",
+      "slug": "3-16-m3-close-management-period-locks-core-close-shared-close-wi-0045-12-6-cls1-cls4",
+      "lineNo": 257,
+      "sha256": "09b170fc671defee5fbfa0f8a509688c1201f600e84fb54e422a822965e7196c"
+    },
+    {
+      "title": "3.17 M3 Exception-Rule Catalog, Owner Inbox & Reversal-Only Rectification Journal (`/core/exceptions`, `/shared/exceptions`, `WI-0046`, `P24`)",
+      "slug": "3-17-m3-exception-rule-catalog-owner-inbox-reversal-only-rectification-journal-core-exceptions-shared-exceptions-wi-0046-p24",
+      "lineNo": 264,
+      "sha256": "89f9947320ca32df27ee47a0a5d730c1d9ff10b4ec6aed4a12d5e4838fd02dff"
+    },
+    {
+      "title": "3.18 M3 Multi-Entity, Multi-Currency & Consolidation/Eliminations (`/core/consolidation`, `/shared/consolidation`, `WI-0047`, `P25`, `§11.6 FX1–FX5`)",
+      "slug": "3-18-m3-multi-entity-multi-currency-consolidation-eliminations-core-consolidation-shared-consolidation-wi-0047-p25-11-6-fx1-fx5",
+      "lineNo": 270,
+      "sha256": "8b88b185b159b9654b054eff90c3fc5eb3a2d3187e2f5c63d9dc94cd07033fdd"
     },
     {
       "title": "5.1 M2 planning views — inside the Model Grid, not new screens (WI-0032)",
       "slug": "5-1-m2-planning-views-inside-the-model-grid-not-new-screens-wi-0032",
-      "lineNo": 267,
-      "sha256": "40ca53a128a9faaa4cdcf25264d83623ba1eaa93da9df83f998f243d79dd8f50"
+      "lineNo": 299,
+      "sha256": "7b395c6d23e90d88b8f742fd17e1cb96cfbc0c6ab87f0645e2b6952602029c66"
     },
     {
       "title": "5.2 Flux Waterfall & PVM Bridge view — inside Statements, not a new screen (WI-0036)",
       "slug": "5-2-flux-waterfall-pvm-bridge-view-inside-statements-not-a-new-screen-wi-0036",
-      "lineNo": 280,
+      "lineNo": 312,
       "sha256": "3369d4330bf3ff4cb2507eb086103cd23b85c1f972d1c570ce6bf7ca9921a2b4"
     },
     {
       "title": "5.3 Dashboards & KPIs view — inside Statements, not a new screen (WI-0038)",
       "slug": "5-3-dashboards-kpis-view-inside-statements-not-a-new-screen-wi-0038",
-      "lineNo": 285,
+      "lineNo": 317,
       "sha256": "8e42ef1ed3a1ffa2a0f3d4ab5c9124d0046fdbdf802013bbd3df5fbcec0a0e6e"
+    },
+    {
+      "title": "5.3b Consolidation & Multi-Currency view — inside Statements, not a new screen (WI-0047)",
+      "slug": "5-3b-consolidation-multi-currency-view-inside-statements-not-a-new-screen-wi-0047",
+      "lineNo": 321,
+      "sha256": "24e239d60aa8d8d069749b1abbccc7f54e0e3b59eeb5427e7dc84a8e094ab8e0"
     },
     {
       "title": "5.4 In-App Contextual Help, RTL Shell & Onboarding Checklist (`WI-0043`)",
       "slug": "5-4-in-app-contextual-help-rtl-shell-onboarding-checklist-wi-0043",
-      "lineNo": 289,
+      "lineNo": 325,
       "sha256": "c0d22ab83177ebf8cf1b89fb9f0735a436b627f43acfb9c15a427cba8dd7df21"
     }
   ],
   "artifacts": {
-    "README.md": "c5f8133453f1ce30a533d69bbb4860b365a8ac7bbdaa54c362d3b776d48781c9",
-    "reference.md": "d06a0b0e3a40e4ce5482ea9a29d70b96299d5a58cb396ea443a56535dd3ae637"
+    "README.md": "8c271c7e64b865120eb5dc4d76c55aaacd9f25dfda52cb3c44787de0b5a6c7a1",
+    "reference.md": "0261fd293ff1d265392ba0e33ee721bd73b0c85032839919e5f81aa84a505cd6"
   }
 }

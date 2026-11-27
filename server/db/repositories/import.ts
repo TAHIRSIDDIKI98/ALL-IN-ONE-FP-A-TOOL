@@ -1,5 +1,10 @@
 import { sha256Hex } from '../../../core/audit/sha256.js';
 import { resolvePeriodForDate, type GeneratedPeriod } from '../../../core/calendar/index.js';
+import {
+  evaluatePeriodWriteGuard,
+  type PeriodLockStatus,
+  type PeriodWriteTarget,
+} from '../../../core/close/index.js';
 import { evaluateMessyGlCsv, parseCsvRecords, type ImportedGlRow } from '../../../core/import/index.js';
 import { STORAGE_SCALE, compare, scaleForCurrency, serialize, sum } from '../../../core/money/index.js';
 import { resolveSourceAccountCode } from '../../../core/mapping/index.js';
@@ -56,6 +61,7 @@ interface PeriodRow extends Record<string, unknown> {
   period_no: number;
   quarter: number;
   label: string;
+  lock_status: PeriodLockStatus;
 }
 
 interface CurrencyRow extends Record<string, unknown> {
@@ -205,6 +211,8 @@ export interface PostableImportRow {
   readonly row: ImportedGlRow;
   readonly periodCode: string;
   readonly periodId: string;
+  readonly entityId: string;
+  readonly entityCurrency: string;
 }
 
 export interface PostableGroup {
@@ -225,6 +233,7 @@ export interface ImportClassification {
   readonly currencyScale: number;
   readonly entityId: string;
   readonly accountIdByCode: ReadonlyMap<string, string>;
+  readonly periodById: ReadonlyMap<string, PeriodWriteTarget>;
   readonly postable: readonly PostableGroup[];
   readonly rawCellsByRow: ReadonlyMap<number, readonly string[]>;
 }
@@ -255,16 +264,24 @@ export async function classifyImport(
     throw new AppError('NOT_FOUND', { userMessage: 'The company could not be found.' });
   }
 
-  const entityRes = await db.query<IdRow>(
-    `SELECT id FROM entity WHERE company_id = $1 AND active = true ORDER BY code ASC LIMIT 1`,
+interface EntityRow extends Record<string, unknown> {
+  id: string;
+  code: string;
+  currency: string;
+}
+
+  const entityRes = await db.query<EntityRow>(
+    `SELECT id, code, currency FROM entity WHERE company_id = $1 AND active = true ORDER BY code ASC`,
     [params.companyId],
   );
-  const entityId = entityRes.rows[0]?.id;
-  if (entityId === undefined) {
+  const defaultEntity = entityRes.rows[0];
+  if (defaultEntity === undefined) {
     throw new AppError('NOT_FOUND', {
       userMessage: 'Add a reporting entity to this company before importing actuals.',
     });
   }
+  const entityId = defaultEntity.id;
+  const entityByCode = new Map(entityRes.rows.map((row) => [row.code, row]));
 
   const accountRes = await db.query<AccountRow>(
     `SELECT id, code FROM account WHERE company_id = $1 AND active = true`,
@@ -273,7 +290,7 @@ export async function classifyImport(
   const accountIdByCode = new Map(accountRes.rows.map((row) => [row.code, row.id]));
 
   const periodRes = await db.query<PeriodRow>(
-    `SELECT id, code, start_date, end_date, is_adjustment, is_53rd_week, fiscal_year, period_no, quarter, label
+    `SELECT id, code, start_date, end_date, is_adjustment, is_53rd_week, fiscal_year, period_no, quarter, label, lock_status
        FROM fiscal_period
       WHERE company_id = $1
       ORDER BY fiscal_year ASC, period_no ASC`,
@@ -292,6 +309,7 @@ export async function classifyImport(
    */
   const periodEntries = periodRes.rows.map((row) => ({
     id: row.id,
+    lockStatus: row.lock_status,
     period: {
       fiscalYear: row.fiscal_year,
       fyLabel: `FY${row.fiscal_year}`,
@@ -305,6 +323,17 @@ export async function classifyImport(
       isAdjustment: row.is_adjustment,
     } satisfies GeneratedPeriod,
   }));
+  const periodById = new Map<string, PeriodWriteTarget>(
+    periodEntries.map((entry) => [
+      entry.id,
+      {
+        id: entry.id,
+        code: entry.period.code,
+        fiscalYear: entry.period.fiscalYear,
+        lockStatus: entry.lockStatus,
+      },
+    ]),
+  );
   const periods: GeneratedPeriod[] = periodEntries.map((entry) => entry.period);
 
   const asOfDate = params.asOfDate ?? new Date().toISOString().slice(0, 10);
@@ -334,7 +363,7 @@ export async function classifyImport(
     reason: row.reason,
   }));
 
-  // 1. Every imported row must resolve to a fiscal period of THIS company's calendar (§4.6).
+  // 1. Every imported row must resolve to a fiscal period AND active entity of THIS company (§4.6).
   const rowsWithPeriod: PostableImportRow[] = [];
   for (const row of parsed.imported) {
     const period = resolvePeriodForDate(periods, row.postingDate);
@@ -344,11 +373,28 @@ export async function classifyImport(
       quarantined.push({ rowNo: row.rowNo, reason: `PERIOD_NOT_FOUND:${row.postingDate}` });
       continue;
     }
-    rowsWithPeriod.push({ row, periodCode: period.code, periodId });
+    let resolvedEntityId = defaultEntity.id;
+    let resolvedEntityCurrency = currency;
+    if (row.entityCode !== undefined) {
+      const targetEntity = entityByCode.get(row.entityCode);
+      if (targetEntity === undefined) {
+        quarantined.push({ rowNo: row.rowNo, reason: `UNKNOWN_ENTITY:${row.entityCode}` });
+        continue;
+      }
+      resolvedEntityId = targetEntity.id;
+      resolvedEntityCurrency = targetEntity.currency;
+    }
+    rowsWithPeriod.push({
+      row,
+      periodCode: period.code,
+      periodId,
+      entityId: resolvedEntityId,
+      entityCurrency: resolvedEntityCurrency,
+    });
   }
 
-  // 2. Double-entry gate: a journal ref posts only if it balances to the cent. An unbalanced ref
-  //    is quarantined whole — never posted unbalanced, never partially posted.
+  // 2. Double-entry & single-entity gate: a journal ref posts only if it balances to the cent
+  //    and belongs to a single entity.
   const byRef = new Map<string, PostableImportRow[]>();
   for (const entry of rowsWithPeriod) {
     const bucket = byRef.get(entry.row.entryRef);
@@ -358,6 +404,13 @@ export async function classifyImport(
 
   const postable: PostableGroup[] = [];
   for (const [ref, rows] of byRef) {
+    const distinctEntities = new Set(rows.map((r) => r.entityId));
+    if (distinctEntities.size > 1) {
+      for (const entry of rows) {
+        quarantined.push({ rowNo: entry.row.rowNo, reason: `MIXED_ENTITY_ENTRY:${ref}` });
+      }
+      continue;
+    }
     const debits = sum(rows.map((r) => r.row.debit));
     const credits = sum(rows.map((r) => r.row.credit));
     if (compare(debits, credits) !== 0) {
@@ -389,6 +442,7 @@ export async function classifyImport(
     currencyScale: scaleForCurrency(currency),
     entityId,
     accountIdByCode,
+    periodById,
     postable,
     rawCellsByRow,
   };
@@ -426,10 +480,39 @@ export async function commitImport(
     currencyScale,
     entityId,
     accountIdByCode,
+    periodById,
     postable,
     rawCellsByRow,
   } = classification;
+
   const priorBatchId = await loadActiveBatch(tx, params.companyId, params.kind, sourceHash);
+
+  const targetPeriods: PeriodWriteTarget[] = [];
+  for (const group of postable) {
+    for (const entry of group.rows) {
+      const target = periodById.get(entry.periodId);
+      if (target !== undefined) targetPeriods.push(target);
+    }
+  }
+  if (priorBatchId !== null) {
+    const priorPeriodsRes = await tx.query<{ period_id: string }>(
+      `SELECT DISTINCT period_id FROM gl_entry WHERE company_id = $1 AND batch_id = $2`,
+      [params.companyId, priorBatchId],
+    );
+    for (const row of priorPeriodsRes.rows) {
+      const target = periodById.get(row.period_id);
+      if (target !== undefined) targetPeriods.push(target);
+    }
+  }
+  const writeGuard = evaluatePeriodWriteGuard(targetPeriods);
+  if (!writeGuard.allowed) {
+    throw new AppError('PERIOD_LOCKED', {
+      userMessage: writeGuard.blockedPeriods.map((b) => b.message).join(' '),
+      details: {
+        blockedPeriods: writeGuard.blockedPeriods.map((b) => `${b.fiscalYear}:${b.periodCode}`),
+      },
+    });
+  }
 
   if (priorBatchId !== null) {
     await tx.query(
@@ -529,10 +612,10 @@ export async function commitImport(
         params.companyId,
         batchId,
         first.periodId,
-        entityId,
+        first.entityId,
         first.row.postingDate,
         group.ref,
-        currency,
+        first.entityCurrency,
         serialize(debits, STORAGE_SCALE),
         serialize(credits, STORAGE_SCALE),
       ],
@@ -563,7 +646,7 @@ export async function commitImport(
           entryId,
           accountId,
           entry.periodId,
-          entityId,
+          entry.entityId,
           serialize(entry.row.debit, STORAGE_SCALE),
           serialize(entry.row.credit, STORAGE_SCALE),
           sourceRowId,
@@ -594,6 +677,9 @@ export async function commitImport(
       entries: entryCreated,
       totalDebits: classification.totalDebits,
       totalCredits: classification.totalCredits,
+      ...(writeGuard.warnings.length > 0
+        ? { periodWarnings: writeGuard.warnings.map((w) => `${w.code}:${w.fiscalYear}:${w.periodCode}`) }
+        : {}),
     },
     occurredAt: params.occurredAt,
   });
@@ -610,6 +696,7 @@ export async function commitImport(
     entryCount: entryCreated,
     sourceHash,
     quarantined: [...quarantined],
+    ...(writeGuard.warnings.length > 0 ? { periodAdvisories: [...writeGuard.warnings] } : {}),
   };
 }
 
@@ -625,6 +712,13 @@ export async function previewImport(
 ): Promise<ImportPreviewReport> {
   const classification = await classifyImport(db, params);
   const postedRows = classification.postable.flatMap((group) => group.rows);
+  const targetPeriods: PeriodWriteTarget[] = [];
+  for (const entry of postedRows) {
+    const target = classification.periodById.get(entry.periodId);
+    if (target !== undefined) targetPeriods.push(target);
+  }
+  const writeGuard = evaluatePeriodWriteGuard(targetPeriods);
+  const advisories = [...writeGuard.blockedPeriods, ...writeGuard.warnings];
   return {
     companyId: params.companyId,
     rowsIn: classification.rowsIn,
@@ -644,5 +738,6 @@ export async function previewImport(
       credit: serialize(entry.row.credit, classification.currencyScale),
     })),
     quarantined: [...classification.quarantined],
+    ...(advisories.length > 0 ? { periodAdvisories: advisories } : {}),
   };
 }

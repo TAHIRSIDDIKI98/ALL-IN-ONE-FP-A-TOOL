@@ -3860,6 +3860,1148 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(Number(auditCntRes.rows[0]?.cnt ?? '0')).toBe(1);
     expect((await verifyCompanyAuditLog(db, companyId)).valid).toBe(true);
   }, 60_000);
+
+  it('WI-0045 M3 Close Management & Period Locks (CLS1–CLS4): DAG prerequisites, live reconciliation blocking, derived status, soft-close warning, hard-close write block, and audited owner unlock', async () => {
+    const owner = {
+      firebaseUid: 'sandbox:close-owner@onefpa.test',
+      email: 'close-owner@onefpa.test',
+      displayName: 'Close Owner',
+    };
+    const editor = {
+      firebaseUid: 'sandbox:close-editor@onefpa.test',
+      email: 'close-editor@onefpa.test',
+      displayName: 'Close Editor',
+    };
+    const reviewer = {
+      firebaseUid: 'sandbox:close-reviewer@onefpa.test',
+      email: 'close-reviewer@onefpa.test',
+      displayName: 'Close Reviewer',
+    };
+    const viewer = {
+      firebaseUid: 'sandbox:close-viewer@onefpa.test',
+      email: 'close-viewer@onefpa.test',
+      displayName: 'Close Viewer',
+    };
+
+    const createRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Close Controls Co',
+        baseCurrency: 'USD',
+        fiscalYear: 2026,
+        calendarKind: '12month',
+        entityCode: 'CLS-1',
+        entityName: 'Close HQ',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const { companyId } = (await createRes.json()) as { companyId: string };
+
+    // Add editor, reviewer, viewer members
+    for (const member of [
+      { email: 'close-editor@onefpa.test', displayName: 'Close Editor', role: 'editor' },
+      { email: 'close-reviewer@onefpa.test', displayName: 'Close Reviewer', role: 'reviewer' },
+      { email: 'close-viewer@onefpa.test', displayName: 'Close Viewer', role: 'viewer' },
+    ]) {
+      const mRes = await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+        method: 'POST',
+        headers: bearer(owner),
+        body: JSON.stringify(member),
+      });
+      expect(mRes.status).toBe(201);
+    }
+
+    // Seed CoA
+    const chartRes = await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        csvText: [
+          'code,name,type,normal_side,statement_line_key',
+          '1000,Cash,asset,debit,bs.asset.cash',
+          '4000,Revenue,revenue,credit,pl.revenue.service',
+        ].join('\n'),
+      }),
+    });
+    expect(chartRes.status).toBe(201);
+
+    // Unauthenticated & foreign-tenant negative checks
+    expect((await fetch(`${baseUrl}/api/companies/${companyId}/close`)).status).toBe(401);
+    expect(
+      (await fetch(`${baseUrl}/api/companies/${companyId}/close`, { headers: bearer(INTRUDER) })).status,
+    ).toBe(403);
+
+    // Negative CLS1: cycle rejected on PUT /close/templates; viewer rejected 403
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/close/templates`, {
+          method: 'PUT',
+          headers: { ...bearer(viewer), 'content-type': 'application/json' },
+          body: JSON.stringify({
+            templates: [
+              {
+                taskKey: 'import_actuals',
+                title: 'Import GL',
+                category: 'import',
+                ownerRole: 'editor',
+                dueDayOffset: 1,
+                prerequisiteKeys: [],
+                requiresReconciliation: false,
+                sortOrder: 1,
+              },
+            ],
+          }),
+        })
+      ).status,
+    ).toBe(403);
+
+    const cycleReject = await fetch(`${baseUrl}/api/companies/${companyId}/close/templates`, {
+      method: 'PUT',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        templates: [
+          {
+            taskKey: 't1',
+            title: 'Task 1',
+            category: 'import',
+            ownerRole: 'editor',
+            dueDayOffset: 1,
+            prerequisiteKeys: ['t2'],
+            requiresReconciliation: false,
+            sortOrder: 1,
+          },
+          {
+            taskKey: 't2',
+            title: 'Task 2',
+            category: 'review',
+            ownerRole: 'reviewer',
+            dueDayOffset: 2,
+            prerequisiteKeys: ['t1'],
+            requiresReconciliation: true,
+            sortOrder: 2,
+          },
+        ],
+      }),
+    });
+    expect(cycleReject.status).toBe(422);
+    expect(((await cycleReject.json()) as { error: { code: string } }).error.code).toBe(
+      'VALIDATION_FAILED',
+    );
+
+    // Save valid 3-task DAG
+    const tplRes = await fetch(`${baseUrl}/api/companies/${companyId}/close/templates`, {
+      method: 'PUT',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        templates: [
+          {
+            taskKey: 'import_actuals',
+            title: 'Import GL actuals',
+            category: 'import',
+            ownerRole: 'editor',
+            dueDayOffset: 1,
+            prerequisiteKeys: [],
+            requiresReconciliation: false,
+            sortOrder: 1,
+          },
+          {
+            taskKey: 'reconcile_tb',
+            title: 'Reconcile TB & statements',
+            category: 'reconciliation',
+            ownerRole: 'editor',
+            dueDayOffset: 3,
+            prerequisiteKeys: ['import_actuals'],
+            requiresReconciliation: true,
+            sortOrder: 2,
+          },
+          {
+            taskKey: 'cfo_review',
+            title: 'Controller & CFO sign-off',
+            category: 'review',
+            ownerRole: 'reviewer',
+            dueDayOffset: 5,
+            prerequisiteKeys: ['reconcile_tb'],
+            requiresReconciliation: true,
+            sortOrder: 3,
+          },
+        ],
+      }),
+    });
+    expect(tplRes.status).toBe(200);
+
+    // Initialize close cycle for FY2026 P01; duplicate returns 409 DUPLICATE_CODE
+    const initRes = await fetch(`${baseUrl}/api/companies/${companyId}/close/cycles`, {
+      method: 'POST',
+      headers: { ...bearer(editor), 'content-type': 'application/json' },
+      body: JSON.stringify({ fiscalYear: 2026, periodCode: 'P01' }),
+    });
+    expect(initRes.status).toBe(201);
+    const ws1 = (await initRes.json()) as {
+      selectedPeriodId: string;
+      cycle: { id: string } | null;
+      statusSummary: { derivedStatus: string; completionPct: string };
+      tasks: { id: string; taskKey: string; version: number; isUnlocked: boolean }[];
+    };
+    expect(ws1.statusSummary.derivedStatus).toBe('not_started');
+    expect(ws1.statusSummary.completionPct).toBe('0.00');
+    expect(ws1.tasks.map((t) => t.isUnlocked)).toEqual([true, false, false]);
+    const cycleId = ws1.cycle!.id;
+    const periodId = ws1.selectedPeriodId;
+    const tImport = ws1.tasks[0]!;
+    const tReconcile = ws1.tasks[1]!;
+    const tReview = ws1.tasks[2]!;
+
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/close/cycles`, {
+          method: 'POST',
+          headers: { ...bearer(editor), 'content-type': 'application/json' },
+          body: JSON.stringify({ fiscalYear: 2026, periodCode: 'P01' }),
+        })
+      ).status,
+    ).toBe(409);
+
+    // CLS1: cannot sign off reconcile_tb before import_actuals
+    const prematureRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/cycles/${cycleId}/tasks/${tReconcile.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(editor), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_off', expectedVersion: tReconcile.version }),
+      },
+    );
+    expect(prematureRes.status).toBe(422);
+
+    // Import actuals with 1 quarantined row in P01 (unmapped account 9999) + 1 balanced JE
+    const dirtyImportRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(editor), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'p01_dirty.csv',
+        csvText: [
+          'date,entry_ref,account_code,debit,credit,memo',
+          '2026-01-15,JE-1,1000,500.00,0.00,Cash',
+          '2026-01-15,JE-1,4000,0.00,500.00,Rev',
+          '2026-01-16,JE-2,9999,50.00,0.00,Unmapped',
+        ].join('\n'),
+      }),
+    });
+    expect(dirtyImportRes.status).toBe(201);
+
+    // Editor signs off import_actuals -> CLS4 derived status becomes 'blocked_reconciliation' and reconcile_tb remains blocked
+    const signImportRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/cycles/${cycleId}/tasks/${tImport.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(editor), 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sign_off',
+          expectedVersion: tImport.version,
+          note: 'Initial GL batch imported',
+        }),
+      },
+    );
+    expect(signImportRes.status).toBe(200);
+    const wsBlocked = (await signImportRes.json()) as {
+      statusSummary: { derivedStatus: string; completionPct: string };
+      reconciliation: { passed: boolean; unmappedOrQuarantinedCount: number };
+    };
+    expect(wsBlocked.reconciliation.passed).toBe(false);
+    expect(wsBlocked.reconciliation.unmappedOrQuarantinedCount).toBe(1);
+    expect(wsBlocked.statusSummary.derivedStatus).toBe('blocked_reconciliation');
+    expect(wsBlocked.statusSummary.completionPct).toBe('33.33');
+
+    // Reconcile sign-off fails while quarantined row remains unresolved
+    const recFailRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/cycles/${cycleId}/tasks/${tReconcile.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(editor), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_off', expectedVersion: tReconcile.version }),
+      },
+    );
+    expect(recFailRes.status).toBe(422);
+
+    // Soft-close P01 (reviewer allowed), then re-import clean CSV (same sourceFilename, new sourceHash replaces dirty? Wait: re-import replaces SAME sourceHash! So re-import clean CSV after replacing dirty OR map 9999? Actually re-importing SAME csvText after mapping 9999 resolves the quarantine cleanly!)
+    const softCloseRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/periods/${periodId}/lock`,
+      {
+        method: 'POST',
+        headers: { ...bearer(reviewer), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'soft_close', reason: 'Soft close for Day 2 review' }),
+      },
+    );
+    expect(softCloseRes.status).toBe(200);
+    expect(
+      ((await softCloseRes.json()) as { statusSummary: { derivedStatus: string } }).statusSummary
+        .derivedStatus,
+    ).toBe('soft_closed');
+
+    // Map 9999 -> 4000 and re-import SAME CSV into soft-closed P01 -> succeeds WITH SOFT_CLOSE_WRITE_WARNING (CLS3)
+    const mapRes = await fetch(`${baseUrl}/api/companies/${companyId}/coa-mapping/commit`, {
+      method: 'POST',
+      headers: { ...bearer(editor), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entries: [{ sourceCode: '9999', status: 'mapped', accountCode: '4000', quarantineReason: null }],
+      }),
+    });
+    expect(mapRes.status).toBe(201);
+
+    const softImportRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(editor), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'p01_clean.csv',
+        csvText: [
+          'date,entry_ref,account_code,debit,credit,memo',
+          '2026-01-15,JE-1,1000,500.00,0.00,Cash',
+          '2026-01-15,JE-1,4000,0.00,500.00,Rev',
+          '2026-01-16,JE-2,9999,50.00,0.00,Mapped',
+          '2026-01-16,JE-2,1000,0.00,50.00,Mapped offset',
+        ].join('\n'),
+      }),
+    });
+    expect(softImportRes.status).toBe(201);
+    const softImported = (await softImportRes.json()) as {
+      periodAdvisories?: { code: string; periodCode: string }[];
+    };
+    expect(softImported.periodAdvisories?.[0]?.code).toBe('SOFT_CLOSE_WRITE_WARNING');
+    expect(softImported.periodAdvisories?.[0]?.periodCode).toBe('P01');
+
+    // Still need to replace the earlier dirty batch (exact same csvText) or mark it resolved:
+    // Re-importing the exact dirty csvText now posts JE-1 (while JE-2 in that file is 1-sided -> still unbalanced!).
+    // Wait: let's unlock -> actually hard-close requires reconciliation clean! Let's check: why did p01_dirty have 1 quarantined row? Because JE-2 in p01_dirty was single-sided. Let's re-import p01_dirty? No, re-importing p01_dirty keeps same hash; instead let's map 9999? Wait: JE-2 in p01_dirty had only 1 line (`50.00` debit, `0` credit), so even mapped it's unbalanced. Let's test hard-close block cleanly on P02 (clean period) AND unlock P01!
+    // Even better: unlock P01 as owner (proving soft_closed -> open unlock!), check lockEvents, and run P02 full cycle -> hard_close!
+    const unlockP01Res = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/periods/${periodId}/lock`,
+      {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'unlock', reason: 'Reopen P01 to resolve quarantine' }),
+      },
+    );
+    expect(unlockP01Res.status).toBe(200);
+
+    // Initialize clean P02 close cycle & post clean P02 actuals
+    const p02ImportRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(editor), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'p02_clean.csv',
+        csvText: [
+          'date,entry_ref,account_code,debit,credit,memo',
+          '2026-02-15,JE-P02,1000,800.00,0.00,Feb cash',
+          '2026-02-15,JE-P02,4000,0.00,800.00,Feb rev',
+        ].join('\n'),
+      }),
+    });
+    expect(p02ImportRes.status).toBe(201);
+
+    const initP02Res = await fetch(`${baseUrl}/api/companies/${companyId}/close/cycles`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ fiscalYear: 2026, periodCode: 'P02' }),
+    });
+    expect(initP02Res.status).toBe(201);
+    const wsP02 = (await initP02Res.json()) as {
+      selectedPeriodId: string;
+      cycle: { id: string };
+      tasks: { id: string; taskKey: string; version: number }[];
+    };
+    const p02Id = wsP02.selectedPeriodId;
+    const c02Id = wsP02.cycle.id;
+
+    // Hard-close rejected before tasks signed off (CLS4)
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/close/periods/${p02Id}/lock`, {
+          method: 'POST',
+          headers: { ...bearer(owner), 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'hard_close', reason: 'Premature lock attempt' }),
+        })
+      ).status,
+    ).toBe(422);
+
+    // Sign off all 3 P02 tasks in DAG order
+    await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/cycles/${c02Id}/tasks/${wsP02.tasks[0]!.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(editor), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_off', expectedVersion: 1 }),
+      },
+    );
+    await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/cycles/${c02Id}/tasks/${wsP02.tasks[1]!.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(editor), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_off', expectedVersion: 1 }),
+      },
+    );
+    const allSignedRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/cycles/${c02Id}/tasks/${wsP02.tasks[2]!.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(reviewer), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_off', expectedVersion: 1 }),
+      },
+    );
+    expect(allSignedRes.status).toBe(200);
+    const wsReady = (await allSignedRes.json()) as {
+      statusSummary: { derivedStatus: string; readyForHardClose: boolean; completionPct: string };
+    };
+    expect(wsReady.statusSummary.derivedStatus).toBe('ready_to_close');
+    expect(wsReady.statusSummary.readyForHardClose).toBe(true);
+    expect(wsReady.statusSummary.completionPct).toBe('100.00');
+
+    // Hard-close P02 (CLS3)
+    const hardCloseRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/periods/${p02Id}/lock`,
+      {
+        method: 'POST',
+        headers: { ...bearer(reviewer), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'hard_close', reason: 'P02 close complete & tied' }),
+      },
+    );
+    expect(hardCloseRes.status).toBe(200);
+    expect(
+      ((await hardCloseRes.json()) as { statusSummary: { derivedStatus: string } }).statusSummary
+        .derivedStatus,
+    ).toBe('hard_closed');
+
+    // Hard-closed P02 blocks new GL import writes with 409 PERIOD_LOCKED (CLS3)
+    const blockedImportRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'p02_late.csv',
+        csvText: [
+          'date,entry_ref,account_code,debit,credit,memo',
+          '2026-02-20,JE-LATE,1000,100.00,0.00,Late',
+          '2026-02-20,JE-LATE,4000,0.00,100.00,Late',
+        ].join('\n'),
+      }),
+    });
+    expect(blockedImportRes.status).toBe(409);
+    expect(((await blockedImportRes.json()) as { error: { code: string } }).error.code).toBe(
+      'PERIOD_LOCKED',
+    );
+
+    // Reviewer cannot unlock hard-closed P02 (403); Owner unlocks with audited reason & import succeeds
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/close/periods/${p02Id}/lock`, {
+          method: 'POST',
+          headers: { ...bearer(reviewer), 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'unlock', reason: 'Reviewer unlock attempt' }),
+        })
+      ).status,
+    ).toBe(403);
+
+    const ownerUnlockP02 = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/periods/${p02Id}/lock`,
+      {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'unlock', reason: 'Controller approved late Feb accrual' }),
+      },
+    );
+    expect(ownerUnlockP02.status).toBe(200);
+    const wsUnlocked = (await ownerUnlockP02.json()) as {
+      statusSummary: { lockStatus: string; derivedStatus: string };
+      lockEvents: { action: string; reason: string }[];
+    };
+    expect(wsUnlocked.statusSummary.lockStatus).toBe('open');
+    expect(wsUnlocked.statusSummary.derivedStatus).toBe('ready_to_close');
+    expect(wsUnlocked.lockEvents.length).toBeGreaterThanOrEqual(4);
+
+    const postAfterUnlock = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'p02_late.csv',
+        csvText: [
+          'date,entry_ref,account_code,debit,credit,memo',
+          '2026-02-20,JE-LATE,1000,100.00,0.00,Late',
+          '2026-02-20,JE-LATE,4000,0.00,100.00,Late',
+        ].join('\n'),
+      }),
+    });
+    expect(postAfterUnlock.status).toBe(201);
+    expect((await verifyCompanyAuditLog(db, companyId)).valid).toBe(true);
+  }, 60_000);
+
+  it('M3 Exception-Rule Catalog, Owner Inbox & Reversal-Only Rectification Journal (WI-0046)', async () => {
+    const owner = {
+      firebaseUid: 'sandbox:exc-owner@onefpa.test',
+      email: 'exc-owner@onefpa.test',
+      displayName: 'Exception Owner',
+    };
+    const reviewer = {
+      firebaseUid: 'sandbox:exc-reviewer@onefpa.test',
+      email: 'exc-reviewer@onefpa.test',
+      displayName: 'Exception Reviewer',
+    };
+    const viewer = {
+      firebaseUid: 'sandbox:exc-viewer@onefpa.test',
+      email: 'exc-viewer@onefpa.test',
+      displayName: 'Exception Viewer',
+    };
+
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: bearer(owner),
+      body: JSON.stringify({
+        companyName: 'Exceptions Co',
+        baseCurrency: 'USD',
+        fiscalYear: 2026,
+        calendarKind: '12month',
+        entityCode: 'HQ-1',
+        entityName: 'HQ-1',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    // Add reviewer + viewer
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+          method: 'POST',
+          headers: { ...bearer(owner), 'content-type': 'application/json' },
+          body: JSON.stringify({
+            email: reviewer.email,
+            displayName: reviewer.displayName,
+            role: 'reviewer',
+          }),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/members`, {
+          method: 'POST',
+          headers: { ...bearer(owner), 'content-type': 'application/json' },
+          body: JSON.stringify({
+            email: viewer.email,
+            displayName: viewer.displayName,
+            role: 'viewer',
+          }),
+        })
+      ).status,
+    ).toBe(201);
+
+    // Import CoA with 1000 Cash, 6200 Rent, 6400 Marketing
+    const chartRes = await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        csvText: [
+          'code,name,type,normal_side,statement_line_key',
+          '1000,Cash,asset,debit,bs.asset.cash',
+          '6200,Office Rent,expense,debit,pl.opex.ga',
+          '6400,Marketing,expense,debit,pl.opex.sm',
+        ].join('\n'),
+      }),
+    });
+    expect(chartRes.status).toBe(201);
+
+    // Seed P01-P03 historical rent on 6200 and marketing on 6400, plus P04 planted EXC-025 (rent misclassified to 6400) + EXC-028 near-duplicate
+    const csvLines = [
+      'date,entry_ref,account_code,debit,credit,memo',
+      '2026-01-10,RENT-1,6200,92500.00,0.00,Office rent Andheri premises lease',
+      '2026-01-10,RENT-1,1000,0.00,92500.00,Office rent Andheri premises lease',
+      '2026-02-10,RENT-2,6200,92500.00,0.00,Office rent Andheri premises lease',
+      '2026-02-10,RENT-2,1000,0.00,92500.00,Office rent Andheri premises lease',
+      '2026-03-10,RENT-3,6200,92500.00,0.00,Office rent Andheri premises lease',
+      '2026-03-10,RENT-3,1000,0.00,92500.00,Office rent Andheri premises lease',
+      '2026-01-12,MKT-1,6400,15000.00,0.00,Event stall Diwali campaign',
+      '2026-01-12,MKT-1,1000,0.00,15000.00,Event stall Diwali campaign',
+      '2026-02-12,MKT-2,6400,15000.00,0.00,Event stall Diwali campaign',
+      '2026-02-12,MKT-2,1000,0.00,15000.00,Event stall Diwali campaign',
+      '2026-03-12,MKT-3,6400,15000.00,0.00,Event stall Diwali campaign',
+      '2026-03-12,MKT-3,1000,0.00,15000.00,Event stall Diwali campaign',
+      // P04 planted EXC-025 misclassified rent on 6400
+      '2026-04-15,JV-26-0433,6400,92500.00,0.00,Office rent Apr-26 Andheri premises',
+      '2026-04-15,JV-26-0433,1000,0.00,92500.00,Office rent Apr-26 Andheri premises',
+      // P04 planted EXC-028 near-duplicate within 30 days
+      '2026-04-02,PV-DUP-1,6200,32000.00,0.00,Legal retainer Acme Law',
+      '2026-04-02,PV-DUP-1,1000,0.00,32000.00,Legal retainer Acme Law',
+      '2026-04-18,PV-DUP-2,6200,32000.00,0.00,Legal retainer Acme Law',
+      '2026-04-18,PV-DUP-2,1000,0.00,32000.00,Legal retainer Acme Law',
+    ].join('\n');
+
+    const impRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'exceptions_seed.csv',
+        csvText: csvLines,
+      }),
+    });
+    expect(impRes.status).toBe(201);
+
+    // Viewer cannot run scan (403)
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/exceptions/scan`, {
+          method: 'POST',
+          headers: { ...bearer(viewer), 'content-type': 'application/json' },
+          body: JSON.stringify({ fiscalYear: 2026, periodCode: 'P04' }),
+        })
+      ).status,
+    ).toBe(403);
+
+    // Owner scans P04 -> detects EXC-025 and EXC-028
+    const scanRes = await fetch(`${baseUrl}/api/companies/${companyId}/exceptions/scan`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ fiscalYear: 2026, periodCode: 'P04' }),
+    });
+    expect(scanRes.status).toBe(200);
+    const scanned = (await scanRes.json()) as {
+      catalog: { ruleId: string }[];
+      lastScan: { newFindingsCount: number; existingFindingsCount: number; notRunRules: { ruleId: string }[] };
+      findings: {
+        id: string;
+        ruleId: string;
+        status: string;
+        version: number;
+        suggestion: { kind: string; lines: { accountCode: string; debit: string; credit: string }[] };
+      }[];
+    };
+    expect(scanned.catalog).toHaveLength(28);
+    expect(scanned.lastScan.newFindingsCount).toBeGreaterThanOrEqual(2);
+    expect(scanned.lastScan.notRunRules.length).toBeGreaterThan(0);
+
+    const ex25 = scanned.findings.find((f) => f.ruleId === 'EXC-025');
+    const ex28 = scanned.findings.find((f) => f.ruleId === 'EXC-028');
+    expect(ex25).toBeDefined();
+    expect(ex28).toBeDefined();
+    expect(ex25!.suggestion.kind).toBe('reclass');
+
+    // Second scan is idempotent (0 new findings)
+    const scan2Res = await fetch(`${baseUrl}/api/companies/${companyId}/exceptions/scan`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ fiscalYear: 2026, periodCode: 'P04' }),
+    });
+    expect(scan2Res.status).toBe(200);
+    const scan2 = (await scan2Res.json()) as {
+      lastScan: { newFindingsCount: number; existingFindingsCount: number };
+    };
+    expect(scan2.lastScan.newFindingsCount).toBe(0);
+    expect(scan2.lastScan.existingFindingsCount).toBeGreaterThanOrEqual(2);
+
+    // Reviewer cannot post_reversal to GL (403); Owner posts reversal atomically into P04
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/exceptions/${ex25!.id}/rectify`, {
+          method: 'POST',
+          headers: { ...bearer(reviewer), 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'post_reversal', expectedVersion: ex25!.version }),
+        })
+      ).status,
+    ).toBe(403);
+
+    // Hard-closed target period rejects post_reversal atomically with 409 PERIOD_LOCKED
+    // (First create a 1-task close cycle on P05 with a clean GL entry so hard_close succeeds per CLS3)
+    await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        sourceFilename: 'p05_clean.csv',
+        csvText: [
+          'date,entry_ref,account_code,debit,credit,memo',
+          '2026-05-05,P5-1,6200,1000.00,0.00,May rent',
+          '2026-05-05,P5-1,1000,0.00,1000.00,May rent',
+        ].join('\n'),
+      }),
+    });
+    await fetch(`${baseUrl}/api/companies/${companyId}/close/templates`, {
+      method: 'PUT',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        templates: [
+          {
+            taskKey: 'import_actuals',
+            title: 'Import GL',
+            category: 'import',
+            ownerRole: 'editor',
+            dueDayOffset: 1,
+            prerequisiteKeys: [],
+            requiresReconciliation: true,
+            sortOrder: 1,
+          },
+        ],
+      }),
+    });
+    const initP05 = await fetch(`${baseUrl}/api/companies/${companyId}/close/cycles`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ fiscalYear: 2026, periodCode: 'P05' }),
+    });
+    expect(initP05.status).toBe(201);
+    const p05Cycle = (await initP05.json()) as {
+      cycle: { id: string } | null;
+      tasks: { id: string; version: number }[];
+      periods: { periodId: string; periodCode: string }[];
+    };
+    const signP05 = await fetch(
+      `${baseUrl}/api/companies/${companyId}/close/cycles/${p05Cycle.cycle!.id}/tasks/${p05Cycle.tasks[0]!.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_off', expectedVersion: p05Cycle.tasks[0]!.version }),
+      },
+    );
+    expect(signP05.status).toBe(200);
+    const p05Id = p05Cycle.periods.find((p) => p.periodCode === 'P05')!.periodId;
+    const lockP05 = await fetch(`${baseUrl}/api/companies/${companyId}/close/periods/${p05Id}/lock`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'hard_close', reason: 'Lock P05 for negative test' }),
+    });
+    expect(lockP05.status).toBe(200);
+
+    const blockedRect = await fetch(
+      `${baseUrl}/api/companies/${companyId}/exceptions/${ex25!.id}/rectify`,
+      {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'post_reversal',
+          expectedVersion: ex25!.version,
+          targetPeriodCode: 'P05',
+        }),
+      },
+    );
+    expect(blockedRect.status).toBe(409);
+    expect(((await blockedRect.json()) as { error: { code: string } }).error.code).toBe(
+      'PERIOD_LOCKED',
+    );
+
+    // Soft-close P04, then post_reversal into soft_closed P04 succeeds with SOFT_CLOSE_WRITE_WARNING & sets status -> corrected
+    const p04Id = p05Cycle.periods.find((p) => p.periodCode === 'P04')!.periodId;
+    const softP04 = await fetch(`${baseUrl}/api/companies/${companyId}/close/periods/${p04Id}/lock`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'soft_close', reason: 'Soft close P04 for rectification advisory' }),
+    });
+    expect(softP04.status).toBe(200);
+
+    const rectRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/exceptions/${ex25!.id}/rectify`,
+      {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'post_reversal',
+          expectedVersion: ex25!.version,
+          targetPeriodCode: 'P04',
+        }),
+      },
+    );
+    expect(rectRes.status).toBe(200);
+    const afterRect = (await rectRes.json()) as {
+      periodAdvisories?: { code: string }[];
+      findings: { id: string; status: string; version: number; rectification: { postedBatchId: string | null } | null }[];
+    };
+    expect(afterRect.periodAdvisories?.[0]?.code).toBe('SOFT_CLOSE_WRITE_WARNING');
+    const rectifiedEx25 = afterRect.findings.find((f) => f.id === ex25!.id)!;
+    expect(rectifiedEx25.status).toBe('corrected');
+    expect(rectifiedEx25.rectification?.postedBatchId).toBeTruthy();
+
+    // Duplicate rectification attempt rejected (409 DUPLICATE_CODE)
+    const dupRect = await fetch(
+      `${baseUrl}/api/companies/${companyId}/exceptions/${ex25!.id}/rectify`,
+      {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'export_csv',
+          expectedVersion: rectifiedEx25.version,
+        }),
+      },
+    );
+    expect(dupRect.status).toBe(409);
+
+    // Reviewer verifies corrected finding -> verified, then closes -> closed
+    const verifyRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/exceptions/${ex25!.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(reviewer), 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify',
+          expectedVersion: rectifiedEx25.version,
+          note: 'Verified reclass posted cleanly to 6200',
+        }),
+      },
+    );
+    expect(verifyRes.status).toBe(200);
+    const afterVerify = (await verifyRes.json()) as {
+      findings: { id: string; status: string; version: number }[];
+    };
+    const verifiedEx25 = afterVerify.findings.find((f) => f.id === ex25!.id)!;
+    expect(verifiedEx25.status).toBe('verified');
+
+    // Waiver > 90 days rejected (422), <= 90 days accepted on EXC-028
+    expect(
+      (
+        await fetch(`${baseUrl}/api/companies/${companyId}/exceptions/${ex28!.id}/transition`, {
+          method: 'POST',
+          headers: { ...bearer(reviewer), 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'waive',
+            expectedVersion: ex28!.version,
+            waiverReason: 'Too long',
+            waiverExpiryDays: 95,
+          }),
+        })
+      ).status,
+    ).toBe(422);
+
+    const waiveRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/exceptions/${ex28!.id}/transition`,
+      {
+        method: 'POST',
+        headers: { ...bearer(reviewer), 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'waive',
+          expectedVersion: ex28!.version,
+          waiverReason: 'Two separate legal retainers confirmed by vendor',
+          waiverExpiryDays: 30,
+        }),
+      },
+    );
+    expect(waiveRes.status).toBe(200);
+    const afterWaive = (await waiveRes.json()) as {
+      findings: { id: string; status: string }[];
+    };
+    expect(afterWaive.findings.find((f) => f.id === ex28!.id)!.status).toBe('waived');
+
+    // Trial Balance after reclass shows 6400 net back to 0.00 in P04 (92500 reversed) and remains balanced
+    const tbRes = await fetch(`${baseUrl}/api/companies/${companyId}/trial-balance?year=2026&period=P04`, {
+      headers: bearer(owner),
+    });
+    expect(tbRes.status).toBe(200);
+    const tb = (await tbRes.json()) as {
+      isBalanced: boolean;
+      totalDebit: string;
+      totalCredit: string;
+      rows: { accountCode: string; endingDebit: string; endingCredit: string }[];
+    };
+    expect(tb.isBalanced).toBe(true);
+    expect(tb.totalDebit).toBe(tb.totalCredit);
+    expect((await verifyCompanyAuditLog(db, companyId)).valid).toBe(true);
+  }, 60_000);
+
+  it('WI-0047 Multi-Entity, Multi-Currency & Consolidation Tie-Out: entity_code import, FX rates, ownership, IC eliminations/residuals, CTA & NCI', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:consol-owner@onefpa.test',
+      email: 'consol-owner@onefpa.test',
+      displayName: 'Consolidation Controller',
+    };
+
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        companyName: 'Global HoldCo Group',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityCode: 'ENT-US',
+        entityName: 'US Parent Corp',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const { companyId } = (await setupRes.json()) as { companyId: string };
+
+    // Import CoA supporting assets, liabilities, equity, revenue, expenses, and IC accounts
+    const coaCsv = [
+      'code,name,type,normal_side,statement_line_key',
+      '1000,Cash,asset,debit,bs.asset.cash',
+      '1150,IC Receivable UK,asset,debit,bs.asset.ar',
+      '1160,IC Receivable DE,asset,debit,bs.asset.ar',
+      '2000,Accounts Payable,liability,credit,bs.liability.ap',
+      '2150,IC Payable US from UK,liability,credit,bs.liability.ap',
+      '2160,IC Payable US from DE,liability,credit,bs.liability.ap',
+      '3000,Common Stock,equity,credit,bs.equity.common_stock',
+      '4000,Product Revenue,revenue,credit,pl.revenue.product',
+      '5000,COGS,expense,debit,pl.cogs.direct',
+    ].join('\n');
+    const coaRes = await fetch(`${baseUrl}/api/companies/${companyId}/chart/import`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ csvText: coaCsv }),
+    });
+    expect(coaRes.status).toBe(201);
+
+    // Add UK (GBP, 80% owned) and DE (EUR, 100% owned) entities
+    const ukRes = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation/entities`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        code: 'ENT-UK',
+        name: 'UK Subsidiary Ltd',
+        currency: 'GBP',
+        parentEntityCode: 'ENT-US',
+      }),
+    });
+    expect(ukRes.status).toBe(201);
+
+    const deRes = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation/entities`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        code: 'ENT-DE',
+        name: 'DE Subsidiary GmbH',
+        currency: 'EUR',
+        parentEntityCode: 'ENT-US',
+      }),
+    });
+    expect(deRes.status).toBe(201);
+
+    // Configure ownership percentages (80% UK => 20% NCI, 100% DE)
+    const ownUkRes = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation/ownerships`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        parentEntityCode: 'ENT-US',
+        childEntityCode: 'ENT-UK',
+        ownershipPct: '80',
+        method: 'full',
+        effectiveFrom: '2026-01-01',
+      }),
+    });
+    expect(ownUkRes.status).toBe(201);
+
+    // Import multi-entity GL actuals matching CONSOL-GROUP-01 oracle via the single /import/commit path with entity_code
+    const glCsv = [
+      'entry_ref,posting_date,account_code,debit,credit,entity_code,memo',
+      'US-01,2026-01-15,1000,50000.00,0,ENT-US,US Cash',
+      'US-01,2026-01-15,1150,12000.00,0,ENT-US,US IC AR UK',
+      'US-01,2026-01-15,1160,5000.00,0,ENT-US,US IC AR DE',
+      'US-01,2026-01-15,2000,0,10000.00,ENT-US,US AP',
+      'US-01,2026-01-15,3000,0,45000.00,ENT-US,US Common Stock',
+      'US-01,2026-01-15,4000,0,30000.00,ENT-US,US Product Revenue',
+      'US-01,2026-01-15,5000,18000.00,0,ENT-US,US COGS',
+      'UK-01,2026-01-15,1000,25000.00,0,ENT-UK,UK Cash GBP',
+      'UK-01,2026-01-15,2150,0,9375.00,ENT-UK,UK IC AP US GBP',
+      'UK-01,2026-01-15,3000,0,10000.00,ENT-UK,UK Common Stock GBP',
+      'UK-01,2026-01-15,4000,0,12000.00,ENT-UK,UK Product Revenue GBP',
+      'UK-01,2026-01-15,5000,6375.00,0,ENT-UK,UK COGS GBP',
+      'DE-01,2026-01-15,1000,14000.00,0,ENT-DE,DE Cash EUR',
+      'DE-01,2026-01-15,2160,0,4400.00,ENT-DE,DE IC AP US EUR',
+      'DE-01,2026-01-15,3000,0,8000.00,ENT-DE,DE Common Stock EUR',
+      'DE-01,2026-01-15,4000,0,5000.00,ENT-DE,DE Product Revenue EUR',
+      'DE-01,2026-01-15,5000,3400.00,0,ENT-DE,DE COGS EUR',
+    ].join('\n');
+
+    // Negative check: unknown entity_code in CSV is quarantined rather than rejected or misposted
+    const badPreviewRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/preview`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        csvText: [
+          'entry_ref,posting_date,account_code,debit,credit,entity_code',
+          'BAD-1,2026-01-10,1000,100,0,ENT-ZZ',
+          'BAD-1,2026-01-10,3000,0,100,ENT-ZZ',
+        ].join('\n'),
+      }),
+    });
+    expect(badPreviewRes.status).toBe(200);
+    const badPreview = (await badPreviewRes.json()) as {
+      quarantined: { reason: string }[];
+      entryCount: number;
+    };
+    expect(badPreview.entryCount).toBe(0);
+    expect(badPreview.quarantined.some((q) => q.reason === 'UNKNOWN_ENTITY:ENT-ZZ')).toBe(true);
+
+    const commitRes = await fetch(`${baseUrl}/api/companies/${companyId}/import/commit`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'actuals',
+        csvText: glCsv,
+        sourceFilename: 'group-p01.csv',
+      }),
+    });
+    expect(commitRes.status).toBe(201);
+    const commitJson = (await commitRes.json()) as { importedCount: number; entryCount: number };
+    expect(commitJson.importedCount).toBe(17);
+    expect(commitJson.entryCount).toBe(3);
+
+    // Running consolidation BEFORE seeding GBP/EUR FX rates fails explicitly with 422 (no 0/1 fallback!)
+    const missingFxRunRes = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation/runs`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ periodCode: 'P01', fiscalYear: 2026 }),
+    });
+    expect(missingFxRunRes.status).toBe(422);
+
+    // Seed closing, average, historical FX rates for GBP/USD and EUR/USD
+    const fxPayloads = [
+      { baseCurrency: 'GBP', quoteCurrency: 'USD', rateType: 'closing', asOfDate: '2026-01-31', rate: '1.2800' },
+      { baseCurrency: 'GBP', quoteCurrency: 'USD', rateType: 'average', asOfDate: '2026-01-31', rate: '1.2500' },
+      { baseCurrency: 'GBP', quoteCurrency: 'USD', rateType: 'historical', asOfDate: '2026-01-01', rate: '1.2000' },
+      { baseCurrency: 'EUR', quoteCurrency: 'USD', rateType: 'closing', asOfDate: '2026-01-31', rate: '1.1000' },
+      { baseCurrency: 'EUR', quoteCurrency: 'USD', rateType: 'average', asOfDate: '2026-01-31', rate: '1.0800' },
+      { baseCurrency: 'EUR', quoteCurrency: 'USD', rateType: 'historical', asOfDate: '2026-01-01', rate: '1.0500' },
+    ];
+    for (const fx of fxPayloads) {
+      const fxRes = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation/fx-rates`, {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify(fx),
+      });
+      expect(fxRes.status).toBe(201);
+    }
+
+    // Seed IC rules: US-UK matched BS (12000 == 12000), US-DE BS with residual (5000 vs 4840)
+    for (const rule of [
+      {
+        fromEntityCode: 'ENT-US',
+        fromAccountCode: '1150',
+        toEntityCode: 'ENT-UK',
+        toAccountCode: '2150',
+        ruleType: 'ic_receivable_payable',
+        description: 'US-UK Intercompany AR/AP',
+      },
+      {
+        fromEntityCode: 'ENT-US',
+        fromAccountCode: '1160',
+        toEntityCode: 'ENT-DE',
+        toAccountCode: '2160',
+        ruleType: 'ic_receivable_payable',
+        description: 'US-DE Intercompany AR/AP (with 160.00 residual)',
+      },
+    ]) {
+      const ruleRes = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation/ic-rules`, {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify(rule),
+      });
+      expect(ruleRes.status).toBe(201);
+    }
+
+    // Execute full consolidation run and verify exact ASC 830 / ASC 810 tie-out!
+    const runRes = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation/runs`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ periodCode: 'P01', fiscalYear: 2026, reportingCurrency: 'USD' }),
+    });
+    expect(runRes.status).toBe(201);
+    const run = (await runRes.json()) as {
+      status: string;
+      groupTbBalanced: boolean;
+      groupBsBalanced: boolean;
+      totalAssets: string;
+      totalLiabilities: string;
+      controllingEquity: string;
+      minorityInterest: string;
+      totalCta: string;
+      consolidatedNetIncome: string;
+      totalEliminations: string;
+      unmatchedIcCount: number;
+      accountingEquationImbalance: string;
+    };
+    expect(run.status).toBe('quarantined_residuals');
+    expect(run.groupTbBalanced).toBe(true);
+    expect(run.groupBsBalanced).toBe(true);
+    expect(run.totalAssets).toBe('97560.00');
+    expect(run.totalLiabilities).toBe('10000.00');
+    expect(run.totalCta).toBe('1400.75');
+    expect(run.minorityInterest).toBe('4000.00');
+    expect(run.controllingEquity).toBe('83560.00');
+    expect(run.consolidatedNetIncome).toBe('20759.25');
+    expect(run.totalEliminations).toBe('16840.00');
+    expect(run.unmatchedIcCount).toBe(1);
+    expect(run.accountingEquationImbalance).toBe('0.00');
+
+    // FX2 realized vs unrealized monetary revaluation preview
+    const revalRes = await fetch(
+      `${baseUrl}/api/companies/${companyId}/consolidation/fx-revaluation`,
+      {
+        method: 'POST',
+        headers: { ...bearer(owner), 'content-type': 'application/json' },
+        body: JSON.stringify({
+          functionalCurrency: 'USD',
+          items: [
+            {
+              itemKey: 'AR-EUR-1',
+              entityCode: 'ENT-US',
+              accountCode: '1200',
+              accountType: 'asset',
+              foreignCurrency: 'EUR',
+              functionalCurrency: 'USD',
+              foreignAmount: '10000.00',
+              bookingRate: '1.0800',
+              periodEndRate: '1.1000',
+              settled: false,
+            },
+            {
+              itemKey: 'AP-GBP-1',
+              entityCode: 'ENT-US',
+              accountCode: '2000',
+              accountType: 'liability',
+              foreignCurrency: 'GBP',
+              functionalCurrency: 'USD',
+              foreignAmount: '5000.00',
+              bookingRate: '1.2500',
+              periodEndRate: '1.2900',
+              settled: true,
+              settlementRate: '1.2800',
+            },
+          ],
+        }),
+      },
+    );
+    expect(revalRes.status).toBe(200);
+    const reval = (await revalRes.json()) as {
+      realizedTotal: string;
+      unrealizedTotal: string;
+      netRevaluationTotal: string;
+      journalBalanced: boolean;
+    };
+    expect(reval.realizedTotal).toBe('-150.00');
+    expect(reval.unrealizedTotal).toBe('200.00');
+    expect(reval.netRevaluationTotal).toBe('50.00');
+    expect(reval.journalBalanced).toBe(true);
+
+    // Tenant isolation & workspace readback
+    const foreignConsol = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation`, {
+      headers: bearer(INTRUDER),
+    });
+    expect(foreignConsol.status).toBe(403);
+
+    const wsRes = await fetch(`${baseUrl}/api/companies/${companyId}/consolidation`, {
+      headers: bearer(owner),
+    });
+    expect(wsRes.status).toBe(200);
+    const ws = (await wsRes.json()) as {
+      entities: unknown[];
+      fxRates: unknown[];
+      icRules: unknown[];
+      latestRun: { totalAssets: string } | null;
+    };
+    expect(ws.entities).toHaveLength(3);
+    expect(ws.fxRates).toHaveLength(6);
+    expect(ws.icRules).toHaveLength(2);
+    expect(ws.latestRun?.totalAssets).toBe('97560.00');
+    expect((await verifyCompanyAuditLog(db, companyId)).valid).toBe(true);
+  }, 60_000);
 });
 
 
