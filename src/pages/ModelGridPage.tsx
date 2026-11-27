@@ -43,6 +43,8 @@ import {
   type WorkflowActionFailure,
 } from '../components/PlanningWorkspace.js';
 import { WorkforcePanel, type WorkforceActionFailure } from '../components/WorkforcePanel.js';
+import { CloseManagementPanel } from '../components/CloseManagementPanel.js';
+import { ExceptionsInboxPanel } from '../components/ExceptionsInboxPanel.js';
 import {
   buildDriverDefinitions,
   buildWorkforcePositionsPayload,
@@ -58,7 +60,7 @@ import {
 import { useWorkspaceStore } from '../state/workspaceStore.js';
 import type { SpinePageProps } from './SignInPage.js';
 
-type GridView = 'actuals' | 'planning';
+type GridView = 'actuals' | 'planning' | 'close' | 'exceptions';
 type GridAction = 'trial-balance' | 'drill';
 
 interface GridFailure {
@@ -1367,7 +1369,11 @@ export default function ModelGridPage({
   const [view, setView] = useState<GridView>(() => {
     if (initialView !== undefined) return initialView;
     if (typeof window === 'undefined') return 'actuals';
-    return new URLSearchParams(window.location.search).get('tab') === 'planning' ? 'planning' : 'actuals';
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'planning') return 'planning';
+    if (tab === 'close') return 'close';
+    if (tab === 'exceptions') return 'exceptions';
+    return 'actuals';
   });
 
   const selectView = (next: GridView): void => {
@@ -1396,6 +1402,8 @@ export default function ModelGridPage({
             [
               { id: 'actuals', label: 'Actuals' },
               { id: 'planning', label: 'Planning' },
+              { id: 'close', label: 'Close' },
+              { id: 'exceptions', label: 'Exceptions' },
             ] as const
           ).map((tab) => (
             <button
@@ -1416,7 +1424,18 @@ export default function ModelGridPage({
         </div>
       </div>
 
-      <div role="tabpanel" aria-label={view === 'actuals' ? 'Actuals view' : 'Planning view'}>
+      <div
+        role="tabpanel"
+        aria-label={
+          view === 'actuals'
+            ? 'Actuals view'
+            : view === 'planning'
+              ? 'Planning view'
+              : view === 'close'
+                ? 'Close view'
+                : 'Exceptions view'
+        }
+      >
         {view === 'actuals' ? (
           <ActualsGrid
             companyId={companyId}
@@ -1426,13 +1445,30 @@ export default function ModelGridPage({
             onNavigate={onNavigate}
             {...(forcedState !== undefined ? { forcedState } : {})}
           />
-        ) : (
+        ) : view === 'planning' ? (
           <PlanningView
             companyId={companyId}
             authToken={authToken}
             fiscalYear={company?.fiscalYear ?? new Date().getFullYear()}
             periodCount={company?.periodCount ?? 12}
             currency={company?.currency ?? 'USD'}
+            onNavigate={onNavigate}
+            {...(forcedState !== undefined ? { forcedState } : {})}
+          />
+        ) : view === 'close' ? (
+          <CloseManagementPanel
+            companyId={companyId}
+            authToken={authToken}
+            fiscalYear={company?.fiscalYear ?? new Date().getFullYear()}
+            onNavigate={onNavigate}
+            onOpenExceptions={() => selectView('exceptions')}
+            {...(forcedState !== undefined ? { forcedState } : {})}
+          />
+        ) : (
+          <ExceptionsInboxPanel
+            companyId={companyId}
+            authToken={authToken}
+            fiscalYear={company?.fiscalYear ?? new Date().getFullYear()}
             onNavigate={onNavigate}
             {...(forcedState !== undefined ? { forcedState } : {})}
           />

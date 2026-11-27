@@ -1,0 +1,76 @@
+{
+  "oracleName": "M3 Exception-Rule Catalog Planted Recall & Precision Controls",
+  "sourceCatalog": "FPA-modular/docs/07_EXCEPTION_RULES_CATALOG.md @ cbaf0e44dbf8a51d4b7732e471d48262f3dc8c69",
+  "derivationMethod": "Hand-computed decimal thresholds and Q3 §4 negative controls",
+  "approvedDate": "2026-11-26",
+  "currency": "USD",
+  "entityCode": "HQ-1",
+  "periodId": "11111111-1111-4111-8111-111111111111",
+  "periodCode": "P07",
+  "periodEndDate": "2026-07-31",
+  "fiscalYear": 2026,
+  "periodNo": 7,
+  "openTargetPeriodId": "22222222-2222-4222-8222-222222222222",
+  "openTargetPeriodCode": "P08",
+  "openTargetPeriodStartDate": "2026-08-01",
+  "expectedPlantedFindings": [
+    {
+      "findingKey": "EXC-001|HQ-1|6100|P07|JV-DUP-1",
+      "ruleId": "EXC-001",
+      "severity": "high",
+      "suggestionKind": "reverse",
+      "amount": "45000.000000"
+    },
+    {
+      "findingKey": "EXC-004|HQ-1|5100|P07|JV-UNBAL-1",
+      "ruleId": "EXC-004",
+      "severity": "high",
+      "suggestionKind": "repost",
+      "amount": "0.010000"
+    },
+    {
+      "findingKey": "EXC-018|HQ-1|5100|P07|5100",
+      "ruleId": "EXC-018",
+      "severity": "high",
+      "suggestionKind": "commentary",
+      "amount": "300000.000000"
+    },
+    {
+      "findingKey": "EXC-018|HQ-1|5120|P07|5120",
+      "ruleId": "EXC-018",
+      "severity": "medium",
+      "suggestionKind": "commentary",
+      "amount": "150000.000000"
+    },
+    {
+      "findingKey": "EXC-025|HQ-1|6400|P07|JV-25-0733",
+      "ruleId": "EXC-025",
+      "severity": "medium",
+      "suggestionKind": "reclass",
+      "amount": "92500.000000",
+      "suggestedTargetAccount": "6200"
+    },
+    {
+      "findingKey": "EXC-026|HQ-1|1400|P07|PV-25-0866",
+      "ruleId": "EXC-026",
+      "severity": "high",
+      "suggestionKind": "reverse_and_repost",
+      "amount": "4800000.000000",
+      "decimalShiftSuspect": true
+    },
+    {
+      "findingKey": "EXC-028|HQ-1|6300|P07|PV-DUP-B",
+      "ruleId": "EXC-028",
+      "severity": "medium",
+      "suggestionKind": "reverse",
+      "amount": "32000.000000"
+    }
+  ],
+  "forbiddenControlFindingKeys": [
+    "EXC-004|HQ-1|5100|P07|JV-CTRL-BAL",
+    "EXC-018|HQ-1|5200|P07|5200",
+    "EXC-018|HQ-1|5300|P07|5300",
+    "EXC-025|HQ-1|6400|P07|JV-CTRL-ONE-TOKEN",
+    "EXC-026|HQ-1|1400|P07|PV-CTRL-2X"
+  ]
+}
