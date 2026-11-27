@@ -52,8 +52,8 @@ export default defineConfig({
     environment: 'node',
     testTimeout: 30000,
     hookTimeout: 30000,
-    // Parallel PGlite-backed forks: 3 forks on 4 vCPUs leaves headroom for OS/event-loop so microbenchmarks never contend.
+    // Parallel PGlite-backed forks: 2 forks match 2 vCPUs cleanly without context-switch contention.
     pool: 'forks',
-    poolOptions: { forks: { maxForks: 3, minForks: 1 } },
+    poolOptions: { forks: { maxForks: 2, minForks: 1 } },
   },
 });

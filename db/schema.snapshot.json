@@ -1,35 +1,81 @@
 {
-  "schemaVersion": "0004_m2_connectors",
-  "migration": "db/migrations/0004_m2_connectors.sql",
-  "tableCount": 25,
+  "schemaVersion": "0007_m3_consolidation",
+  "migration": "db/migrations/0007_m3_consolidation.sql",
+  "tableCount": 36,
   "tables": [
     "account",
     "app_user",
     "approval_task",
     "audit_log",
+    "close_cycle",
+    "close_task",
+    "close_task_template",
     "coa_mapping",
     "comment",
     "company",
     "connector_config",
+    "consolidation_run",
     "department",
     "entity",
+    "entity_ownership",
+    "exception_finding",
+    "exception_finding_event",
     "fiscal_calendar",
     "fiscal_period",
+    "fx_rate",
     "gl_entry",
     "gl_line",
     "import_batch",
     "import_row_raw",
+    "intercompany_rule",
     "job",
     "membership",
     "notification",
+    "period_lock_event",
     "plan_line",
     "plan_version",
+    "rectification_journal",
     "scenario",
     "statement_line",
     "sync_run",
     "workforce_position"
   ],
   "moneyColumns": [
+    {
+      "table": "consolidation_run",
+      "column": "total_assets",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_liabilities",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_equity",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_cta",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "consolidation_run",
+      "column": "minority_interest",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_eliminations",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "exception_finding",
+      "column": "amount",
+      "type": "NUMERIC(28,6)"
+    },
     {
       "table": "gl_entry",
       "column": "total_debit",
@@ -53,6 +99,16 @@
     {
       "table": "plan_line",
       "column": "amount",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "rectification_journal",
+      "column": "total_debit",
+      "type": "NUMERIC(28,6)"
+    },
+    {
+      "table": "rectification_journal",
+      "column": "total_credit",
       "type": "NUMERIC(28,6)"
     },
     {
@@ -429,6 +485,286 @@
       "default": "now()"
     },
     {
+      "table": "close_cycle",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "close_cycle",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_cycle",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_cycle",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_cycle",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "close_cycle",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "close_task",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "close_task",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "cycle_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "template_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "task_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "title",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "category",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "owner_role",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "assigned_user_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "due_date",
+      "type": "date",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "prerequisite_keys",
+      "type": "text[]",
+      "nullable": false,
+      "default": "'{}'::text[]"
+    },
+    {
+      "table": "close_task",
+      "column": "requires_reconciliation",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "close_task",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": "'pending'::text"
+    },
+    {
+      "table": "close_task",
+      "column": "sort_order",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "signed_off_by",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "signed_off_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "signoff_note",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "close_task",
+      "column": "version",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "close_task",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "close_task",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "close_task_template",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "close_task_template",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task_template",
+      "column": "task_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task_template",
+      "column": "title",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task_template",
+      "column": "category",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task_template",
+      "column": "owner_role",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task_template",
+      "column": "due_day_offset",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task_template",
+      "column": "prerequisite_keys",
+      "type": "text[]",
+      "nullable": false,
+      "default": "'{}'::text[]"
+    },
+    {
+      "table": "close_task_template",
+      "column": "requires_reconciliation",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "close_task_template",
+      "column": "sort_order",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task_template",
+      "column": "active",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "close_task_template",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "close_task_template",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "close_task_template",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
       "table": "coa_mapping",
       "column": "id",
       "type": "uuid",
@@ -709,6 +1045,139 @@
       "default": "now()"
     },
     {
+      "table": "consolidation_run",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "consolidation_run",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "fiscal_year",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "reporting_currency",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "group_tb_balanced",
+      "type": "boolean",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "group_bs_balanced",
+      "type": "boolean",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_assets",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_liabilities",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_equity",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_cta",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "minority_interest",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "total_eliminations",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "unmatched_ic_count",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "snapshot_json",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "executed_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "audit_entry_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "consolidation_run",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
       "table": "department",
       "column": "id",
       "type": "uuid",
@@ -801,6 +1270,300 @@
     },
     {
       "table": "entity",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "entity_ownership",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "entity_ownership",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity_ownership",
+      "column": "parent_entity_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity_ownership",
+      "column": "child_entity_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity_ownership",
+      "column": "ownership_pct",
+      "type": "numeric(9,6)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity_ownership",
+      "column": "consolidation_method",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "entity_ownership",
+      "column": "effective_from",
+      "type": "date",
+      "nullable": false,
+      "default": "CURRENT_DATE"
+    },
+    {
+      "table": "entity_ownership",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "exception_finding",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "exception_finding",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "finding_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "finding_id_hash",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "rule_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "title",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "severity",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": "'new'::text"
+    },
+    {
+      "table": "exception_finding",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "account_code",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "statement_line_key",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "grain_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "amount",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "exception_finding",
+      "column": "owner_user_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "due_date",
+      "type": "date",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "explanation_note",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "waiver_reason",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "waiver_expires_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "exception_finding",
+      "column": "evidence_json",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "exception_finding",
+      "column": "suggestion_json",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "exception_finding",
+      "column": "version",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "exception_finding",
+      "column": "detected_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "exception_finding",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "exception_finding",
+      "column": "updated_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "finding_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "from_status",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "to_status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "action",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "note",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "actor_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
+      "column": "audit_entry_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "exception_finding_event",
       "column": "created_at",
       "type": "timestamp with time zone",
       "nullable": false,
@@ -948,6 +1711,97 @@
     },
     {
       "table": "fiscal_period",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "fiscal_period",
+      "column": "lock_status",
+      "type": "text",
+      "nullable": false,
+      "default": "'open'::text"
+    },
+    {
+      "table": "fiscal_period",
+      "column": "lock_updated_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "fiscal_period",
+      "column": "lock_updated_by",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "fx_rate",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
+      "column": "base_currency",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
+      "column": "quote_currency",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
+      "column": "rate_type",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
+      "column": "as_of_date",
+      "type": "date",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
+      "column": "rate",
+      "type": "numeric(28,12)",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
+      "column": "source",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "fx_rate",
       "column": "created_at",
       "type": "timestamp with time zone",
       "nullable": false,
@@ -1248,6 +2102,76 @@
       "default": "now()"
     },
     {
+      "table": "intercompany_rule",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "from_entity_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "from_account_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "to_entity_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "to_account_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "rule_type",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "description",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "active",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "intercompany_rule",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
       "table": "job",
       "column": "id",
       "type": "uuid",
@@ -1451,6 +2375,76 @@
       "default": "now()"
     },
     {
+      "table": "period_lock_event",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "period_lock_event",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "period_lock_event",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "period_lock_event",
+      "column": "from_status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "period_lock_event",
+      "column": "to_status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "period_lock_event",
+      "column": "action",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "period_lock_event",
+      "column": "reason",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "period_lock_event",
+      "column": "actor_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "period_lock_event",
+      "column": "audit_entry_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "period_lock_event",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
       "table": "plan_line",
       "column": "id",
       "type": "uuid",
@@ -1571,6 +2565,118 @@
     },
     {
       "table": "plan_version",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "rectification_journal",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "rectification_journal",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "finding_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "target_period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "mode",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "suggestion_kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "basis",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "erp_hint",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "lines_json",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'[]'::jsonb"
+    },
+    {
+      "table": "rectification_journal",
+      "column": "total_debit",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "rectification_journal",
+      "column": "total_credit",
+      "type": "numeric(28,6)",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "rectification_journal",
+      "column": "posted_batch_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "csv_payload",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "note",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "rectification_journal",
       "column": "created_at",
       "type": "timestamp with time zone",
       "nullable": false,
@@ -2493,6 +3599,534 @@
       "references": "audit_log.id"
     },
     {
+      "table": "close_cycle",
+      "name": "close_cycle_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_cycle.company_id"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_cycle.created_at"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_created_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_cycle.created_by"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_cycle.id"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_cycle.period_id"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_updated_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_cycle.updated_at"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "close_cycle.id"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "close_cycle.id"
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_company_id_period_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "close_cycle.company_id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_category_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.category"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_category_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.category"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.signed_off_at"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.company_id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.created_at"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_cycle_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.cycle_id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_due_date_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.due_date"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_owner_role_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.owner_role"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_owner_role_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.owner_role"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_prerequisite_keys_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.prerequisite_keys"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_requires_reconciliation_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.requires_reconciliation"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_sort_order_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.sort_order"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_sort_order_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.sort_order"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.status"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.status"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_task_key_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.task_key"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_task_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.task_key"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_title_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.title"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_title_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.title"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_updated_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.updated_at"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_version_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.version"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_version_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task.version"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_assigned_user_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "assigned_user_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_cycle_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "cycle_id"
+      ],
+      "references": "close_cycle.id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_signed_off_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "signed_off_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_template_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "template_id"
+      ],
+      "references": "close_task_template.id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "close_task.id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_cycle_id_task_key_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "cycle_id",
+        "task_key"
+      ],
+      "references": "close_task.company_id"
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "close_task.id"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_active_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.active"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_category_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.category"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_category_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.category"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.company_id"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.created_at"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_created_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.created_by"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_due_day_offset_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.due_day_offset"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_due_day_offset_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.due_day_offset"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.id"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_owner_role_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.owner_role"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_owner_role_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.owner_role"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_prerequisite_keys_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.prerequisite_keys"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_requires_reconciliation_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.requires_reconciliation"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_sort_order_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.sort_order"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_sort_order_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.sort_order"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_task_key_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.task_key"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_task_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.task_key"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_title_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.title"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_title_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.title"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_updated_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "close_task_template.updated_at"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "close_task_template.id"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "close_task_template.id"
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_company_id_task_key_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "task_key"
+      ],
+      "references": "close_task_template.company_id"
+    },
+    {
       "table": "coa_mapping",
       "name": "coa_mapping_check",
       "type": "CHECK",
@@ -3024,6 +4658,224 @@
       "references": "connector_config.company_id"
     },
     {
+      "table": "consolidation_run",
+      "name": "consolidation_run_audit_entry_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.audit_entry_id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.company_id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.created_at"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_executed_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.executed_by"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_fiscal_year_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.fiscal_year"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_fiscal_year_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.fiscal_year"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_group_bs_balanced_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.group_bs_balanced"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_group_tb_balanced_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.group_tb_balanced"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_minority_interest_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.minority_interest"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.period_id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_reporting_currency_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.reporting_currency"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_reporting_currency_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.reporting_currency"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_snapshot_json_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.snapshot_json"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.status"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.status"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_total_assets_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.total_assets"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_total_cta_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.total_cta"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_total_eliminations_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.total_eliminations"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_total_equity_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.total_equity"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_total_liabilities_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.total_liabilities"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_unmatched_ic_count_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.unmatched_ic_count"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_unmatched_ic_count_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "consolidation_run.unmatched_ic_count"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_audit_entry_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "audit_entry_id"
+      ],
+      "references": "audit_log.id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_company_id_executed_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "executed_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "consolidation_run.id"
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "consolidation_run.id"
+    },
+    {
       "table": "department",
       "name": "department_active_not_null",
       "type": "CHECK",
@@ -3236,6 +5088,533 @@
       "references": "entity.id"
     },
     {
+      "table": "entity_ownership",
+      "name": "entity_ownership_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.child_entity_id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_child_entity_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.child_entity_id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.company_id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_consolidation_method_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.consolidation_method"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_consolidation_method_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.consolidation_method"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.created_at"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_effective_from_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.effective_from"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_ownership_pct_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.ownership_pct"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_ownership_pct_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.ownership_pct"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_parent_entity_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "entity_ownership.parent_entity_id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_company_id_child_entity_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "child_entity_id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_company_id_parent_entity_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "parent_entity_id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "entity_ownership.id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "entity_ownership.id"
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_company_id_parent_entity_id_child_entity_i_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "parent_entity_id",
+        "child_entity_id"
+      ],
+      "references": "entity_ownership.company_id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_amount_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.amount"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.status"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.company_id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_detected_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.detected_at"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_due_date_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.due_date"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_evidence_json_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.evidence_json"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_finding_id_hash_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.finding_id_hash"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_finding_id_hash_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.finding_id_hash"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_finding_key_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.finding_key"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_finding_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.finding_key"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_grain_key_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.grain_key"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_grain_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.grain_key"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.period_id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_rule_id_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.rule_id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_rule_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.rule_id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_severity_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.severity"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_severity_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.severity"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.status"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.status"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_suggestion_json_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.suggestion_json"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_title_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.title"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_title_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.title"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_updated_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.updated_at"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_updated_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.updated_by"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_version_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.version"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_version_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding.version"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_owner_user_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "owner_user_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_updated_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "updated_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "exception_finding.id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_finding_key_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "finding_key"
+      ],
+      "references": "exception_finding.company_id"
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "exception_finding.id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_action_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.action"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_action_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.action"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_actor_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.actor_id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_audit_entry_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.audit_entry_id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.company_id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.created_at"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_finding_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.finding_id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_from_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.from_status"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_to_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.to_status"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_to_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "exception_finding_event.to_status"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_audit_entry_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "audit_entry_id"
+      ],
+      "references": "audit_log.id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_company_id_actor_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "actor_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_company_id_finding_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "finding_id"
+      ],
+      "references": "exception_finding.id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "exception_finding_event.id"
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "exception_finding_event.id"
+    },
+    {
       "table": "fiscal_calendar",
       "name": "fiscal_calendar_company_id_not_null",
       "type": "CHECK",
@@ -3426,6 +5805,20 @@
     },
     {
       "table": "fiscal_period",
+      "name": "fiscal_period_lock_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.lock_status"
+    },
+    {
+      "table": "fiscal_period",
+      "name": "fiscal_period_lock_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fiscal_period.lock_status"
+    },
+    {
+      "table": "fiscal_period",
       "name": "fiscal_period_period_no_check",
       "type": "CHECK",
       "columns": [],
@@ -3480,6 +5873,16 @@
     },
     {
       "table": "fiscal_period",
+      "name": "fk_fiscal_period_lock_actor",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "lock_updated_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "fiscal_period",
       "name": "fiscal_period_pkey",
       "type": "PRIMARY KEY",
       "columns": [
@@ -3520,6 +5923,169 @@
         "id"
       ],
       "references": "fiscal_period.id"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_as_of_date_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.as_of_date"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_base_currency_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.base_currency"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_base_currency_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.base_currency"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.base_currency"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.company_id"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.created_at"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_created_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.created_by"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.id"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_quote_currency_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.quote_currency"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_quote_currency_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.quote_currency"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_rate_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.rate"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_rate_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.rate"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_rate_type_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.rate_type"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_rate_type_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.rate_type"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_source_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.source"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_source_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "fx_rate.source"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "fx_rate.id"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_company_id_base_currency_quote_currency_rate_type_a_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "base_currency",
+        "quote_currency",
+        "rate_type",
+        "as_of_date"
+      ],
+      "references": "fx_rate.company_id"
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "fx_rate.id"
     },
     {
       "table": "gl_entry",
@@ -4113,6 +6679,178 @@
       "references": "import_row_raw.id"
     },
     {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_active_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.active"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.from_entity_id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.company_id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.created_at"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_description_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.description"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_description_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.description"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_from_account_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.from_account_id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_from_entity_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.from_entity_id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_rule_type_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.rule_type"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_rule_type_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.rule_type"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_to_account_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.to_account_id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_to_entity_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "intercompany_rule.to_entity_id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_from_account_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "from_account_id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_from_entity_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "from_entity_id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_to_account_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "to_account_id"
+      ],
+      "references": "account.id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_to_entity_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "to_entity_id"
+      ],
+      "references": "entity.id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "intercompany_rule.id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_from_entity_id_from_account_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "from_entity_id",
+        "from_account_id",
+        "to_entity_id",
+        "to_account_id"
+      ],
+      "references": "intercompany_rule.company_id"
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "intercompany_rule.id"
+    },
+    {
       "table": "job",
       "name": "job_attempts_check",
       "type": "CHECK",
@@ -4504,6 +7242,168 @@
       "references": "notification.id"
     },
     {
+      "table": "period_lock_event",
+      "name": "period_lock_event_action_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.action"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_action_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.action"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_actor_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.actor_id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_audit_entry_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.audit_entry_id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.from_status"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.company_id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.created_at"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_from_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.from_status"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_from_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.from_status"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.period_id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_reason_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.reason"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_reason_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.reason"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_to_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.to_status"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_to_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "period_lock_event.to_status"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_audit_entry_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "audit_entry_id"
+      ],
+      "references": "audit_log.id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_company_id_actor_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "actor_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "period_lock_event.id"
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "period_lock_event.id"
+    },
+    {
       "table": "plan_line",
       "name": "plan_line_account_id_not_null",
       "type": "CHECK",
@@ -4780,6 +7680,231 @@
         "version_no"
       ],
       "references": "plan_version.company_id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_basis_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.basis"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_basis_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.basis"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.total_credit"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_check1",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.mode"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.company_id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.created_at"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_created_by_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.created_by"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_erp_hint_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.erp_hint"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_erp_hint_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.erp_hint"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_finding_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.finding_id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_lines_json_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.lines_json"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_mode_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.mode"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_mode_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.mode"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_suggestion_kind_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.suggestion_kind"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_suggestion_kind_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.suggestion_kind"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_target_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.target_period_id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_total_credit_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.total_credit"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_total_credit_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.total_credit"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_total_debit_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.total_debit"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_total_debit_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "rectification_journal.total_debit"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_finding_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "finding_id"
+      ],
+      "references": "exception_finding.id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_posted_batch_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "posted_batch_id"
+      ],
+      "references": "import_batch.id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_target_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "target_period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "rectification_journal.id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_finding_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "finding_id"
+      ],
+      "references": "rectification_journal.company_id"
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "rectification_journal.id"
     },
     {
       "table": "scenario",
@@ -5563,6 +8688,115 @@
       ]
     },
     {
+      "table": "close_cycle",
+      "name": "close_cycle_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_company_id_period_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "period_id"
+      ]
+    },
+    {
+      "table": "close_cycle",
+      "name": "close_cycle_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "close_cycle",
+      "name": "idx_close_cycle_company_period",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "period_id"
+      ]
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_cycle_id_task_key_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "cycle_id",
+        "task_key"
+      ]
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "close_task",
+      "name": "close_task_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "close_task",
+      "name": "idx_close_task_cycle_order",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "cycle_id",
+        "sort_order",
+        "task_key"
+      ]
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_company_id_task_key_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "task_key"
+      ]
+    },
+    {
+      "table": "close_task_template",
+      "name": "close_task_template_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "close_task_template",
+      "name": "idx_close_task_template_company",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "sort_order",
+        "task_key"
+      ]
+    },
+    {
       "table": "coa_mapping",
       "name": "coa_mapping_company_id_id_key",
       "unique": true,
@@ -5663,6 +8897,34 @@
       ]
     },
     {
+      "table": "consolidation_run",
+      "name": "consolidation_run_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "consolidation_run",
+      "name": "consolidation_run_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "consolidation_run",
+      "name": "idx_consolidation_run_company_period",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "fiscal_year",
+        "period_id",
+        "created_at"
+      ]
+    },
+    {
       "table": "department",
       "name": "department_company_id_code_key",
       "unique": true,
@@ -5712,6 +8974,117 @@
       "unique": true,
       "columns": [
         "id"
+      ]
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_company_id_parent_entity_id_child_entity_i_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "parent_entity_id",
+        "child_entity_id"
+      ]
+    },
+    {
+      "table": "entity_ownership",
+      "name": "entity_ownership_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "entity_ownership",
+      "name": "idx_entity_ownership_company",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "parent_entity_id",
+        "child_entity_id"
+      ]
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_finding_key_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "finding_key"
+      ]
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "exception_finding",
+      "name": "exception_finding_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "exception_finding",
+      "name": "idx_exception_finding_company_owner",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "owner_user_id",
+        "status"
+      ]
+    },
+    {
+      "table": "exception_finding",
+      "name": "idx_exception_finding_company_period_status",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "period_id",
+        "status",
+        "severity"
+      ]
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "exception_finding_event_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "idx_exception_finding_event_company_finding",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "finding_id",
+        "created_at"
       ]
     },
     {
@@ -5778,6 +9151,47 @@
         "company_id",
         "start_date",
         "end_date"
+      ]
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_company_id_base_currency_quote_currency_rate_type_a_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "base_currency",
+        "quote_currency",
+        "rate_type",
+        "as_of_date"
+      ]
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "fx_rate",
+      "name": "fx_rate_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "fx_rate",
+      "name": "idx_fx_rate_lookup",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "base_currency",
+        "quote_currency",
+        "rate_type",
+        "as_of_date"
       ]
     },
     {
@@ -5888,6 +9302,44 @@
       ]
     },
     {
+      "table": "intercompany_rule",
+      "name": "idx_intercompany_rule_company_active",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "active"
+      ]
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_from_entity_id_from_account_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "from_entity_id",
+        "from_account_id",
+        "to_entity_id",
+        "to_account_id"
+      ]
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "intercompany_rule",
+      "name": "intercompany_rule_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
       "table": "job",
       "name": "idx_job_company_created",
       "unique": false,
@@ -5977,6 +9429,33 @@
       ]
     },
     {
+      "table": "period_lock_event",
+      "name": "idx_period_lock_event_company_period",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "period_id",
+        "created_at"
+      ]
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "period_lock_event",
+      "name": "period_lock_event_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
       "table": "plan_line",
       "name": "plan_line_company_id_id_key",
       "unique": true,
@@ -6029,6 +9508,42 @@
     {
       "table": "plan_version",
       "name": "plan_version_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "rectification_journal",
+      "name": "idx_rectification_journal_company_period",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "target_period_id",
+        "created_at"
+      ]
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_finding_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "finding_id"
+      ]
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "rectification_journal",
+      "name": "rectification_journal_pkey",
       "unique": true,
       "columns": [
         "id"
@@ -6153,6 +9668,16 @@
       "deferrable": false
     },
     {
+      "table": "consolidation_run",
+      "name": "trg_consolidation_run_immutable",
+      "deferrable": false
+    },
+    {
+      "table": "exception_finding_event",
+      "name": "trg_exception_finding_event_immutable",
+      "deferrable": false
+    },
+    {
       "table": "gl_entry",
       "name": "trg_gl_entry_balance_header",
       "deferrable": true
@@ -6171,6 +9696,11 @@
       "table": "import_row_raw",
       "name": "trg_import_row_raw_accounting",
       "deferrable": true
+    },
+    {
+      "table": "period_lock_event",
+      "name": "trg_period_lock_event_append_only",
+      "deferrable": false
     }
   ]
 }

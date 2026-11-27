@@ -1,7 +1,7 @@
 import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { checkOrWriteUserGuide } from './generate-docs.mjs';
 import { runWorkIntegrityCheck } from './work-integrity.mjs';
@@ -17,6 +17,28 @@ function makeTempWorkspace(): string {
 function runGate(scriptRelPath: string, rootDir: string) {
   return spawnSync('node', [join(process.cwd(), scriptRelPath), '--root', rootDir], {
     encoding: 'utf8',
+  });
+}
+
+function runGateAsync(
+  scriptRelPath: string,
+  rootDir: string,
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn('node', [join(process.cwd(), scriptRelPath), '--root', rootDir], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('close', (code) => {
+      resolve({ status: code, stdout, stderr });
+    });
   });
 }
 
@@ -74,7 +96,7 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     expect(digest.stdout).toContain('renders the page');
   });
 
-  it('P01 money-ast fails on raw float arithmetic, Math.abs, Number(), and .toFixed() on money', () => {
+  it('P01 money-ast fails on raw float arithmetic, Math.abs, Number(), and .toFixed() on money', async () => {
     const ws = makeTempWorkspace();
     mkdirSync(join(ws, 'core', 'statements'), { recursive: true });
     writeFileSync(
@@ -88,17 +110,18 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
         '}',
       ].join('\n'),
     );
-    const red = runGate('scripts/money-ast.mjs', ws);
+    const [red, cleanRepo] = await Promise.all([
+      runGateAsync('scripts/money-ast.mjs', ws),
+      runGateAsync('scripts/money-ast.mjs', process.cwd()),
+    ]);
     expect(red.status).toBe(1);
     expect(red.stderr).toContain('arithmetic -');
     expect(red.stderr).toContain('math-abs-banned');
     expect(red.stderr).toContain('float-coercion');
-
-    const cleanRepo = runGate('scripts/money-ast.mjs', process.cwd());
     expect(cleanRepo.status).toBe(0);
   });
 
-  it('P02 tautology fails on constant tautology and self-recomputing engine expectations', () => {
+  it('P02 tautology fails on constant tautology and self-recomputing engine expectations', async () => {
     const ws = makeTempWorkspace();
     mkdirSync(join(ws, 'core'), { recursive: true });
     // Build test content via charCode/concat so our own gate test file does not match literal tautology regex
@@ -110,15 +133,16 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
       `function computeVariance(a: number, b: number) { return a - b; }\n${constTaut}\n${selfRecompute}\n`,
     );
 
-    const red = runGate('scripts/tautology.mjs', ws);
+    const [red, cleanRepo] = await Promise.all([
+      runGateAsync('scripts/tautology.mjs', ws),
+      runGateAsync('scripts/tautology.mjs', process.cwd()),
+    ]);
     expect(red.status).toBe(1);
     expect(red.stderr).toContain('self-recomputing assertion');
-
-    const cleanRepo = runGate('scripts/tautology.mjs', process.cwd());
     expect(cleanRepo.status).toBe(0);
   });
 
-  it('P03 fabrication fails on hardcoded currency KPI, coming-soon chrome, and banned seed names', () => {
+  it('P03 fabrication fails on hardcoded currency KPI, coming-soon chrome, and banned seed names', async () => {
     const ws = makeTempWorkspace();
     mkdirSync(join(ws, 'src', 'pages'), { recursive: true });
     const fakeDollar = '$' + '12.4M';
@@ -127,12 +151,13 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
       join(ws, 'src', 'pages', 'FakeBoard.tsx'),
       `export const kpi = { revenue: '${fakeDollar}' };\nexport const label = '${comingSoon}';\n`,
     );
-    const red = runGate('scripts/fabrication.mjs', ws);
+    const [red, cleanRepo] = await Promise.all([
+      runGateAsync('scripts/fabrication.mjs', ws),
+      runGateAsync('scripts/fabrication.mjs', process.cwd()),
+    ]);
     expect(red.status).toBe(1);
     expect(red.stderr).toContain('currency-literal');
     expect(red.stderr).toContain('coming-soon-chrome');
-
-    const cleanRepo = runGate('scripts/fabrication.mjs', process.cwd());
     expect(cleanRepo.status).toBe(0);
   });
 
@@ -407,12 +432,108 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     cleanGit(['-c', 'user.email=gate@test.local', '-c', 'user.name=Gate Test', 'commit', '--allow-empty', '-m', 'feat(spine): add persistence', '-m', 'WI-0012 evidence']);
     const cleanHistory = runGate('scripts/work-integrity.mjs', cleanWs);
     expect(cleanHistory.status).toBe(0);
+
+    // 9. Explicit exemptCommits only exempt the named ancestor SHA with a decided DEC-### and rationale;
+    //    unlisted violating commits, undecided DECs, short reasons, duplicate SHAs, and non-ancestors still fail.
+    const exRepo = repo([
+      { subject: 'chore(integrity): enforce the work-integrity codex', body: 'WI-0005C evidence' },
+      { subject: 'feat: published commit without scope' },
+      { subject: 'feat(gates): subsequent compliant commit', body: 'WI-0044 evidence' },
+    ]);
+    writeFileSync(
+      join(exRepo.ws, 'TASKBOARD.md'),
+      '## \u00a7Decisions\n| DEC-007 | 2026-11-25 | boundary | ratified | \u2014 | Y |\n| DEC-021 | 2026-11-26 | exempt published commits | ratified | \u2014 | Y |\n',
+    );
+    writeBaseline(exRepo.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: exRepo.hashes[0],
+      note: BOUNDARY_REASON,
+      exemptCommits: [
+        {
+          sha: exRepo.hashes[1],
+          decision: 'DEC-021',
+          reason: 'Published commit on main predates DEC-021 repair and cannot be rewritten.',
+        },
+      ],
+    });
+    expect(runGate('scripts/work-integrity.mjs', exRepo.ws).status).toBe(0);
+
+    // Unlisted violating commit after an exempted commit still fails S-COMMIT.
+    const exDirty = repo([
+      { subject: 'chore(integrity): enforce the work-integrity codex', body: 'WI-0005C evidence' },
+      { subject: 'feat: published commit without scope' },
+      { subject: 'feat: unlisted bad commit' },
+    ]);
+    writeFileSync(
+      join(exDirty.ws, 'TASKBOARD.md'),
+      '## \u00a7Decisions\n| DEC-007 | 2026-11-25 | boundary | ratified | \u2014 | Y |\n| DEC-021 | 2026-11-26 | exempt published commits | ratified | \u2014 | Y |\n',
+    );
+    writeBaseline(exDirty.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: exDirty.hashes[0],
+      note: BOUNDARY_REASON,
+      exemptCommits: [
+        {
+          sha: exDirty.hashes[1],
+          decision: 'DEC-021',
+          reason: 'Published commit on main predates DEC-021 repair and cannot be rewritten.',
+        },
+      ],
+    });
+    const unlistedRed = runGate('scripts/work-integrity.mjs', exDirty.ws);
+    expect(unlistedRed.status).toBe(1);
+    const badHash = exDirty.hashes[2] ?? '';
+    expect(badHash.length).toBe(40);
+    expect(unlistedRed.stderr).toContain(badHash.slice(0, 7));
+
+    // Bad exemptCommits metadata (unknown DEC, non-ancestor SHA, short reason) fails closed.
+    writeBaseline(exRepo.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: exRepo.hashes[0],
+      note: BOUNDARY_REASON,
+      exemptCommits: [
+        {
+          sha: exRepo.hashes[1],
+          decision: 'DEC-999',
+          reason: 'Published commit on main predates DEC-021 repair and cannot be rewritten.',
+        },
+      ],
+    });
+    expect(runWorkIntegrityCheck(exRepo.ws).violations.join('\n')).toContain('DEC-999');
+
+    writeBaseline(exRepo.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: exRepo.hashes[0],
+      note: BOUNDARY_REASON,
+      exemptCommits: [
+        {
+          sha: 'e'.repeat(40),
+          decision: 'DEC-021',
+          reason: 'Published commit on main predates DEC-021 repair and cannot be rewritten.',
+        },
+      ],
+    });
+    expect(runWorkIntegrityCheck(exRepo.ws).violations.join('\n')).toContain('is not an ancestor of HEAD');
+
+    writeBaseline(exRepo.ws, {
+      decision: 'DEC-007',
+      enforcedFrom: exRepo.hashes[0],
+      note: BOUNDARY_REASON,
+      exemptCommits: [
+        {
+          sha: exRepo.hashes[1],
+          decision: 'DEC-021',
+          reason: 'too short',
+        },
+      ],
+    });
+    expect(runWorkIntegrityCheck(exRepo.ws).violations.join('\n')).toContain('must record a rationale');
   });
 
-  it('INT1-INT13 work-integrity fails on TODO placeholder, dead button, empty catch, console.log, assertionless test, cut-line breach, or missing attestation', () => {
+  it('INT1-INT13 work-integrity fails on TODO placeholder, dead button, empty catch, console.log, assertionless test, cut-line breach, or missing attestation', async () => {
     const ws = makeTempWorkspace();
     mkdirSync(join(ws, 'src'), { recursive: true });
-    mkdirSync(join(ws, 'core', 'consolidation'), { recursive: true });
+    mkdirSync(join(ws, 'core', 'montecarlo'), { recursive: true });
 
     // Construct tokens dynamically so our test file stays clean
     const todoWord = 'TO' + 'DO';
@@ -431,7 +552,10 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
       '## §Work Items\n| WI-9999 | M0 | x | — | §1 | 1. ok [x] | x | x | Y | VERIFIED | verified output tail here |\n## §Attestations\n',
     );
 
-    const red = runGate('scripts/work-integrity.mjs', ws);
+    const [red, cleanRepo] = await Promise.all([
+      runGateAsync('scripts/work-integrity.mjs', ws),
+      runGateAsync('scripts/work-integrity.mjs', process.cwd()),
+    ]);
     expect(red.status).toBe(1);
     expect(red.stderr).toContain('S-PLACEHOLDER');
     expect(red.stderr).toContain('S-DEBUG');
@@ -440,8 +564,6 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     expect(red.stderr).toContain('S-TEST-INTEGRITY');
     expect(red.stderr).toContain('S-CUTLINE');
     expect(red.stderr).toContain('INT1: WI-9999');
-
-    const cleanRepo = runGate('scripts/work-integrity.mjs', process.cwd());
     expect(cleanRepo.status).toBe(0);
   });
 

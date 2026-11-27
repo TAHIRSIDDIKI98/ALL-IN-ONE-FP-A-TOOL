@@ -1,5 +1,37 @@
 {
   "decision": "DEC-007",
   "enforcedFrom": "a7132dba6571432c0c33f768c08a80fd2c2135a4",
-  "note": "S-COMMIT (INT8) governs commits authored after the Work-Integrity Codex took effect. This boundary is the first commit that repaired the gate with a decided baseline (a7132db); every commit at or before it predates enforcement and is published history that MASTER_PROMPT §8.9 forbids rewriting. The boundary commit itself must satisfy S-COMMIT, so no violating commit can ever become the boundary, and every commit newer than it is checked."
+  "note": "S-COMMIT (INT8) governs commits authored after the Work-Integrity Codex took effect. This boundary is the first commit that repaired the gate with a decided baseline (a7132db); every commit at or before it predates enforcement and is published history that MASTER_PROMPT §8.9 forbids rewriting. The boundary commit itself must satisfy S-COMMIT, so no violating commit can ever become the boundary, and every commit newer than it is checked.",
+  "exemptCommits": [
+    {
+      "sha": "c713abe24833d781bdbf825626e273e36744a624",
+      "decision": "DEC-021",
+      "reason": "Published M2 WI-0033 commit on main placed WI-0033 in subject without scope/body; §8.9 forbids rewriting published history."
+    },
+    {
+      "sha": "5de18841f0ecd38ffc994c9c2107397966a0c740",
+      "decision": "DEC-021",
+      "reason": "Published M2 WI-0034 commit on main omitted conventional scope and WI body; §8.9 forbids rewriting published history."
+    },
+    {
+      "sha": "45066528351c6648bbb2d0c7658476bc4f9512ec",
+      "decision": "DEC-021",
+      "reason": "Published M2 WI-0035..WI-0037 commit on main omitted conventional scope and WI body; §8.9 forbids rewriting published history."
+    },
+    {
+      "sha": "ee68b2038f77a8e3a69fdd8bab0830803578c5e6",
+      "decision": "DEC-021",
+      "reason": "Published M2 WI-0038/WI-0039 commit on main omitted conventional scope; §8.9 forbids rewriting published history."
+    },
+    {
+      "sha": "2eeb1d6045db3e01efefef57da7c04ad6e9dd9f9",
+      "decision": "DEC-021",
+      "reason": "Published M2 WI-0040/WI-0041 commit on main omitted WI body; §8.9 forbids rewriting published history."
+    },
+    {
+      "sha": "4b69865f160b586c50ed5afce6975e2c999a8c8d",
+      "decision": "DEC-021",
+      "reason": "Published M2 WI-0042/WI-0043 documentation commit on main omitted WI body; §8.9 forbids rewriting published history."
+    }
+  ]
 }

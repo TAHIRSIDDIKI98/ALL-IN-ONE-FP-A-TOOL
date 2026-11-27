@@ -27,6 +27,17 @@ export const QuarantineRecordSchema = z.object({
 
 export type QuarantineRecord = z.infer<typeof QuarantineRecordSchema>;
 
+export const PeriodWriteAdvisorySchema = z.object({
+  periodId: z.string().uuid(),
+  periodCode: z.string().min(1),
+  fiscalYear: z.number().int(),
+  lockStatus: z.enum(['soft_closed', 'hard_closed']),
+  code: z.enum(['SOFT_CLOSE_WRITE_WARNING', 'HARD_CLOSE_WRITE_BLOCKED']),
+  message: z.string().min(1),
+});
+
+export type PeriodWriteAdvisory = z.infer<typeof PeriodWriteAdvisorySchema>;
+
 export const ImportCommitRequestSchema = z.object({
   kind: z.enum(['actuals', 'budget']),
   sourceFilename: z.string().trim().min(1).max(200),
@@ -51,6 +62,7 @@ export const ImportCommitResultSchema = z.object({
   entryCount: z.number().int().nonnegative(),
   sourceHash: z.string().regex(/^[0-9a-f]{64}$/),
   quarantined: z.array(QuarantineRecordSchema),
+  periodAdvisories: z.array(PeriodWriteAdvisorySchema).optional(),
 });
 
 export type ImportCommitResult = z.infer<typeof ImportCommitResultSchema>;
@@ -91,6 +103,7 @@ export const ImportPreviewReportSchema = z.object({
   totalCredits: z.string(),
   imported: z.array(ImportPreviewRowSchema),
   quarantined: z.array(QuarantineRecordSchema),
+  periodAdvisories: z.array(PeriodWriteAdvisorySchema).optional(),
 });
 
 export type ImportPreviewReport = z.infer<typeof ImportPreviewReportSchema>;

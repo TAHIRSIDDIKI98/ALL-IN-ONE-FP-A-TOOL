@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PeriodDateSchema } from '../../shared/temporal.js';
 import { ApiClientError, createApiClient } from './client.js';
 
 interface RecordedRequest {
@@ -1791,6 +1792,255 @@ describe('WI-0019 browser API client (relative URLs, typed errors, string money)
     expect(checklistCalls[1]?.url).toBe(`/api/companies/${companyId}/onboarding/checklist/signoff`);
     expect(loadedChecklist.completedCount).toBe(5);
     expect(signedChecklist.isComplete).toBe(true);
+  });
+
+  it('calls M3 close management endpoints with relative URLs and surfaces PERIOD_LOCKED (WI-0045)', async () => {
+    const companyId = String(COMPANY['companyId']);
+    const periodId = '55555555-5555-4555-8555-555555555555';
+    const cycleId = '66666666-6666-4666-8666-666666666666';
+    const taskId = '77777777-7777-4777-8777-777777777777';
+
+    const sampleCloseWorkspace = {
+      companyId,
+      actorRole: 'owner',
+      selectedFiscalYear: 2026,
+      selectedPeriodCode: 'P01',
+      selectedPeriodId: periodId,
+      periods: [
+        {
+          periodId,
+          fiscalYear: 2026,
+          periodNo: 1,
+          periodCode: 'P01',
+          label: 'Jan 2026',
+          startDate: '2026-01-01',
+          endDate: '2026-01-31',
+          lockStatus: 'open',
+          lockUpdatedAt: null,
+          hasCycle: true,
+          derivedStatus: 'in_progress',
+          completionPct: '50.00',
+          signedOffCount: 1,
+          totalTasks: 2,
+        },
+      ],
+      templates: [],
+      cycle: {
+        id: cycleId,
+        periodId,
+        periodCode: 'P01',
+        fiscalYear: 2026,
+        createdAt: '2026-11-26T00:00:00.000Z',
+      },
+      statusSummary: {
+        derivedStatus: 'in_progress',
+        lockStatus: 'open',
+        totalTasks: 2,
+        signedOffCount: 1,
+        inProgressCount: 0,
+        pendingCount: 1,
+        reopenedCount: 0,
+        completionPct: '50.00',
+        reconciliationPassed: true,
+        readyForHardClose: false,
+        incompleteTaskKeys: ['reconcile_tb'],
+      },
+      reconciliation: {
+        passed: true,
+        trialBalanceBalanced: true,
+        unmappedOrQuarantinedCount: 0,
+        statementArticulationValid: true,
+        hasActualsInPeriod: true,
+        issues: [],
+      },
+      tasks: [],
+      lockEvents: [],
+    };
+
+    const { fetchImpl, calls } = fakeFetch((req) => {
+      if (req.url.endsWith('/close/templates')) {
+        return { status: 200, body: { companyId, templates: [] } };
+      }
+      return { status: 200, body: sampleCloseWorkspace };
+    });
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const ws = await client.getCloseWorkspace(companyId, { year: 2026, period: 'P01' });
+    await client.upsertCloseTemplates(companyId, {
+      templates: [
+        {
+          taskKey: 'import_actuals',
+          title: 'Import GL',
+          category: 'import',
+          ownerRole: 'editor',
+          dueDayOffset: 1,
+          prerequisiteKeys: [],
+          requiresReconciliation: false,
+          sortOrder: 1,
+        },
+      ],
+    });
+    await client.initializeCloseCycle(companyId, { fiscalYear: 2026, periodCode: 'P01' });
+    await client.transitionCloseTask(companyId, cycleId, taskId, {
+      action: 'sign_off',
+      expectedVersion: 1,
+      note: 'Verified',
+    });
+    await client.transitionPeriodLock(companyId, periodId, {
+      action: 'soft_close',
+      reason: 'Close window started',
+    });
+
+    expect(ws.statusSummary.completionPct).toBe('50.00');
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/close?year=2026&period=P01`);
+    expect(calls[1]?.method).toBe('PUT');
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/close/templates`);
+    expect(calls[2]?.url).toBe(`/api/companies/${companyId}/close/cycles`);
+    expect(calls[3]?.url).toBe(
+      `/api/companies/${companyId}/close/cycles/${cycleId}/tasks/${taskId}/transition`,
+    );
+    expect(calls[4]?.url).toBe(`/api/companies/${companyId}/close/periods/${periodId}/lock`);
+
+    const { fetchImpl: lockedFetch } = fakeFetch(() => ({
+      status: 409,
+      body: {
+        error: {
+          code: 'PERIOD_LOCKED',
+          userMessage: 'Period P02 is hard-closed.',
+          details: {},
+        },
+      },
+    }));
+    const lockedClient = createApiClient({ getToken: () => 'token-123', fetchImpl: lockedFetch });
+    await expect(
+      lockedClient.commitImport(companyId, {
+        kind: 'actuals',
+        sourceFilename: 'late.csv',
+        csvText: 'a,b',
+      }),
+    ).rejects.toMatchObject({ code: 'PERIOD_LOCKED' });
+  });
+
+  it('calls M3 exception-inbox, scan, transition, and rectification routes through tenant-scoped relative URLs (WI-0046)', async () => {
+    const companyId = String(COMPANY['companyId']);
+    const findingId = '44444444-4444-4444-8444-444444444444';
+    const sampleWorkspace = {
+      companyId,
+      actorRole: 'owner',
+      selectedFiscalYear: 2026,
+      selectedPeriodCode: 'P04',
+      selectedPeriodId: '22222222-2222-4222-8222-222222222222',
+      periods: [],
+      members: [],
+      catalog: [],
+      metrics: {
+        totalFindings: 1,
+        openCount: 1,
+        highSeverityOpenCount: 0,
+        unassignedOpenCount: 1,
+        correctedPendingVerifyCount: 0,
+        waivedCount: 0,
+        closedOrVerifiedCount: 0,
+      },
+      lastScan: null,
+      findings: [],
+      recentEvents: [],
+    };
+    const { fetchImpl, calls } = fakeFetch(() => ({ status: 200, body: sampleWorkspace }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    const ws = await client.getExceptionsWorkspace(companyId, { year: 2026, period: 'P04' });
+    await client.scanCompanyExceptions(companyId, { fiscalYear: 2026, periodCode: 'P04' });
+    await client.transitionExceptionFinding(companyId, findingId, {
+      action: 'acknowledge',
+      expectedVersion: 1,
+    });
+    await client.rectifyExceptionFinding(companyId, findingId, {
+      mode: 'post_reversal',
+      expectedVersion: 2,
+      targetPeriodCode: 'P04',
+    });
+
+    expect(ws.selectedPeriodCode).toBe('P04');
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/exceptions?year=2026&period=P04`);
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/exceptions/scan`);
+    expect(calls[2]?.url).toBe(`/api/companies/${companyId}/exceptions/${findingId}/transition`);
+    expect(calls[3]?.url).toBe(`/api/companies/${companyId}/exceptions/${findingId}/rectify`);
+  });
+
+  it('calls M3 consolidation entity, ownership, fx-rate, ic-rule, revaluation, and run routes (WI-0047)', async () => {
+    const companyId = String(COMPANY['companyId']);
+    const { fetchImpl, calls } = fakeFetch(() => ({
+      status: 200,
+      body: {
+        companyId,
+        baseCurrency: 'USD',
+        entities: [],
+        ownerships: [],
+        fxRates: [],
+        icRules: [],
+        latestRun: null,
+        recentRuns: [],
+      },
+    }));
+    const client = createApiClient({ getToken: () => 'token-123', fetchImpl });
+
+    await client.getConsolidationWorkspace(companyId);
+    await client.createConsolidationEntity(companyId, {
+      code: 'ENT-UK',
+      name: 'UK Sub',
+      currency: 'GBP',
+      parentEntityCode: 'ENT-US',
+    });
+    await client.upsertEntityOwnership(companyId, {
+      parentEntityCode: 'ENT-US',
+      childEntityCode: 'ENT-UK',
+      ownershipPct: '80',
+      method: 'full',
+      effectiveFrom: PeriodDateSchema.parse('2026-01-01'),
+    });
+    await client.upsertFxRate(companyId, {
+      baseCurrency: 'GBP',
+      quoteCurrency: 'USD',
+      rateType: 'closing',
+      asOfDate: PeriodDateSchema.parse('2026-01-31'),
+      rate: '1.2800',
+      source: 'ecb',
+    });
+    await client.createIntercompanyRule(companyId, {
+      fromEntityCode: 'ENT-US',
+      fromAccountCode: '1150',
+      toEntityCode: 'ENT-UK',
+      toAccountCode: '2150',
+      ruleType: 'ic_receivable_payable',
+      description: 'US-UK AR/AP',
+    });
+    await client.previewFxRevaluation(companyId, {
+      functionalCurrency: 'USD',
+      items: [
+        {
+          itemKey: 'AR-1',
+          entityCode: 'ENT-US',
+          accountCode: '1100',
+          accountType: 'asset',
+          foreignCurrency: 'EUR',
+          functionalCurrency: 'USD',
+          foreignAmount: '1000.00',
+          bookingRate: '1.0800',
+          periodEndRate: '1.1000',
+          settled: false,
+        },
+      ],
+    });
+    await client.runConsolidation(companyId, { periodCode: 'P01', fiscalYear: 2026 });
+
+    expect(calls[0]?.url).toBe(`/api/companies/${companyId}/consolidation`);
+    expect(calls[1]?.url).toBe(`/api/companies/${companyId}/consolidation/entities`);
+    expect(calls[2]?.url).toBe(`/api/companies/${companyId}/consolidation/ownerships`);
+    expect(calls[3]?.url).toBe(`/api/companies/${companyId}/consolidation/fx-rates`);
+    expect(calls[4]?.url).toBe(`/api/companies/${companyId}/consolidation/ic-rules`);
+    expect(calls[5]?.url).toBe(`/api/companies/${companyId}/consolidation/fx-revaluation`);
+    expect(calls[6]?.url).toBe(`/api/companies/${companyId}/consolidation/runs`);
   });
 });
 

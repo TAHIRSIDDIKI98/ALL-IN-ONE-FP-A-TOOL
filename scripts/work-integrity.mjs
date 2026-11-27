@@ -11,7 +11,7 @@
  *  - S-COMMIT (INT8): every authored commit after the recorded codex boundary is conventional and
  *    carries its single WI id (GitHub pull-request merge commits and pre-codex history are out of scope)
  *  - INT1 & INT9: every `VERIFIED` row in TASKBOARD.md §Work Items has non-empty pasted evidence AND a corresponding verbatim §13.9 attestation in TASKBOARD.md §Attestations
- *  - S-CUTLINE (INT11): bans out-of-phase directories/files (`consolidation`, `monte-carlo`, `marketplace`, `ai-chat`, etc.) during M0/M1
+ *  - S-CUTLINE (INT11): bans out-of-phase directories/files (`monte-carlo`, `marketplace`, `capex`, `treasury`, `ai-chat`, etc.) until their phase/WI opens (`consolidation` unlocked by M3 WI-0047 / DEC-024)
  *  - S-RATCHET (INT6, INT13): verifies test file count, `it()` count, assertion count, and `/core` source-to-test ratio never decrease against `scripts/integrity-ratchet.json`.
  */
 import { execSync, spawnSync } from 'node:child_process';
@@ -26,7 +26,6 @@ const PRODUCT_DIRS = ['core', 'shared', 'server', 'src'];
 const TEST_DIRS = ['core', 'shared', 'server', 'src', 'db', 'fixtures', 'e2e', 'scripts'];
 
 const OUT_OF_PHASE_NAMES = new Set([
-  'consolidation',
   'montecarlo',
   'monte-carlo',
   'marketplace',
@@ -337,7 +336,7 @@ function commitHygieneViolations(subject, body) {
 function loadCommitBaseline(rootDir, violations) {
   const baselinePath = join(rootDir, COMMIT_BASELINE_REL);
   if (!existsSync(baselinePath)) {
-    return { decision: null, enforcedFrom: null };
+    return { decision: null, enforcedFrom: null, exemptCommits: [] };
   }
 
   let parsed;
@@ -345,7 +344,7 @@ function loadCommitBaseline(rootDir, violations) {
     parsed = JSON.parse(readFileSync(baselinePath, 'utf8'));
   } catch {
     violations.push('S-COMMIT scripts/commit-baseline.json is not valid JSON');
-    return { decision: null, enforcedFrom: null };
+    return { decision: null, enforcedFrom: null, exemptCommits: [] };
   }
 
   const decision = typeof parsed.decision === 'string' ? parsed.decision : null;
@@ -363,17 +362,59 @@ function loadCommitBaseline(rootDir, violations) {
     violations.push('S-COMMIT scripts/commit-baseline.json must declare a full 40-character lowercase enforcedFrom commit hash');
   }
 
+  const taskboardPath = join(rootDir, 'TASKBOARD.md');
+  const taskboard = existsSync(taskboardPath) ? readFileSync(taskboardPath, 'utf8') : '';
+
   if (decision !== null && /^[0-9a-f]{40}$/.test(enforcedFrom)) {
-    const taskboardPath = join(rootDir, 'TASKBOARD.md');
-    const taskboard = existsSync(taskboardPath) ? readFileSync(taskboardPath, 'utf8') : '';
     if (!new RegExp(`\\b${decision}\\b`).test(taskboard)) {
       violations.push(`S-COMMIT baseline cites ${decision}, but that decision id does not appear in TASKBOARD.md`);
+    }
+  }
+
+  const exemptCommits = [];
+  if (parsed.exemptCommits !== undefined) {
+    if (!Array.isArray(parsed.exemptCommits)) {
+      violations.push('S-COMMIT scripts/commit-baseline.json exemptCommits must be an array when present');
+    } else {
+      const seenShas = new Set();
+      for (const [idx, entry] of parsed.exemptCommits.entries()) {
+        const sha = typeof entry?.sha === 'string' ? entry.sha : '';
+        const entryDec = typeof entry?.decision === 'string' ? entry.decision : '';
+        const entryReason = typeof entry?.reason === 'string' ? entry.reason.trim() : '';
+        if (!/^[0-9a-f]{40}$/.test(sha)) {
+          violations.push(`S-COMMIT exemptCommits[${idx}] must declare a full 40-character lowercase sha`);
+          continue;
+        }
+        if (seenShas.has(sha)) {
+          violations.push(`S-COMMIT exemptCommits[${idx}] duplicate sha ${sha.slice(0, 7)}`);
+          continue;
+        }
+        seenShas.add(sha);
+        if (!/^DEC-\d{3}$/.test(entryDec)) {
+          violations.push(`S-COMMIT exemptCommits[${idx}] (${sha.slice(0, 7)}) must cite a DEC-### decision id`);
+          continue;
+        }
+        if (!new RegExp(`\\b${entryDec}\\b`).test(taskboard)) {
+          violations.push(
+            `S-COMMIT exemptCommits[${idx}] (${sha.slice(0, 7)}) cites ${entryDec}, which does not appear in TASKBOARD.md`,
+          );
+          continue;
+        }
+        if (entryReason.length < 20) {
+          violations.push(
+            `S-COMMIT exemptCommits[${idx}] (${sha.slice(0, 7)}) must record a rationale (>= 20 chars)`,
+          );
+          continue;
+        }
+        exemptCommits.push({ sha, decision: entryDec, reason: entryReason });
+      }
     }
   }
 
   return {
     decision,
     enforcedFrom: /^[0-9a-f]{40}$/.test(enforcedFrom) ? enforcedFrom : null,
+    exemptCommits,
   };
 }
 
@@ -381,12 +422,13 @@ function checkGitCommitHygiene(rootDir) {
   const violations = [];
   if (!existsSync(join(rootDir, '.git'))) return violations;
 
-  const { enforcedFrom } = loadCommitBaseline(rootDir, violations);
+  const { enforcedFrom, exemptCommits } = loadCommitBaseline(rootDir, violations);
   const format = '--format=%H|||%P|||%s|||%b===END===';
   // spawnSync with an argument array: no shell, so the format's `|` separators stay literal.
   const runGit = (args) =>
     spawnSync('git', args, { cwd: rootDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 
+  let boundaryValid = enforcedFrom === null;
   if (enforcedFrom !== null) {
     const ancestry = runGit(['merge-base', '--is-ancestor', enforcedFrom, 'HEAD']);
     if (ancestry.status !== 0) {
@@ -394,6 +436,7 @@ function checkGitCommitHygiene(rootDir) {
         `S-COMMIT enforcement boundary ${enforcedFrom.slice(0, 7)} is not an ancestor of HEAD — restore the published baseline`,
       );
     } else {
+      boundaryValid = true;
       const boundary = runGit(['log', '-1', format, enforcedFrom]);
       const [, , boundarySubject = '', boundaryBody = ''] = (boundary.stdout ?? '').split('|||');
       for (const message of commitHygieneViolations(boundarySubject, boundaryBody)) {
@@ -402,11 +445,39 @@ function checkGitCommitHygiene(rootDir) {
     }
   }
 
+  const exemptSet = new Set();
+  for (const entry of exemptCommits) {
+    const isAnc = runGit(['merge-base', '--is-ancestor', entry.sha, 'HEAD']);
+    if (isAnc.status !== 0) {
+      violations.push(
+        `S-COMMIT exemptCommits ${entry.sha.slice(0, 7)} is not an ancestor of HEAD`,
+      );
+      continue;
+    }
+    if (enforcedFrom !== null && boundaryValid) {
+      if (entry.sha === enforcedFrom) {
+        violations.push(
+          `S-COMMIT exemptCommits ${entry.sha.slice(0, 7)} cannot equal the enforcement boundary`,
+        );
+        continue;
+      }
+      const afterBoundary = runGit(['merge-base', '--is-ancestor', enforcedFrom, entry.sha]);
+      if (afterBoundary.status !== 0) {
+        violations.push(
+          `S-COMMIT exemptCommits ${entry.sha.slice(0, 7)} is not strictly after enforcement boundary ${enforcedFrom.slice(0, 7)}`,
+        );
+        continue;
+      }
+    }
+    exemptSet.add(entry.sha);
+  }
+
   const logArgs = enforcedFrom === null ? ['log', format] : ['log', format, `${enforcedFrom}..HEAD`];
   const log = runGit(logArgs);
   const records = (log.stdout ?? '').split('===END===').map((s) => s.trim()).filter(Boolean);
   for (const rec of records) {
     const [hash = '', parents = '', subject = '', body = ''] = rec.split('|||');
+    if (exemptSet.has(hash)) continue;
     const parentCount = parents.trim().length === 0 ? 0 : parents.trim().split(/\s+/).length;
     // GitHub writes pull-request merge commits; they carry no authored work claim.
     if (parentCount > 1 && GITHUB_MERGE_SUBJECT_RE.test(subject)) continue;

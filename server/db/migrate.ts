@@ -14,6 +14,9 @@ const MIGRATION_SENTINEL_CHECKS: Readonly<Record<string, string>> = {
   '0002_m2_collaboration.sql': "SELECT to_regclass('public.approval_task') AS reg",
   '0003_m2_workforce.sql': "SELECT to_regclass('public.workforce_position') AS reg",
   '0004_m2_connectors.sql': "SELECT to_regclass('public.connector_config') AS reg",
+  '0005_m3_close_management.sql': "SELECT to_regclass('public.close_cycle') AS reg",
+  '0006_m3_exceptions.sql': "SELECT to_regclass('public.exception_finding') AS reg",
+  '0007_m3_consolidation.sql': "SELECT to_regclass('public.consolidation_run') AS reg",
 };
 
 export function listMigrationFiles(migrationsDir: string): string[] {

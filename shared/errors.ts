@@ -25,6 +25,7 @@ export const ERROR_CODES = [
   'STATEMENT_TIE_OUT_FAILED',
   'ALLOCATION_ZERO_WEIGHTS',
   'MODEL_VERSION_LOCKED',
+  'PERIOD_LOCKED',
   'DRILL_INVARIANT_FAILED',
   'AUDIT_CHAIN_BREAK',
   'LLM_EGRESS_BLOCKED',
@@ -170,6 +171,12 @@ export const ERROR_CATALOG: Record<ErrorCode, ErrorSpec> = {
     retryable: false,
     defaultUserMessage: 'This plan version is locked and immutable.',
     hint: 'Create a new draft plan version to edit budget lines.',
+  },
+  PERIOD_LOCKED: {
+    httpStatus: 409,
+    retryable: false,
+    defaultUserMessage: 'This fiscal period is hard-closed and blocks new writes.',
+    hint: 'Request an audited owner unlock or post to an open period.',
   },
   DRILL_INVARIANT_FAILED: {
     httpStatus: 500,

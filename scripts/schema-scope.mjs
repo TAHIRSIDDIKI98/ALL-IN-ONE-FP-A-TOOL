@@ -49,11 +49,37 @@ export const APPROVED_M2_CONNECTOR_TABLES = [
   'sync_run',
 ];
 
+/** Opened in M3 under DEC-022 (§12.6 Close Management & Period Locks). CapEx/Treasury/FX/Consolidation remain blocked until their M3 WIs. */
+export const APPROVED_M3_CLOSE_TABLES = [
+  'close_task_template',
+  'close_cycle',
+  'close_task',
+  'period_lock_event',
+];
+
+/** Opened in M3 under DEC-023 (§2.6, §4.1, §12.6 Exception-Rule Catalog, Owner Inbox & Reversal-Only Rectification Journal). */
+export const APPROVED_M3_EXCEPTION_TABLES = [
+  'exception_finding',
+  'exception_finding_event',
+  'rectification_journal',
+];
+
+/** Opened in M3 under DEC-024 (§2.6, §11.6 Multi-Entity, Multi-Currency & Consolidation). */
+export const APPROVED_M3_CONSOLIDATION_TABLES = [
+  'fx_rate',
+  'entity_ownership',
+  'intercompany_rule',
+  'consolidation_run',
+];
+
 const APPROVED_SET = new Set([
   ...APPROVED_M1_TABLES,
   ...APPROVED_M2_COLLABORATION_TABLES,
   ...APPROVED_M2_WORKFORCE_TABLES,
   ...APPROVED_M2_CONNECTOR_TABLES,
+  ...APPROVED_M3_CLOSE_TABLES,
+  ...APPROVED_M3_EXCEPTION_TABLES,
+  ...APPROVED_M3_CONSOLIDATION_TABLES,
 ]);
 
 export function checkSchemaScope(rootDir = process.cwd(), { requireComplete = false } = {}) {

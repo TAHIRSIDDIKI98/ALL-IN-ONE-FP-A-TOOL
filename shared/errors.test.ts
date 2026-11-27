@@ -14,8 +14,8 @@ import {
 } from './index.js';
 
 describe('WI-0003 Typed Error Catalog & Shared Contracts (Port P12, §3.2, §5.2)', () => {
-  it('defines non-empty user message, hint, and valid 4xx/5xx HTTP status for all 26 error codes', () => {
-    expect(ERROR_CODES.length).toBe(26);
+  it('defines non-empty user message, hint, and valid 4xx/5xx HTTP status for all 27 error codes', () => {
+    expect(ERROR_CODES.length).toBe(27);
     for (const code of ERROR_CODES) {
       const err = new AppError(code, { details: { probe: 'ok' } });
       const parsed = ErrorBodySchema.parse(err.toBody());

@@ -190,7 +190,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
     const actualTables = tablesRes.rows.map((r) => r.tablename);
     const expectedTables = [...schemaSnapshot.tables].sort();
     expect(actualTables).toEqual(expectedTables);
-    expect(actualTables).toHaveLength(25);
+    expect(actualTables).toHaveLength(36);
 
     // Idempotent second run applies 0 new files
     const secondRun = await applyMigrations(db);
@@ -730,5 +730,263 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
        ) VALUES ($1, $2, 'incremental', 'completed', $3, 2, 2, 0, '1000.000000', '1000.000000', 'matched', $4, $5, now())`,
       [s.companyA, connIdA, 'f'.repeat(64), s.batchA, s.userId],
     );
+  });
+
+  it('WI-0045 M3 Close Management: enforces close_task signoff check, cross-tenant FKs, period lock checks, and immutable period_lock_event trigger', async () => {
+    const s = await seedBaseTenants(db, 'close');
+
+    // Negative: invalid fiscal_period.lock_status rejected
+    await expect(
+      db.query(`UPDATE fiscal_period SET lock_status = 'frozen' WHERE id = $1`, [s.periodA]),
+    ).rejects.toThrow();
+
+    // Positive: close_task_template + close_cycle + close_task
+    const tplRes = await db.query<{ id: string }>(
+      `INSERT INTO close_task_template (
+         company_id, task_key, title, category, owner_role, due_day_offset,
+         prerequisite_keys, requires_reconciliation, sort_order, created_by
+       ) VALUES ($1, 'import_gl', 'Import GL', 'import', 'editor', 1, '{}', false, 1, $2)
+       RETURNING id`,
+      [s.companyA, s.userId],
+    );
+    const tplIdA = tplRes.rows[0]!.id;
+
+    const cycleRes = await db.query<{ id: string }>(
+      `INSERT INTO close_cycle (company_id, period_id, created_by)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [s.companyA, s.periodA, s.userId],
+    );
+    const cycleIdA = cycleRes.rows[0]!.id;
+
+    // Negative: signed_off status without signed_off_by / signed_off_at rejected by CHECK
+    await expect(
+      db.query(
+        `INSERT INTO close_task (
+           company_id, cycle_id, template_id, task_key, title, category, owner_role,
+           due_date, prerequisite_keys, requires_reconciliation, status, sort_order
+         ) VALUES ($1, $2, $3, 'import_gl', 'Import GL', 'import', 'editor', '2026-02-01', '{}', false, 'signed_off', 1)`,
+        [s.companyA, cycleIdA, tplIdA],
+      ),
+    ).rejects.toThrow();
+
+    // Negative cross-tenant FK: Company B close_cycle referencing Company A period_id rejected
+    const bUser = await db.query<{ id: string }>(
+      `INSERT INTO app_user (firebase_uid, email, display_name) VALUES ('uid-close-b', 'close-b@example.com', 'Close B') RETURNING id`,
+    );
+    const bUserId = bUser.rows[0]!.id;
+    await db.query(`INSERT INTO membership (company_id, user_id, role) VALUES ($1, $2, 'owner')`, [
+      s.companyB,
+      bUserId,
+    ]);
+    await expect(
+      db.query(
+        `INSERT INTO close_cycle (company_id, period_id, created_by) VALUES ($1, $2, $3)`,
+        [s.companyB, s.periodA, bUserId],
+      ),
+    ).rejects.toThrow();
+
+    // Positive: period_lock_event linked to audit_log is immutable (BEFORE UPDATE OR DELETE trigger)
+    const auditRes = await db.query<{ id: string }>(
+      `INSERT INTO audit_log (
+         company_id, actor_id, action, target_table, target_id,
+         old_payload, new_payload, prev_hash, entry_hash
+       ) VALUES ($1, $2, 'period.soft_closed', 'fiscal_period', $3, '{}'::jsonb, '{}'::jsonb, $4, $5)
+       RETURNING id`,
+      [s.companyA, s.userId, s.periodA, '0'.repeat(64), 'a'.repeat(64)],
+    );
+    const lockEvRes = await db.query<{ id: string }>(
+      `INSERT INTO period_lock_event (
+         company_id, period_id, from_status, to_status, action, reason, actor_id, audit_entry_id
+       ) VALUES ($1, $2, 'open', 'soft_closed', 'soft_close', 'Month end soft close', $3, $4)
+       RETURNING id`,
+      [s.companyA, s.periodA, s.userId, auditRes.rows[0]!.id],
+    );
+    const lockEvId = lockEvRes.rows[0]!.id;
+
+    await expect(
+      db.query(`UPDATE period_lock_event SET reason = 'Tampered' WHERE id = $1`, [lockEvId]),
+    ).rejects.toThrow(/PERIOD_LOCK_EVENT_IMMUTABLE/);
+    await expect(
+      db.query(`DELETE FROM period_lock_event WHERE id = $1`, [lockEvId]),
+    ).rejects.toThrow(/PERIOD_LOCK_EVENT_IMMUTABLE/);
+  });
+
+  it('WI-0046 M3 Exceptions & Rectification schema: immutable events, balanced rectification constraint, and 1:1 finding uniqueness', async () => {
+    const s = await seedBaseTenants(db, 'wi0046');
+
+    const findingRes = await db.query<{ id: string }>(
+      `INSERT INTO exception_finding (
+         company_id, finding_key, finding_id_hash, rule_id, title, severity, status,
+         period_id, account_code, statement_line_key, grain_key, amount, due_date,
+         evidence_json, suggestion_json, updated_by
+       ) VALUES (
+         $1, 'EXC-025|HQ-1|6400|P01|JV-1', '1234567890abcdef1234567890abcdef',
+         'EXC-025', 'Potential exception — review: Misclassification', 'medium', 'new',
+         $2, '6400', 'pl.opex.sm', 'JV-1', '92500.000000', '2026-02-05',
+         '{}'::jsonb, '{"kind":"reclass"}'::jsonb, $3
+       ) RETURNING id`,
+      [s.companyA, s.periodA, s.userId],
+    );
+    const findingId = findingRes.rows[0]!.id;
+
+    const auditRes = await db.query<{ id: string }>(
+      `INSERT INTO audit_log (
+         company_id, actor_id, action, target_table, target_id,
+         old_payload, new_payload, prev_hash, entry_hash
+       ) VALUES ($1, $2, 'exception.detected', 'exception_finding', $3, NULL, '{}'::jsonb, $4, $5)
+       RETURNING id`,
+      [s.companyA, s.userId, findingId, '0'.repeat(64), 'b'.repeat(64)],
+    );
+
+    const evRes = await db.query<{ id: string }>(
+      `INSERT INTO exception_finding_event (
+         company_id, finding_id, from_status, to_status, action, note, actor_id, audit_entry_id
+       ) VALUES ($1, $2, NULL, 'new', 'detected', 'Initial scan', $3, $4)
+       RETURNING id`,
+      [s.companyA, findingId, s.userId, auditRes.rows[0]!.id],
+    );
+    const evId = evRes.rows[0]!.id;
+
+    // Immutable event log rejects UPDATE and DELETE
+    await expect(
+      db.query(`UPDATE exception_finding_event SET note = 'Tampered' WHERE id = $1`, [evId]),
+    ).rejects.toThrow(/EXCEPTION_EVENT_IMMUTABLE/);
+    await expect(
+      db.query(`DELETE FROM exception_finding_event WHERE id = $1`, [evId]),
+    ).rejects.toThrow(/EXCEPTION_EVENT_IMMUTABLE/);
+
+    // Unbalanced rectification journal rejected by CHECK (total_debit = total_credit)
+    await expect(
+      db.query(
+        `INSERT INTO rectification_journal (
+           company_id, finding_id, target_period_id, mode, suggestion_kind, basis, erp_hint,
+           lines_json, total_debit, total_credit, created_by
+         ) VALUES ($1, $2, $3, 'export_csv', 'reclass', 'Test', 'ERP', '[]'::jsonb, '100.00', '90.00', $4)`,
+        [s.companyA, findingId, s.periodA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Balanced rectification succeeds once and rejects duplicate finding consumption
+    await db.query(
+      `INSERT INTO rectification_journal (
+         company_id, finding_id, target_period_id, mode, suggestion_kind, basis, erp_hint,
+         lines_json, total_debit, total_credit, created_by
+       ) VALUES ($1, $2, $3, 'export_csv', 'reclass', 'Test', 'ERP', '[]'::jsonb, '100.00', '100.00', $4)`,
+      [s.companyA, findingId, s.periodA, s.userId],
+    );
+    await expect(
+      db.query(
+        `INSERT INTO rectification_journal (
+           company_id, finding_id, target_period_id, mode, suggestion_kind, basis, erp_hint,
+           lines_json, total_debit, total_credit, created_by
+         ) VALUES ($1, $2, $3, 'dismiss', 'reclass', 'Dup', 'ERP', '[]'::jsonb, '0.00', '0.00', $4)`,
+        [s.companyA, findingId, s.periodA, s.userId],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('WI-0047 FX1–FX5: enforces fx_rate, entity_ownership, intercompany_rule composite FKs and CONSOLIDATION_RUN_IMMUTABLE trigger', async () => {
+    const s = await seedBaseTenants(db, 'consol');
+    const entARes = await db.query<{ id: string }>(
+      `INSERT INTO entity (company_id, code, name, currency)
+       VALUES ($1, 'ENT-US', 'US HoldCo', 'USD') RETURNING id`,
+      [s.companyA],
+    );
+    const entSubRes = await db.query<{ id: string }>(
+      `INSERT INTO entity (company_id, code, name, currency)
+       VALUES ($1, 'ENT-UK', 'UK Sub', 'GBP') RETURNING id`,
+      [s.companyA],
+    );
+    const entBRes = await db.query<{ id: string }>(
+      `INSERT INTO entity (company_id, code, name, currency)
+       VALUES ($1, 'ENT-B', 'Foreign B', 'EUR') RETURNING id`,
+      [s.companyB],
+    );
+    const entA = entARes.rows[0]!.id;
+    const entSub = entSubRes.rows[0]!.id;
+    const entB = entBRes.rows[0]!.id;
+
+    // Cross-tenant entity_ownership rejected by composite FK
+    await expect(
+      db.query(
+        `INSERT INTO entity_ownership (company_id, parent_entity_id, child_entity_id, ownership_pct, consolidation_method, effective_from)
+         VALUES ($1, $2, $3, '80.0000', 'full', '2026-01-01')`,
+        [s.companyA, entA, entB],
+      ),
+    ).rejects.toThrow();
+
+    // Self-ownership rejected by CHECK (parent_entity_id <> child_entity_id)
+    await expect(
+      db.query(
+        `INSERT INTO entity_ownership (company_id, parent_entity_id, child_entity_id, ownership_pct, consolidation_method, effective_from)
+         VALUES ($1, $2, $2, '100.0000', 'full', '2026-01-01')`,
+        [s.companyA, entA],
+      ),
+    ).rejects.toThrow();
+
+    // Non-positive FX rate or identical currencies rejected by CHECK
+    await expect(
+      db.query(
+        `INSERT INTO fx_rate (company_id, base_currency, quote_currency, rate_type, as_of_date, rate, source, created_by)
+         VALUES ($1, 'GBP', 'USD', 'closing', '2026-01-31', '0', 'manual', $2)`,
+        [s.companyA, s.userId],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      db.query(
+        `INSERT INTO fx_rate (company_id, base_currency, quote_currency, rate_type, as_of_date, rate, source, created_by)
+         VALUES ($1, 'USD', 'USD', 'closing', '2026-01-31', '1.0000', 'manual', $2)`,
+        [s.companyA, s.userId],
+      ),
+    ).rejects.toThrow();
+
+    // Same-entity IC rule rejected by CHECK (from_entity_id <> to_entity_id)
+    await expect(
+      db.query(
+        `INSERT INTO intercompany_rule (
+           company_id, from_entity_id, from_account_id, to_entity_id, to_account_id, rule_type, description
+         ) VALUES ($1, $2, $3, $2, $4, 'ic_receivable_payable', 'Invalid self IC')`,
+        [s.companyA, entA, s.cashAcctA, s.revAcctA],
+      ),
+    ).rejects.toThrow();
+
+    await db.query(
+      `INSERT INTO intercompany_rule (
+         company_id, from_entity_id, from_account_id, to_entity_id, to_account_id, rule_type, description
+       ) VALUES ($1, $2, $3, $4, $5, 'ic_receivable_payable', 'Valid US-UK IC')`,
+      [s.companyA, entA, s.cashAcctA, entSub, s.revAcctA],
+    );
+
+    const auditRes = await db.query<{ id: string }>(
+      `INSERT INTO audit_log (
+         company_id, actor_id, action, target_table, target_id,
+         old_payload, new_payload, prev_hash, entry_hash
+       ) VALUES ($1, $2, 'consolidation.run', 'consolidation_run', $3, NULL, '{}'::jsonb, $4, $5)
+       RETURNING id`,
+      [s.companyA, s.userId, s.periodA, '0'.repeat(64), 'c'.repeat(64)],
+    );
+
+    const runRes = await db.query<{ id: string }>(
+      `INSERT INTO consolidation_run (
+         company_id, fiscal_year, period_id, reporting_currency, status,
+         group_tb_balanced, group_bs_balanced, total_assets, total_liabilities, total_equity,
+         total_cta, minority_interest, total_eliminations, unmatched_ic_count, snapshot_json,
+         executed_by, audit_entry_id
+       ) VALUES (
+         $1, 2026, $2, 'USD', 'completed',
+         true, true, '1000.00', '400.00', '600.00',
+         '25.00', '0.00', '100.00', 0, '{}'::jsonb, $3, $4
+       ) RETURNING id`,
+      [s.companyA, s.periodA, s.userId, auditRes.rows[0]!.id],
+    );
+    const runId = runRes.rows[0]!.id;
+
+    // Immutable consolidation_run rejects UPDATE and DELETE
+    await expect(
+      db.query(`UPDATE consolidation_run SET total_cta = '999.00' WHERE id = $1`, [runId]),
+    ).rejects.toThrow(/CONSOLIDATION_RUN_IMMUTABLE/);
+    await expect(
+      db.query(`DELETE FROM consolidation_run WHERE id = $1`, [runId]),
+    ).rejects.toThrow(/CONSOLIDATION_RUN_IMMUTABLE/);
   });
 });
