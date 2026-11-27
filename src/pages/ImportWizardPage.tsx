@@ -397,6 +397,12 @@ export function ImportWizardContent({
             </div>
           </dl>
 
+          {preview.periodAdvisories !== undefined && preview.periodAdvisories.length > 0 && (
+            <PartialBanner
+              detail={preview.periodAdvisories.map((a) => a.message).join(' ')}
+            />
+          )}
+
           {preview.quarantinedCount > 0 && (
             <div className="space-y-2">
               <PartialBanner
@@ -487,6 +493,11 @@ export function ImportWizardContent({
               ? 'Row accounting ties: imported + quarantined = rows in. Re-committing the same file replaces this batch atomically with zero duplicates.'
               : 'Row accounting DOES NOT tie — treat this batch as unsafe and report it.'}
           </p>
+          {committed.periodAdvisories !== undefined && committed.periodAdvisories.length > 0 && (
+            <PartialBanner
+              detail={committed.periodAdvisories.map((a) => a.message).join(' ')}
+            />
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"

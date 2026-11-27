@@ -40,4 +40,5 @@ export * from './spine.js';
 export * from './workforce.js';
 export * from './temporal.js';
 export * from './guidance.js';
+export * from './close.js';
 
