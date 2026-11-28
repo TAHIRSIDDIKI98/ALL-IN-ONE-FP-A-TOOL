@@ -5,7 +5,7 @@
  * Verifies:
  *  - GOV1: MASTER_PROMPT.md declares an explicit version header (`Version X.Y`) and `MASTER PROMPT CHANGELOG`.
  *  - GOV2: Every `§X.Y` section cross-reference inside MASTER_PROMPT.md resolves to an actual heading
- *          or sub-numbered item in MASTER_PROMPT.md (zero dangling section references), and all 12 Parts exist.
+ *          or sub-numbered item in MASTER_PROMPT.md (zero dangling section references), and all 14 Parts exist.
  *  - GOV3: Any version > 1.0 cites a `DEC-###` entry present in TASKBOARD.md §Decisions.
  *  - VER1: package.json version is valid SemVer and present in CHANGELOG.md.
  *  - VER3: /docs/adr contains numbered immutable ADRs (`0001-*.md`, ...) with Status/Context/Decision/Consequences.
@@ -35,8 +35,8 @@ export function checkConstitutionAndGovernance(rootDir = process.cwd()) {
     violations.push('GOV1: MASTER_PROMPT.md missing `MASTER PROMPT CHANGELOG` block');
   }
 
-  // Check Parts 1..13 headings exist
-  for (let p = 1; p <= 13; p++) {
+  // Check Parts 1..14 headings exist
+  for (let p = 1; p <= 14; p++) {
     const partRe = new RegExp(`^##\\s+PART\\s+${p}\\s*/`, 'm');
     if (!partRe.test(mp)) {
       violations.push(`GOV2: MASTER_PROMPT.md missing heading for PART ${p}`);

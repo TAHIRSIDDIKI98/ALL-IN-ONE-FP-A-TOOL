@@ -1,6 +1,9 @@
+import { cpus } from 'node:os';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+
+const VITEST_MAX_FORKS = Math.min(3, Math.max(2, cpus().length - 1));
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -52,8 +55,8 @@ export default defineConfig({
     environment: 'node',
     testTimeout: 30000,
     hookTimeout: 30000,
-    // Parallel PGlite-backed forks: 2 forks match 2 vCPUs cleanly without context-switch contention.
+    // Scale fork pool to available vCPUs (2 on 2-vCPU CI runners, up to 4 on 4-vCPU sandboxes).
     pool: 'forks',
-    poolOptions: { forks: { maxForks: 2, minForks: 1 } },
+    poolOptions: { forks: { maxForks: VITEST_MAX_FORKS, minForks: 1 } },
   },
 });

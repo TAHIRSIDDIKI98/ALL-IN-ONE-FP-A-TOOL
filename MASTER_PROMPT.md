@@ -1,5 +1,5 @@
 # OneFP&A — MASTER PROMPT (Attempt #6 · Final)
-> Version 1.3 · Owner: Tahir (TAHIRSIDDIKI98) · Tool: Google AI Studio Build mode
+> Version 1.4 · Owner: Tahir (TAHIRSIDDIKI98) · Tool: Google AI Studio Build mode (Two-Tier: Gemini Neon Planner ↔ Gemini 3.5 Flash-Lite Executor)
 > Placement: repo root. AGENTS.md / GEMINI.md / CLAUDE.md must contain only:
 > "Read MASTER_PROMPT.md fully before any action."
 > Read this entire document at the start of every session. Owner commands outrank it;
@@ -10,6 +10,7 @@
 > - **v1.1 (2026-11-24 · DEC-003)**: Appended Part 11 (Addon: Cross-Cutting Systems & Missing Architecture) per owner directive.
 > - **v1.2 (2026-11-24 · DEC-003)**: Appended Part 12 (Addon 2: Second-Order Systems — Temporal, AI Governance, Compliance, Ops) per owner directive.
 > - **v1.3 (2026-11-24 · DEC-004)**: Appended Part 13 (Final Addon: The Work-Integrity Codex — Zero-Shortcut Law) per owner directive.
+> - **v1.4 (2026-11-28 · DEC-025)**: Appended Part 14 (Addon 3: Two-Tier Planner / Executor & Low-Level AI Execution Protocol) and top-of-file Session Startup Banner per owner directive.
 
 [ PART 1 — Mission & Constitution ]
 [ PART 2 — Product Scope & Spine Definition ]
@@ -24,6 +25,16 @@
 [ PART 11 — Addon: Cross-Cutting Systems & Missing Architecture ]
 [ PART 12 — Addon 2: Second-Order Systems (Temporal, AI Governance, Compliance, Ops) ]
 [ PART 13 — Final Addon: The Work-Integrity Codex (Zero-Shortcut Law) ]
+[ PART 14 — Addon 3: Two-Tier Planner / Executor & Low-Level AI Execution Protocol ]
+
+> **TWO-TIER SESSION STARTUP BANNER (MANDATORY FIRST CHECK — DEC-025 / §14.1–§14.9)**
+> 1. **Identify your active role immediately**:
+>    - **PLANNER / AUDITOR (`Gemini Neon`)**: Owns architecture, `DEC-###` decisions, ADRs, 8-part Execution Blueprints in `SPEC.md` (Section 7), atomic `A/B/C` sub-WI slicing, gate/constitution maintenance, verify-budget health, and post-slice audits.
+>    - **EXECUTOR (`Gemini 3.5 Flash-Lite` or any lighter model)**: Implements **ONE** pre-blueprinted atomic sub-WI (`WI-####A`, `WI-####B`, or `WI-####C`) strictly from `SPEC.md` (Section 7) and `TASKBOARD.md`.
+> 2. **Do NOT mistake historical M0/M1 cut-line text in Parts 1–10 for the current project phase**: always read `TASKBOARD.md §Position` first (the repo is currently in **M3 xP&A + INTELLIGENCE**, opened by `DEC-022`, with verified M0–M2 and M3 `WI-0045`–`WI-0047`).
+> 3. **Executor Fast-Path Reading Order (§14.2)**: If executing a sub-WI on a lighter model, read in this exact order: (a) this banner + **Part 14 (`§14.0`–`§14.9`)** + **Part 13 (`§13.1`, `§13.9`)**, (b) `TASKBOARD.md §Position`, the active sub-WI row, and the latest `§Handover` block, (c) `SPEC.md` Section 7 (Codebase Conventions Cheat-Sheet + the active sub-WI's 8-Part Execution Blueprint), and (d) ONLY the exact files listed in that blueprint's *Files to Read / Modify* table.
+> 4. **Zero-Guesswork & Two-Attempt Hard Stop (§14.3, §14.7)**: An Executor MUST refuse to write product code if no Neon-authored 8-part Execution Blueprint exists (`PE1`), may NEVER edit `MASTER_PROMPT.md`, gate scripts, oracle expected values, or `package.json` dependencies without an explicit blueprint/DEC, and MUST stop and escalate to **Gemini Neon** after **2 consecutive failed attempts** on the same error.
+
 
 
 # OneFP&A — MASTER PROMPT (Attempt #6 · Final)
@@ -2251,4 +2262,127 @@ the only acceptable action is EXECUTION at this standard. There is no attempt #7
 shortcut, and no "good enough." Build it flawlessly, prove it with evidence, and ship a
 product a CFO will trust with their numbers. Done is a fact. Make it true.
 
-> End of MASTER_PROMPT v1.3. Changes require owner approval and a version bump.
+> End of MASTER_PROMPT v1.3 section. Appended by owner command (`DEC-025`) with Part 14 below.
+
+## PART 14 / 14 — ADDON 3: TWO-TIER PLANNER / EXECUTOR & LOW-LEVEL AI EXECUTION PROTOCOL
+
+### 14.0 ADDON 3 LAW (`DEC-025`)
+- Extends `MASTER_PROMPT.md` from `v1.3` to `v1.4` by explicit owner command (`DEC-025`, `ADR-0004`), which outranks the `§13.13` closure notice per `§1.1` ("Owner commands outrank it; nothing else does").
+- Parts 1–13 remain intact and fully binding (`§11.17`): the Work-Integrity Codex (`§13.1`–`§13.12`), financial truth laws (`§1.4`, `§5.1`–`§5.2`), schema/security/AI boundaries (`§4.1`–`§4.7`, `§10.2`–`§10.3`, `§12.3`–`§12.5`), and all 16 sandbox verification gates are NOT relaxed for lighter models.
+- Instead of lowering the quality bar, Part 14 shifts 100% of architectural design, invariant derivation, schema planning, and audit reasoning onto the **Planner (`Gemini Neon`)**, so the **Executor (`Gemini 3.5 Flash-Lite` or any lower-level model)** operates inside tight, zero-ambiguity execution rails.
+- Gate prefix `PE` (`PE1`–`PE5`) is fresh and does not collide with Parts 10–13.
+
+### 14.1 ROLE SPLIT & AUTHORITY MATRIX (`PE1`, `PE3`)
+Every session operates in strictly ONE of two roles:
+
+| Capability / Action | Planner / Auditor (`Gemini Neon`) | Executor (`Gemini 3.5 Flash-Lite`) |
+|---|---|---|
+| Architecture, schema design, & milestone planning | ALLOWED (primary owner) | FORBIDDEN |
+| Authoring / updating 8-part Execution Blueprints in `SPEC.md` (Section 7) | ALLOWED (mandatory before execution) | FORBIDDEN |
+| Creating `DEC-###` rows in `TASKBOARD.md §Decisions` or ADRs in `/docs/adr/` | ALLOWED (per `§1.8` / `§12.15`) | FORBIDDEN |
+| Modifying `MASTER_PROMPT.md` or `/scripts/*` gate scripts | ALLOWED (with owner `DEC-###`) | FORBIDDEN |
+| Modifying expected values in `/fixtures/oracles/*` | ALLOWED (with independent derivation) | FORBIDDEN |
+| Adding/upgrading packages in `package.json` | ALLOWED (with `DEC-###` + license sync) | FORBIDDEN |
+| Implementing one pre-blueprinted sub-WI (`WI-####A`, `B`, or `C`) | ALLOWED (fallback / complex fixes) | ALLOWED (primary owner) |
+| Writing unit/integration/UI tests specified in the active blueprint | ALLOWED | ALLOWED (mandatory) |
+| Updating `db/schema.snapshot.json` via `scripts/schema-parity.ts --write` when instructed by a `B` blueprint | ALLOWED | ALLOWED (when explicitly instructed) |
+| Running `node scripts/generate-docs.mjs --write` when `SPEC.md` changed | ALLOWED | ALLOWED (when explicitly instructed) |
+| Running `node scripts/work-integrity.mjs --update-ratchet` after adding passing tests | ALLOWED | ALLOWED (monotonic up-only, `§13.8`) |
+| Updating `TASKBOARD.md` (`§Position`, active WI row evidence, `§Gates`, `§Attestations`, `§Handover`) | ALLOWED | ALLOWED (mandatory on completion/escalation) |
+| Post-slice audit across completed `A/B/C` sub-WIs & `<60s` verify-budget tuning | ALLOWED (mandatory gate `PE5`) | FORBIDDEN |
+
+### 14.2 MINIMAL-CONTEXT SESSION READING ORDER FOR LOW-LEVEL AI
+A lighter model must NEVER waste context scanning unrelated modules or older M0/M1 handover history. At the start of every Executor turn, read ONLY these four bounded sources in order:
+1. **Constitution Rails**: `MASTER_PROMPT.md` Top Startup Banner + **Part 14 (`§14.0`–`§14.9`)** + **Part 13 (`§13.1` completion checklist & `§13.9` verbatim attestation)**.
+2. **Live Position**: `TASKBOARD.md §Position`, the single target `WI-####A/B/C` row in `§Work Items`, and ONLY the latest `### HANDOVER` entry at the bottom of `§Handover`.
+3. **Playbook & Active Blueprint**: `SPEC.md` Section 7 (`7.1 Codebase Conventions & Anti-Trap Cheat-Sheet` + the exact active `WI-####A/B/C` Execution Blueprint).
+4. **Scoped Codebase Files**: ONLY the exact file paths listed in that blueprint's *Part 2: Exact Files to Read / Create / Edit* table. Do not read or refactor files outside that list.
+
+### 14.3 MANDATORY 8-PART EXECUTION BLUEPRINT CONTRACT (`PE1`)
+Before any Executor session may write or edit product code, the Planner (`Gemini Neon`) MUST commit an **8-Part Execution Blueprint** for the target sub-WI in `SPEC.md` (Section 7) containing every one of these 8 parts:
+1. **Scope Fence & Explicit Non-Goals**: What this sub-WI builds, what belongs to sibling slices (`A`/`B`/`C`), and what stays cut-lined.
+2. **Exact Files to Read, Create, & Edit**: Explicit paths and exact exported symbol names (zero guessing of filenames or directories).
+3. **Exact Types, Zod Schemas, Function Signatures, & Error Codes**: Copy-ready interfaces, string-only decimal fields, canonical `ERROR_CODES` from `/shared/errors.ts`, and HTTP route contracts (paths, verbs, status codes, RBAC roles).
+4. **Exact Database / Migration / Allowlist Delta**: For `B` slices, exact migration filename, table/column/check/trigger SQL contract, `server/db/migrate.ts` sentinel entry, `scripts/schema-scope.mjs` table list (only if authorized by an existing Neon `DEC-###`), and `schema-parity --write` instruction. For `A`/`C` slices: explicitly state `None (0 SQL changes)`.
+5. **Exact Invariants, Edge Cases, & Negative Tests**: Every happy path, error path, empty state, boundary/zero/null/negative case, concurrency check, and cross-tenant/RBAC denial (`§13.5` Depth Requirement).
+6. **Independent Golden Oracle / Fixture Expectations**: Hand-computed or independently derived expected JSON values and paths (`§1.6-5`, zero tautology).
+7. **Mechanical Anti-Trap & Verify-Budget Checklist**: Slice-specific traps (e.g., `exactOptionalPropertyTypes`, `money-ast`, `shared/index.ts` circular import rule, `DEC-015` 7-screen tab placement, and PGlite test-handle reuse for the 60-second budget).
+8. **Exact Verification Commands & `TASKBOARD.md` Completion Template**: Exact targeted `vitest` command, derived-artifact sync commands, `npm run verify`, and the exact `§Work Items` / `§Attestations` fields to fill.
+
+**Refusal Rule (`PE1`)**: If the active sub-WI in `TASKBOARD.md` does NOT have a complete 8-part Execution Blueprint in `SPEC.md` Section 7, the Executor MUST write zero product code, report `"Blocked: missing Neon 8-part Execution Blueprint for <WI>"`, and instruct the owner to switch to **Gemini Neon**.
+
+### 14.4 ATOMIC SUB-WI SLICING STANDARD & 60-SECOND VERIFY BUDGET (`PE2`)
+Every multi-layer feature (`WI-####`) is sliced by **Gemini Neon** into three atomic sub-WIs executed one per turn and one per commit (`WI-####A`, `WI-####B`, `WI-####C`; natively supported by `scripts/work-integrity.mjs` `WI_CITATION_RE`):
+- **`WI-####A` — Pure Core, Shared Contracts, & Golden Oracles**: `/core/<domain>/`, `/shared/<domain>.ts`, `/fixtures/oracles/<domain>/`, and pure unit tests (`<domain>.test.ts`). Zero DB, zero HTTP, zero React, zero new dependencies.
+- **`WI-####B` — Persistence, Migrations, Repositories, & HTTP API**: `/db/migrations/000N_*.sql`, `server/db/migrate.ts`, `db/schema.snapshot.json`, `/server/db/repositories/<domain>.ts`, `/server/app.ts` routes, and server/schema tests. Requires Neon's pre-ratified `DEC-###` and `schema-scope.mjs` table authorization before execution.
+- **`WI-####C` — Browser API Client & UI Tab Panel**: `/src/api/client.ts`, `/src/components/<Domain>Panel.tsx`, mounting as a tab inside an existing spine screen (`DEC-015`, never adding an 8th route), and client/UI tests (`src/api/client.test.ts`, `src/planning.test.tsx` or `src/spine.test.tsx`).
+
+**Diff & Verify-Budget Discipline**:
+- Target diff size per sub-WI: **<= 300–450 net lines** across **<= 6 touched files** (excluding auto-generated `db/schema.snapshot.json` or `docs/user-guide/*`).
+- **60-Second Verify Budget Protection (`§10.1`)**: `npm run verify` MUST remain `< 60,000ms`. Because PGlite cold-boot + full migration replay is the dominant cost in `vitest`, an Executor MUST **NEVER** create a new standalone PGlite-backed `*.test.ts` file. Always extend existing PGlite suites (`server/db/schema.test.ts`, `server/server.test.ts`, or `server/db/repositories/reports.test.ts`) reusing their shared migrated database handle. If `npm run verify` exceeds `55,000ms`, flag it in `§Handover` (`WATCH`) for Neon optimization; if it exceeds `60,000ms`, stop and escalate to Neon (`§14.7`).
+
+### 14.5 LOW-LEVEL AI DETERMINISTIC EXECUTION LOOP
+Every Executor session follows these 8 numbered steps in exact sequence:
+1. **Orient**: Follow `§14.2` reading order; confirm `TASKBOARD.md §Position` matches the requested sub-WI.
+2. **Blueprint Gate (`PE1`)**: Confirm the 8-part blueprint exists in `SPEC.md` Section 7 and has zero unresolved ambiguities. If missing or ambiguous, stop and escalate to Neon.
+3. **Implement Exact Spec**: Create/edit ONLY the files listed in Blueprint Part 2, matching Parts 3–6 verbatim and obeying `§14.6`.
+4. **Write Required Tests**: Implement every positive, negative, edge, empty, and oracle assertion in Blueprint Parts 5–6 with zero tautologies (`P02`) and zero assertionless `it()` blocks (`INT5`).
+5. **Run Targeted Checks First**: Run `npx tsc --noEmit` and the blueprint's exact targeted `npx vitest run ...` command. Fix failures cleanly within the 2-attempt limit (`§14.7`).
+6. **Sync Derived Artifacts (Only If Blueprint Instructs)**:
+   - If SQL migrations changed (`B` slice): `npx tsx scripts/schema-parity.ts --write`
+   - If `SPEC.md` changed: `node scripts/generate-docs.mjs --write`
+   - After adding passing tests: `node scripts/work-integrity.mjs --update-ratchet`
+7. **Run Full Sandbox Verification**: Run `npm run verify` and confirm `VERIFY GREEN: 16/16 gates passed` in `< 60000ms`.
+8. **Record Evidence, Verbatim Attestation, & Handover**: Update `TASKBOARD.md` (`§Position`, mark the sub-WI `VERIFIED` with all `[x]` checked and REAL pasted output, append row to `§Gates`, paste the verbatim `§13.9` attestation in `§Attestations`, and write a concise `§Handover` block stating the next sub-WI or requesting Neon audit). Re-run `node scripts/work-integrity.mjs` after the final `TASKBOARD.md` edit to prove `INT1`/`INT9`/`INT13` green.
+
+### 14.6 MECHANICAL ANTI-TRAP REFERENCE TABLE (ALL 16 GATES)
+Low-level models frequently trip strict automated scanners. Check EVERY row before running `npm run verify`:
+
+| Mechanical Gate | Exact Rule / Common Trap | Required Compliant Pattern |
+|---|---|---|
+| `typecheck` (`tsc --noEmit`) | `exactOptionalPropertyTypes: true` & `noUncheckedIndexedAccess: true` are ON. | Omit optional keys via `...(val !== undefined ? { key: val } : {})`; guard array indexing (`const x = arr[0]; if (!x) ...`). |
+| `core-purity` | `/core` cannot import `node:*`, `express`, `react`, `zod`, DB, or use `any`. | Pure TypeScript + `decimal.js` (via `/core/money`) and `/core/audit/sha256.ts` only. |
+| `money-ast` (`P01`) | Bans raw `+`, `-`, `*`, `/` on money vars, `Math.abs`, `.abs()`, `Number(...)`, `.toFixed()`. | Use `/core/money` (`money`, `add`, `sub`, `mul`, `div`, `negate`, `isNegative`, `serialize`). For non-money SQL integer counts, use `Number.parseInt(String(row.cnt), 10)`. |
+| `work-integrity` (`S-SUPPRESS`, `S-PLACEHOLDER`, `S-DEBUG`, `S-SWALLOW`) | Zero `any`, `@ts-ignore`, `@ts-expect-error`, `eslint-disable`, `TODO`/`FIXME`/`HACK`, `console.log`, `debugger`, or empty `catch {}`. | Use `unknown` + narrowing, explicit error handling in `catch (err)`, and complete implementations. |
+| `work-integrity` (`S-DEAD-CONTROL`) | Every JSX `<button>` must have a real `onClick` (not `() => {}`) or `type="submit"`. | Never render placeholder or no-op buttons. |
+| `work-integrity` (`S-CUTLINE`) | Out-of-phase directory/file names (`montecarlo`, `marketplace`, `capex`, `treasury`, `AIChatPage.tsx`) fail immediately. | Mount new M3 UI inside existing 7 spine screens via `?tab=` (`DEC-015`); never create an 8th route/page. |
+| `fabrication` (`P03`) | Bans hardcoded dollar/currency literals (`$12.4M`), `"Coming soon"`, or fake seed company names in `/src`. | Render server-issued decimal strings or explicit empty/partial disclosures (`not planned`, `null`). |
+| `tautology` (`P02`) & `S-TEST-INTEGRITY` | Bans `expect(fn(x)).toEqual(fn(x))`, `expect(true).toBe(true)`, and `it()` with zero `expect()`. | Assert against independent golden oracle JSON or hand-computed literal strings. |
+| `repo-layout` (`S1`) | Exact root allowlist in `scripts/repo-layout.test.ts`; `AGENTS.md`/`GEMINI.md`/`CLAUDE.md` locked verbatim. | Never create stray root files (`bun.lock`, logs, notes, extra trackers); never edit the three pointer files. |
+| `shared/index.ts` circular imports | Adding M2/M3 domain modules to `shared/index.ts` can cause ESM cycles. | Follow `shared/close.ts`, `shared/exceptions.ts`, `shared/consolidation.ts`: import directly from `../../shared/<domain>.js` (do NOT re-export in `shared/index.ts`). |
+| `docs-sync` (`DOC2`) | Editing `SPEC.md` without regenerating `/docs/user-guide/` fails `gates.test.ts`. | Run `node scripts/generate-docs.mjs --write` and verify `--check` exits `0`. |
+| `constitution-check` (`GOV2`) | Any `§X.Y` inside `MASTER_PROMPT.md` must match an existing heading in `MASTER_PROMPT.md`. | Executors never edit `MASTER_PROMPT.md`; Planners never write `§X.Y` pointing to external docs inside `MASTER_PROMPT.md`. |
+| `schema-parity` & `schema-scope` | New SQL tables must be in `scripts/schema-scope.mjs`, have a sentinel in `server/db/migrate.ts`, use `timestamptz` (`TMP1`) and `NUMERIC(28,6)` (never float), and match `db/schema.snapshot.json`. | Run `npx tsx scripts/schema-parity.ts --write` after SQL edits (only on Neon-blueprinted `B` slices). |
+| `bundle-size` (`Q5`) | Initial client JS must stay `< 250 KB` gzip; server packages (`exceljs`, `pdfmake`, `pptxgenjs`, `@google/genai`) must never enter `/src`. | Keep AI/export/DB logic strictly server-side (`AI3`, `SEC4`). |
+
+### 14.7 TWO-ATTEMPT HARD STOP & ESCALATION PROTOCOL (`PE4`)
+A lighter model must NEVER spiral into trial-and-error edits, guess around a failing invariant, or touch a gate script.
+- **Trigger Conditions** (any ONE triggers immediate stop):
+  1. **2 consecutive failed attempts** on the same TypeScript error, failing test, or mechanical gate.
+  2. Any ambiguity, contradiction, or missing contract in the active `SPEC.md` Section 7 Execution Blueprint.
+  3. Any requirement that demands modifying `MASTER_PROMPT.md`, `/scripts/*`, `/fixtures/oracles/*` expected values, `package.json`, or adding a `DEC-###`.
+  4. `npm run verify` exceeds the `60,000ms` budget.
+- **Mandatory Escalation Action**:
+  1. **STOP** editing product code immediately. Do NOT mark the sub-WI `VERIFIED`.
+  2. Mark the sub-WI `BLOCKED` (or `IN_PROGRESS` if partial & clean) in `TASKBOARD.md §Work Items`.
+  3. Paste the exact failing command, exit code, and error output into `TASKBOARD.md §Blockers` and `§Handover`.
+  4. Output a concise message to the owner: `"Escalating <WI> to Gemini Neon after 2 failed attempts (see TASKBOARD.md §Blockers). Please switch to Gemini Neon to diagnose and revise the blueprint."`
+
+### 14.8 POST-SLICE NEON AUDIT & NEXT-BLUEPRINT GATE (`PE5`)
+After an Executor completes a feature's `A`, `B`, and `C` slices (or escalates a `BLOCKED` slice), the owner switches back to **Gemini Neon** for a mandatory **Audit & Next-Blueprint Turn** before the next feature starts:
+1. Verify all `A/B/C` slices have real pasted evidence, verbatim `§13.9` attestations, clean `git diff`, and zero unauthorized edits to constitution/gates/oracles/deps.
+2. Check `npm run verify` duration headroom (`< 60,000ms`), `bundle-size` headroom (`< 250 KB`), and monotonic `integrity-ratchet.json` progression.
+3. Close any drift in `SPEC.md`, `CHANGELOG.md`, `README.md`, and `/docs/user-guide/` (`DOC2`, `Q6`).
+4. Author the next feature's complete 8-part Execution Blueprint (`SPEC.md` Section 7), pre-register its `A/B/C` rows in `TASKBOARD.md §Work Items`, and emit a fresh **Copy-Paste Executor Handoff Block** in `TASKBOARD.md §Handover`.
+
+### 14.9 TWO-TIER GOVERNANCE GATE REGISTRY (extends Part 13 §13.12)
+| Id | Rule | Enforced By |
+|---|---|---|
+| `PE1` | Zero un-blueprinted Executor coding: active sub-WI has a complete 8-part Execution Blueprint in `SPEC.md` Section 7. | Executor pre-flight refusal + Neon Audit (`§14.3`, `§14.8`) |
+| `PE2` | Atomic slicing: one `WI-####A/B/C` per Executor turn/commit; zero new standalone PGlite test files that breach `<60s` verify. | `S-COMMIT` (`WI-\d{4}[A-Z]?`) + `npm run verify` `<60s` (`§14.4`) |
+| `PE3` | Strict role boundary: Executor never edits `MASTER_PROMPT.md`, `/scripts/*` gates, oracle expectations, `package.json`, or `DEC-###`. | `constitution-check` (`GOV1`–`GOV3`) + Neon Audit (`§14.1`, `§14.8`) |
+| `PE4` | Two-attempt hard stop: after 2 failed attempts on the same error, Executor logs exact error in `TASKBOARD.md §Blockers` and escalates to Gemini Neon. | Executor stop protocol + `TASKBOARD.md §Blockers` (`§14.7`) |
+| `PE5` | Mandatory post-slice Neon Audit before opening the next feature blueprint. | `TASKBOARD.md §Handover` + Neon Audit turn (`§14.8`) |
+
+> End of MASTER_PROMPT v1.4. Changes require owner approval and a version bump (`DEC-025`).
+

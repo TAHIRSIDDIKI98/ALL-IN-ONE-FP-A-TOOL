@@ -6,9 +6,11 @@
  * Runs every sandbox gate with zero external secrets and zero network credentials,
  * enforcing STOP-THE-LINE on any failure and asserting total elapsed time < 60s.
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { cpus } from 'node:os';
 
 const BUDGET_MS = 60_000;
+const CAN_OVERLAP_TYPECHECK = cpus().length >= 4;
 
 const STATIC_READONLY_STEPS = [
   { id: 'core-purity', cmd: 'node', args: ['scripts/core-purity.mjs'] },
@@ -66,24 +68,6 @@ function runStepAsync(step) {
   });
 }
 
-function runStepSync(step) {
-  const stepStart = Date.now();
-  const res = spawnSync(step.cmd, step.args, {
-    cwd: process.cwd(),
-    env: cleanEnv,
-    encoding: 'utf8',
-    stdio: 'pipe',
-  });
-  return {
-    id: step.id,
-    ok: res.status === 0,
-    exitCode: res.status ?? 1,
-    durationMs: Date.now() - stepStart,
-    stdout: res.stdout ?? '',
-    stderr: res.stderr ?? '',
-  };
-}
-
 function printResult(res) {
   const mark = res.ok ? 'PASS' : 'FAIL';
   console.log(`[${mark}] ${res.id.padEnd(16)} (${res.durationMs}ms)`);
@@ -96,10 +80,10 @@ function printResult(res) {
 const summary = [];
 let failed = false;
 
-// Phase 1: run read-only preflight checks (typecheck + schema-parity + static AST checks)
-// across 3 cores without overlapping Vitest's heavy PGlite fork pool.
-const [typecheckRes, schemaParityRes, staticResults] = await Promise.all([
-  runStepAsync({ id: 'typecheck', cmd: './node_modules/.bin/tsc', args: ['--noEmit'] }),
+// Phase 1: run read-only static AST checks + schema-parity alongside the isolated dist/ build chain
+// (build -> bundle-size -> secret-scan) BEFORE Vitest starts so dist/ is built and quiescent.
+// On <4 vCPU hosts, typecheck also runs in Phase 1 so Vitest never competes for CPU during timing assertions.
+const phase1Tasks = [
   runStepAsync({ id: 'schema-parity', cmd: './node_modules/.bin/tsx', args: ['scripts/schema-parity.ts'] }),
   (async () => {
     const out = [];
@@ -110,9 +94,28 @@ const [typecheckRes, schemaParityRes, staticResults] = await Promise.all([
     }
     return out;
   })(),
-]);
+  (async () => {
+    const out = [];
+    for (const step of POST_TEST_STEPS) {
+      const res = await runStepAsync(step);
+      out.push(res);
+      if (!res.ok) break;
+    }
+    return out;
+  })(),
+];
+if (!CAN_OVERLAP_TYPECHECK) {
+  phase1Tasks.push(runStepAsync({ id: 'typecheck', cmd: './node_modules/.bin/tsc', args: ['--noEmit'] }));
+}
 
-const phase1Ordered = [typecheckRes, ...staticResults, schemaParityRes];
+const [schemaParityRes, staticResults, buildChainResults, phase1TypecheckRes] = await Promise.all(phase1Tasks);
+
+const phase1Ordered = [
+  ...(phase1TypecheckRes ? [phase1TypecheckRes] : []),
+  ...staticResults,
+  schemaParityRes,
+  ...buildChainResults,
+];
 for (const res of phase1Ordered) {
   summary.push(res);
   printResult(res);
@@ -122,14 +125,14 @@ for (const res of phase1Ordered) {
   }
 }
 
-// Phase 2 & 3: Vitest (dedicated CPU) followed sequentially by build -> bundle-size -> secret-scan.
+// Phase 2: Vitest (on >=4 vCPU hosts, 3 Vitest forks + 1 typecheck = 4 cores, zero oversubscription).
 if (!failed) {
-  const remainingSteps = [
-    { id: 'vitest', cmd: './node_modules/.bin/vitest', args: ['run'] },
-    ...POST_TEST_STEPS,
-  ];
-  for (const step of remainingSteps) {
-    const res = runStepSync(step);
+  const phase2Tasks = [runStepAsync({ id: 'vitest', cmd: './node_modules/.bin/vitest', args: ['run'] })];
+  if (CAN_OVERLAP_TYPECHECK) {
+    phase2Tasks.unshift(runStepAsync({ id: 'typecheck', cmd: './node_modules/.bin/tsc', args: ['--noEmit'] }));
+  }
+  const phase2Results = await Promise.all(phase2Tasks);
+  for (const res of phase2Results) {
     summary.push(res);
     printResult(res);
     if (!res.ok) {

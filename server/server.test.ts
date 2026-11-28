@@ -5002,6 +5002,104 @@ describe('M1 Express spine API (/server/app.ts)', () => {
     expect(ws.latestRun?.totalAssets).toBe('97560.00');
     expect((await verifyCompanyAuditLog(db, companyId)).valid).toBe(true);
   }, 60_000);
+
+  it('supports AI policy configuration, commentary generation, workflow transition, NLQ, guarded formula evaluation, and egress audit logging', async () => {
+    const owner: VerifiedIdentity = {
+      firebaseUid: 'sandbox:ai-owner@onefpa.test',
+      email: 'ai-owner@onefpa.test',
+      displayName: 'AI Controller',
+    };
+    const setupRes = await fetch(`${baseUrl}/api/setup/company`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        companyName: 'AI Test Co',
+        baseCurrency: 'USD',
+        calendarKind: '12month',
+        fiscalYear: 2026,
+        entityName: 'HQ',
+        entityCode: '001',
+      }),
+    });
+    expect(setupRes.status).toBe(201);
+    const setupData = (await setupRes.json()) as { companyId: string };
+    const companyId = setupData.companyId;
+
+    // 1. Get AI policy config (defaults to disabled)
+    const polRes = await fetch(`${baseUrl}/api/companies/${companyId}/ai/policy`, {
+      headers: bearer(owner),
+    });
+    const polText = await polRes.text();
+    if (polRes.status !== 200) {
+      console.log('POLICY GET ERROR:', polText);
+    }
+    expect(polRes.status).toBe(200);
+    const pol = JSON.parse(polText) as { aiEnabled: boolean };
+    expect(pol.aiEnabled).toBe(false);
+
+    // 2. Enable AI policy (owner only)
+    const putPolRes = await fetch(`${baseUrl}/api/companies/${companyId}/ai/policy`, {
+      method: 'PUT',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ aiEnabled: true }),
+    });
+    expect(putPolRes.status).toBe(200);
+    const putPol = (await putPolRes.json()) as { aiEnabled: boolean };
+    expect(putPol.aiEnabled).toBe(true);
+
+    // 3. Generate AI variance commentary
+    const genRes = await fetch(`${baseUrl}/api/companies/${companyId}/ai/commentary/generate`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        periodCode: 'P01',
+        statementLineKey: 'pl.revenue.product',
+        basis: 'YTD Growth',
+      }),
+    });
+    const genText = await genRes.text();
+    if (genRes.status !== 201) {
+      console.log('COMMENTARY GENERATE ERROR:', genText);
+    }
+    expect(genRes.status).toBe(201);
+    const genData = JSON.parse(genText) as { commentary: { id: string; status: string; provenance: string } };
+    expect(genData.commentary.id).toBeTypeOf('string');
+    expect(genData.commentary.status).toBe('ai_draft');
+
+    // 4. Transition commentary status (ai_draft -> approved)
+    const transRes = await fetch(`${baseUrl}/api/companies/${companyId}/ai/commentary/${genData.commentary.id}/transition`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ targetStatus: 'approved' }),
+    });
+    expect(transRes.status).toBe(200);
+    const transData = (await transRes.json()) as { status: string };
+    expect(transData.status).toBe('approved');
+
+    // 5. Natural language query (NLQ)
+    const nlqRes = await fetch(`${baseUrl}/api/companies/${companyId}/ai/nlq`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ question: 'What was revenue in P01?' }),
+    });
+    const nlqText = await nlqRes.text();
+    if (nlqRes.status !== 200) {
+      console.log('NLQ ERROR:', nlqText);
+    }
+    expect(nlqRes.status).toBe(200);
+    const nlqData = JSON.parse(nlqText) as { intent: string };
+    expect(nlqData.intent).toBeDefined();
+
+    // 6. Guarded formula evaluation
+    const formulaRes = await fetch(`${baseUrl}/api/companies/${companyId}/ai/formula/evaluate`, {
+      method: 'POST',
+      headers: { ...bearer(owner), 'content-type': 'application/json' },
+      body: JSON.stringify({ expression: 'revenue * 2', periodCode: 'P01' }),
+    });
+    expect(formulaRes.status).toBe(200);
+    const formulaData = (await formulaRes.json()) as { valid: boolean; value: string | null };
+    expect(formulaData.valid).toBe(true);
+  });
 });
 
 

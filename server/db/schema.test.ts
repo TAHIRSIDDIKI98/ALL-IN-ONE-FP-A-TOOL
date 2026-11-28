@@ -190,7 +190,7 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
     const actualTables = tablesRes.rows.map((r) => r.tablename);
     const expectedTables = [...schemaSnapshot.tables].sort();
     expect(actualTables).toEqual(expectedTables);
-    expect(actualTables).toHaveLength(36);
+    expect(actualTables).toHaveLength(39);
 
     // Idempotent second run applies 0 new files
     const secondRun = await applyMigrations(db);
@@ -989,4 +989,24 @@ describe('WI-0007 M1 18-Table Schema Migrations on PGLite (D1–D7, D9)', () => 
       db.query(`DELETE FROM consolidation_run WHERE id = $1`, [runId]),
     ).rejects.toThrow(/CONSOLIDATION_RUN_IMMUTABLE/);
   });
+
+  it('enforces ai_egress_audit append-only immutability trigger', async () => {
+    const s = await seedBaseTenants(db, 'aitest');
+    const auditRes = await db.query<{ id: string }>(
+      `INSERT INTO ai_egress_audit (company_id, actor_id, feature, endpoint, model_used, mode, prompt_bytes, redaction_count, prompt_hash)
+       VALUES ($1, $2, 'variance_commentary', '/api/ai/commentary', 'gemini-2.5-flash', 'llm', 150, 0, 'hash123')
+       RETURNING id`,
+      [s.companyA, s.userId]
+    );
+    const auditId = auditRes.rows[0]!.id;
+
+    await expect(
+      db.query(`UPDATE ai_egress_audit SET prompt_hash = 'hack' WHERE id = $1`, [auditId])
+    ).rejects.toThrow(/AI_EGRESS_AUDIT_IMMUTABLE/);
+
+    await expect(
+      db.query(`DELETE FROM ai_egress_audit WHERE id = $1`, [auditId])
+    ).rejects.toThrow(/AI_EGRESS_AUDIT_IMMUTABLE/);
+  });
 });
+

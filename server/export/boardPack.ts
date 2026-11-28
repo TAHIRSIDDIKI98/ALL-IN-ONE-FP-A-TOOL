@@ -20,6 +20,7 @@ import type { BvaReport } from '../../shared/bva.js';
 import type { SqlExecutor } from '../db/migrate.js';
 import { getBvaReport } from '../db/repositories/bva.js';
 import { getFinancialStatements } from '../db/repositories/reports.js';
+import { getApprovedCommentaries } from '../db/repositories/ai.js';
 
 /**
  * Board-pack assembly and rendering (MASTER_PROMPT §9.3.7, A6/U5/G7).
@@ -170,6 +171,34 @@ export async function buildBoardPackReport(
         `Plan ${plan}; variance ${variance}; ${pct}; ${bvaRow.favorability}`,
       ),
     );
+  }
+
+  // NAR2: Board pack includes ONLY approved or locked commentary, never ai_draft
+  try {
+    const periodRes = await db.query<{ id: string }>(
+      `SELECT id FROM fiscal_period WHERE company_id = $1 AND code = $2`,
+      [params.companyId, statements.range.throughPeriodCode]
+    );
+    const periodRow = periodRes.rows[0];
+    if (periodRow) {
+      const periodId = periodRow.id;
+      const approvedComms = await getApprovedCommentaries(db, params.companyId, periodId);
+      const commMap = new Map<string, string>();
+      for (const c of approvedComms) {
+        commMap.set(c.statement_line_key, c.disclosure);
+      }
+      for (const row of rows) {
+        const lineKey = row.key.replace(BOARD_PACK_KEY_NAMESPACES.statement, '');
+        const disclosure = commMap.get(lineKey);
+        if (disclosure && !row.detail) {
+          (row as { detail: string }).detail = disclosure;
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes('relation "narrative_commentary" does not exist')) {
+      throw err;
+    }
   }
 
   const planBasis =

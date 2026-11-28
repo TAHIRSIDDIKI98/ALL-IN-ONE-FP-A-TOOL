@@ -1,8 +1,8 @@
 {
   "generator": "scripts/generate-docs.mjs",
-  "specSha256": "655c788824fad4b458df31dd96b171ca4138c76f819865f8e236d4dea3274419",
-  "topLevelCount": 6,
-  "subsectionCount": 37,
+  "specSha256": "ee7c0daeaaafb301f08d462870644a5a4b756bb04a5649fbd72991edfd042c0a",
+  "topLevelCount": 7,
+  "subsectionCount": 40,
   "sections": [
     {
       "title": "1. Repository & Stack Specification (M0 — Gates S1–S8)",
@@ -38,7 +38,13 @@
       "title": "6. M0 Acceptance Criteria Checklist (WI-0001 .. WI-0010)",
       "slug": "6-m0-acceptance-criteria-checklist-wi-0001-wi-0010",
       "lineNo": 331,
-      "sha256": "1fda2d8cdcb372e3cb3a7b4d9b0ba576da7e7b77d6a5bc63b9961b53427cd7e9"
+      "sha256": "a10d8f935a0b50d048d9a294f96373e888713c2bd1353580365780988186ed0c"
+    },
+    {
+      "title": "7. Low-Level AI Executor Playbook & Active Execution Blueprints (v1.4 / DEC-025)",
+      "slug": "7-low-level-ai-executor-playbook-active-execution-blueprints-v1-4-dec-025",
+      "lineNo": 348,
+      "sha256": "d38f14517a2c0a466d04910afdcfd7c3a87617c136b5fecfe9fbab95f1b7755e"
     },
     {
       "title": "1.1 Directory Contract",
@@ -261,10 +267,28 @@
       "slug": "5-4-in-app-contextual-help-rtl-shell-onboarding-checklist-wi-0043",
       "lineNo": 325,
       "sha256": "c0d22ab83177ebf8cf1b89fb9f0735a436b627f43acfb9c15a427cba8dd7df21"
+    },
+    {
+      "title": "7.1 Codebase Conventions & Anti-Trap Cheat-Sheet",
+      "slug": "7-1-codebase-conventions-anti-trap-cheat-sheet",
+      "lineNo": 352,
+      "sha256": "8a53a31b58e5987655d2a8239a1de9d46091c10df4d850d5ba4238937b60a9f7"
+    },
+    {
+      "title": "7.2 Standard 8-Part Execution Blueprint Template",
+      "slug": "7-2-standard-8-part-execution-blueprint-template",
+      "lineNo": 386,
+      "sha256": "80db964cfdb8f77cf9cc5386a72d9cb4efeffc618a3a2c4dfa714a700291a9d4"
+    },
+    {
+      "title": "7.3 Active Blueprint: WI-0048 — M3 Cited AI Variance Commentary, NLQ & Guarded Formula Builder",
+      "slug": "7-3-active-blueprint-wi-0048-m3-cited-ai-variance-commentary-nlq-guarded-formula-builder",
+      "lineNo": 399,
+      "sha256": "bea6d2504f58fb79c62169f0efdf94738bc5fec9b71f8d955108aab995451a83"
     }
   ],
   "artifacts": {
-    "README.md": "8c271c7e64b865120eb5dc4d76c55aaacd9f25dfda52cb3c44787de0b5a6c7a1",
-    "reference.md": "0261fd293ff1d265392ba0e33ee721bd73b0c85032839919e5f81aa84a505cd6"
+    "README.md": "c0dcf74565a938bd594884eba078ecb9383686d801fd98c9e392e00e626856c4",
+    "reference.md": "eeed4ec81a297f05797d4ee27e809cf8fcbcc169b5f32f1675049ce1118f8970"
   }
 }

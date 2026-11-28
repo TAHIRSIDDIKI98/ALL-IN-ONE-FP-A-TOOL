@@ -235,6 +235,32 @@ describe('WI-0002 Gate Integrity & Salvage Ports P01–P04 (PR3, P5, S4, S8)', (
     expect(cleanRepo.status).toBe(0);
   });
 
+  it('WI-0047A GOV2 constitution-check enforces PART 14 heading, zero dangling §14.x refs, and DEC-025 linkage', () => {
+    const ws = makeTempWorkspace();
+    const parts1To13 = Array.from({ length: 13 }, (_, idx) => `## PART ${idx + 1} / 14\n### ${idx + 1}.1 Section\n`).join('\n');
+    writeFileSync(
+      join(ws, 'MASTER_PROMPT.md'),
+      `> Version 1.4\nMASTER PROMPT CHANGELOG (DEC-025)\n${parts1To13}\nSee §14.99 for missing section.\n`,
+    );
+    writeFileSync(join(ws, 'TASKBOARD.md'), 'DEC-025\n');
+    writeFileSync(join(ws, 'package.json'), JSON.stringify({ version: '0.1.0' }));
+    writeFileSync(join(ws, 'CHANGELOG.md'), '## [0.1.0]\n');
+    mkdirSync(join(ws, 'docs', 'adr'), { recursive: true });
+    writeFileSync(
+      join(ws, 'docs', 'adr', '0004-planner-executor-model-split.md'),
+      '# ADR-0004\n## Context\nx\n## Decision\ny\n## Consequences\nz\n',
+    );
+
+    const red = runGate('scripts/constitution-check.mjs', ws);
+    expect(red.status).toBe(1);
+    expect(red.stderr).toContain('missing heading for PART 14');
+    expect(red.stderr).toContain('Dangling section reference §14.99');
+
+    const cleanRepo = runGate('scripts/constitution-check.mjs', process.cwd());
+    expect(cleanRepo.status).toBe(0);
+    expect(cleanRepo.stdout).toContain('constitution-check green');
+  });
+
   it('LIC1-LIC3 license-check fails on disallowed AGPL-3.0 dependency and passes on clean repo', () => {
     const ws = makeTempWorkspace();
     writeFileSync(join(ws, 'LICENSE'), 'Proprietary\n');

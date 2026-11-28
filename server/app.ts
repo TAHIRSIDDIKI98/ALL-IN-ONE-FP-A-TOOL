@@ -212,6 +212,27 @@ import {
   isActorMember,
   listActorCompanies,
 } from './db/repositories/setup.js';
+import {
+  AiPolicyConfigSchema,
+  GenerateCommentaryRequestSchema,
+  GenerateCommentaryResponseSchema,
+  NlqRequestSchema,
+  NlqResponseSchema,
+  FormulaEvalRequestSchema,
+  FormulaEvalResponseSchema,
+  NarrativeTransitionRequestSchema,
+  NarrativeCommentarySchema,
+} from '../shared/ai.js';
+import {
+  getAiPolicyConfig,
+  updateAiPolicyConfig,
+  createNarrativeCommentary,
+  getNarrativeCommentaries,
+  transitionNarrativeStatus,
+  logAiEgressAudit,
+} from './db/repositories/ai.js';
+import { executeAiChokepoint } from './ai/chokepoint.js';
+import { type EngineFact, evaluateGuardedFormula } from '../core/ai/index.js';
 
 /** Hard byte ceiling for an import upload (§4.4). Checked before any parsing or database work. */
 const MAX_IMPORT_BYTES = 5_000_000;
@@ -1933,6 +1954,344 @@ export function createSpineApp(context: SpineContext) {
           occurredAt: UtcInstantSchema.parse(new Date().toISOString()),
         });
         res.status(201).json(ConsolidationRunSummarySchema.parse(run));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  function toIso(val: unknown): string | null {
+    if (val === null || val === undefined) return null;
+    if (val instanceof Date) return val.toISOString();
+    return String(val);
+  }
+
+  /**
+   * M3 AI Intelligence & Cited Commentary (§10.3, WI-0048B, DEC-026):
+   * Policy config, commentary generation & transition, NLQ, and guarded formula evaluation.
+   */
+  app.get(
+    '/api/companies/:companyId/ai/policy',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId } = await requireCompanyActor(req);
+        const policy = await getAiPolicyConfig(db, companyId);
+        res.status(200).json(
+          AiPolicyConfigSchema.parse({
+            id: policy.id,
+            companyId: policy.company_id,
+            aiEnabled: policy.ai_enabled,
+            consentNoticeVersion: policy.consent_notice_version,
+            consentRecordedAt: toIso(policy.consent_recorded_at),
+            consentRecordedBy: policy.consent_recorded_by,
+            maxRequestsPerHour: policy.max_requests_per_hour,
+            updatedAt: toIso(policy.updated_at) ?? new Date().toISOString(),
+          })
+        );
+      } catch (error) {
+        console.error('AI policy get error:', error);
+        next(error);
+      }
+    },
+  );
+
+  app.put(
+    '/api/companies/:companyId/ai/policy',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const memRes = await db.query<{ role: 'owner' | 'editor' | 'reviewer' | 'viewer' }>(
+          `SELECT role FROM membership WHERE company_id = $1 AND user_id = $2`,
+          [companyId, userId]
+        );
+        const role = memRes.rows[0]?.role || 'viewer';
+        if (role !== 'owner') {
+          throw new AppError('TENANT_FORBIDDEN', { userMessage: 'Only company owners can update AI policy configuration' });
+        }
+        const schema = z.object({ aiEnabled: z.boolean() });
+        const body = parseBody(schema, req.body);
+        const policy = await db.transaction((tx) =>
+          updateAiPolicyConfig(tx, companyId, userId, body.aiEnabled)
+        );
+        res.status(200).json(
+          AiPolicyConfigSchema.parse({
+            id: policy.id,
+            companyId: policy.company_id,
+            aiEnabled: policy.ai_enabled,
+            consentNoticeVersion: policy.consent_notice_version,
+            consentRecordedAt: toIso(policy.consent_recorded_at),
+            consentRecordedBy: policy.consent_recorded_by,
+            maxRequestsPerHour: policy.max_requests_per_hour,
+            updatedAt: toIso(policy.updated_at) ?? new Date().toISOString(),
+          })
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/ai/commentary/generate',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const memRes = await db.query<{ role: 'owner' | 'editor' | 'reviewer' | 'viewer' }>(
+          `SELECT role FROM membership WHERE company_id = $1 AND user_id = $2`,
+          [companyId, userId]
+        );
+        const role = memRes.rows[0]?.role || 'viewer';
+        if (role === 'viewer') {
+          throw new AppError('TENANT_FORBIDDEN', { userMessage: 'Viewers cannot generate AI commentary' });
+        }
+        const body = parseBody(GenerateCommentaryRequestSchema, req.body);
+        const policy = await getAiPolicyConfig(db, companyId);
+
+        const periodRes = await db.query<{ id: string }>(
+          `SELECT id FROM fiscal_period WHERE company_id = $1 AND code = $2`,
+          [companyId, body.periodCode]
+        );
+        if (periodRes.rows.length === 0) {
+          throw new AppError('PERIOD_NOT_FOUND', { userMessage: `Period ${body.periodCode} not found` });
+        }
+        const periodId = periodRes.rows[0]!.id;
+
+        const statements = await getFinancialStatements(db, { companyId, throughPeriodCode: body.periodCode });
+        const facts: EngineFact[] = [
+          {
+            citationKey: `statement:pl.${body.statementLineKey}:${body.periodCode}`,
+            statementLineKey: body.statementLineKey,
+            periodCode: body.periodCode,
+            label: body.statementLineKey,
+            value: (statements.pnl as Record<string, unknown>)[body.statementLineKey] as string || '0.00',
+            basis: body.basis || 'YTD',
+          },
+        ];
+
+        const chokepointResult = await executeAiChokepoint({
+          companyId,
+          actorId: userId,
+          feature: 'variance_commentary',
+          aiEnabled: policy.ai_enabled,
+          maxRequestsPerHour: policy.max_requests_per_hour,
+          currentRequestCount: 0,
+          untrustedUserText: body.basis ?? '',
+          facts,
+        });
+
+        await db.transaction(async (tx) => {
+          await logAiEgressAudit(tx, companyId, userId || null, {
+            feature: 'variance_commentary',
+            endpoint: req.originalUrl,
+            modelUsed: chokepointResult.modelUsed,
+            mode: chokepointResult.mode,
+            promptBytes: chokepointResult.promptBytes,
+            redactionCount: chokepointResult.redactionCount,
+            ...(chokepointResult.fallbackReason ? { fallbackReason: chokepointResult.fallbackReason } : {}),
+            promptHash: chokepointResult.promptHash,
+          });
+        });
+
+        const sentences = [{ text: chokepointResult.responseText, citationKeys: [`statement:pl.${body.statementLineKey}:${body.periodCode}`] }];
+        const commentary = await db.transaction((tx) =>
+          createNarrativeCommentary(tx, companyId, userId || null, {
+            periodId,
+            statementLineKey: body.statementLineKey,
+            status: 'ai_draft',
+            provenance: chokepointResult.mode === 'llm' ? 'ai_draft' : 'deterministic_fallback',
+            disclosure: chokepointResult.responseText,
+            sentencesJson: sentences,
+            citationCoveragePct: chokepointResult.validation?.citationCoveragePct || '100.00',
+          })
+        );
+
+        res.status(201).json(
+          GenerateCommentaryResponseSchema.parse({
+            commentary: {
+              id: commentary.id,
+              companyId: commentary.company_id,
+              periodId: commentary.period_id,
+              statementLineKey: commentary.statement_line_key,
+              versionNo: commentary.version_no,
+              status: commentary.status,
+              provenance: commentary.provenance,
+              disclosure: commentary.disclosure,
+              sentences,
+              citationCoveragePct: commentary.citation_coverage_pct,
+              createdAt: toIso(commentary.created_at) ?? new Date().toISOString(),
+              approvedAt: toIso(commentary.approved_at),
+            },
+            mode: chokepointResult.mode,
+            redactionCount: chokepointResult.redactionCount,
+          })
+        );
+      } catch (error) {
+        console.error('Commentary generate error:', error);
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/ai/commentary/:commentaryId/transition',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const memRes = await db.query<{ role: 'owner' | 'editor' | 'reviewer' | 'viewer' }>(
+          `SELECT role FROM membership WHERE company_id = $1 AND user_id = $2`,
+          [companyId, userId]
+        );
+        const role = memRes.rows[0]?.role || 'viewer';
+        if (role === 'viewer') {
+          throw new AppError('TENANT_FORBIDDEN', { userMessage: 'Viewers cannot transition narrative commentary' });
+        }
+        const commentaryId = readEntityUuidParam(req.params['commentaryId'], 'commentaryId');
+        const body = parseBody(NarrativeTransitionRequestSchema, req.body);
+        const updated = await db.transaction((tx) =>
+          transitionNarrativeStatus(tx, companyId, userId, commentaryId, body.targetStatus, role)
+        );
+        res.status(200).json(
+          NarrativeCommentarySchema.parse({
+            id: updated.id,
+            companyId: updated.company_id,
+            periodId: updated.period_id,
+            statementLineKey: updated.statement_line_key,
+            versionNo: updated.version_no,
+            status: updated.status,
+            provenance: updated.provenance,
+            disclosure: updated.disclosure,
+            sentences: updated.sentences_json,
+            citationCoveragePct: updated.citation_coverage_pct,
+            createdAt: toIso(updated.created_at) ?? new Date().toISOString(),
+            approvedAt: toIso(updated.approved_at),
+          })
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/ai/nlq',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const body = parseBody(NlqRequestSchema, req.body);
+        const policy = await getAiPolicyConfig(db, companyId);
+
+        const chokepointResult = await executeAiChokepoint({
+          companyId,
+          actorId: userId,
+          feature: 'nlq_query',
+          aiEnabled: policy.ai_enabled,
+          maxRequestsPerHour: policy.max_requests_per_hour,
+          currentRequestCount: 0,
+          untrustedUserText: body.question,
+          facts: [],
+        });
+
+        await db.transaction(async (tx) => {
+          await logAiEgressAudit(tx, companyId, userId || null, {
+            feature: 'nlq_query',
+            endpoint: req.originalUrl,
+            modelUsed: chokepointResult.modelUsed,
+            mode: chokepointResult.mode,
+            promptBytes: chokepointResult.promptBytes,
+            redactionCount: chokepointResult.redactionCount,
+            ...(chokepointResult.fallbackReason ? { fallbackReason: chokepointResult.fallbackReason } : {}),
+            promptHash: chokepointResult.promptHash,
+          });
+        });
+
+        const plan = chokepointResult.parsedNlq;
+        const nlqRes = plan ? {
+          intent: plan.intent,
+          targetKeys: plan.targetKeys,
+          periodCode: plan.periodCode,
+          fiscalYear: plan.fiscalYear,
+          answerText: plan.rejectedReason ? `Query rejected: ${plan.rejectedReason}` : `Query intent resolved: ${plan.intent} for target keys [${plan.targetKeys.join(', ')}]`,
+          facts: [],
+          rejectedReason: plan.rejectedReason,
+        } : {
+          intent: 'unsupported',
+          targetKeys: [],
+          periodCode: null,
+          fiscalYear: null,
+          answerText: 'Could not resolve question.',
+          facts: [],
+          rejectedReason: 'UNSUPPORTED_INTENT',
+        };
+
+        res.status(200).json(NlqResponseSchema.parse(nlqRes));
+      } catch (error) {
+        console.error('NLQ error:', error);
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    '/api/companies/:companyId/ai/formula/evaluate',
+    requireAuth,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { companyId, userId } = await requireCompanyActor(req);
+        const memRes = await db.query<{ role: 'owner' | 'editor' | 'reviewer' | 'viewer' }>(
+          `SELECT role FROM membership WHERE company_id = $1 AND user_id = $2`,
+          [companyId, userId]
+        );
+        const role = memRes.rows[0]?.role || 'viewer';
+        if (role === 'viewer') {
+          throw new AppError('TENANT_FORBIDDEN', { userMessage: 'Viewers cannot evaluate guarded formulas' });
+        }
+        const body = parseBody(FormulaEvalRequestSchema, req.body);
+        const policy = await getAiPolicyConfig(db, companyId);
+
+        const statements = await getFinancialStatements(db, { companyId, throughPeriodCode: body.periodCode });
+        const facts: EngineFact[] = [
+          { citationKey: 'statement:pl.revenue', statementLineKey: 'revenue', periodCode: body.periodCode, label: 'Revenue', value: statements.pnl.revenue, basis: 'YTD' },
+          { citationKey: 'statement:pl.cogs', statementLineKey: 'cogs', periodCode: body.periodCode, label: 'COGS', value: statements.pnl.cogs, basis: 'YTD' },
+          { citationKey: 'statement:pl.grossProfit', statementLineKey: 'grossProfit', periodCode: body.periodCode, label: 'Gross Profit', value: statements.pnl.grossProfit, basis: 'YTD' },
+          { citationKey: 'statement:pl.netIncome', statementLineKey: 'netIncome', periodCode: body.periodCode, label: 'Net Income', value: statements.pnl.netIncome, basis: 'YTD' },
+          { citationKey: 'statement:bs.totalAssets', statementLineKey: 'totalAssets', periodCode: body.periodCode, label: 'Total Assets', value: statements.balanceSheet.totalAssets, basis: 'YTD' },
+        ];
+
+        const factRecord: Record<string, string> = {};
+        for (const f of facts) {
+          factRecord[f.citationKey] = f.value;
+          factRecord[f.statementLineKey] = f.value;
+        }
+
+        const evaluated = evaluateGuardedFormula(body.expression, factRecord, 2);
+
+        await db.transaction(async (tx) => {
+          await logAiEgressAudit(tx, companyId, userId || null, {
+            feature: 'formula_builder',
+            endpoint: req.originalUrl,
+            modelUsed: 'gemini-2.5-flash',
+            mode: 'deterministic_fallback',
+            promptBytes: 100,
+            redactionCount: 0,
+            ...(evaluated.errorCode ? { fallbackReason: evaluated.errorCode } : {}),
+            promptHash: 'formula_eval',
+          });
+        });
+
+        res.status(200).json(
+          FormulaEvalResponseSchema.parse({
+            valid: evaluated.valid,
+            normalizedFormula: evaluated.normalizedFormula,
+            referencedKeys: evaluated.referencedKeys,
+            value: evaluated.value,
+            errorCode: evaluated.errorCode,
+          })
+        );
       } catch (error) {
         next(error);
       }

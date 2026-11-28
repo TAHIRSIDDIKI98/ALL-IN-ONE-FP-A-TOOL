@@ -1,9 +1,11 @@
 {
-  "schemaVersion": "0007_m3_consolidation",
-  "migration": "db/migrations/0007_m3_consolidation.sql",
-  "tableCount": 36,
+  "schemaVersion": "0008_m3_ai_intelligence",
+  "migration": "db/migrations/0008_m3_ai_intelligence.sql",
+  "tableCount": 39,
   "tables": [
     "account",
+    "ai_egress_audit",
+    "ai_policy_config",
     "app_user",
     "approval_task",
     "audit_log",
@@ -30,6 +32,7 @@
     "intercompany_rule",
     "job",
     "membership",
+    "narrative_commentary",
     "notification",
     "period_lock_event",
     "plan_line",
@@ -249,6 +252,146 @@
     {
       "table": "account",
       "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "actor_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "feature",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "endpoint",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "model_used",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "mode",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "prompt_bytes",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "redaction_count",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "fallback_reason",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "prompt_hash",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_egress_audit",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "ai_policy_config",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "ai_policy_config",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_policy_config",
+      "column": "ai_enabled",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "ai_policy_config",
+      "column": "consent_notice_version",
+      "type": "text",
+      "nullable": false,
+      "default": "'v1'::text"
+    },
+    {
+      "table": "ai_policy_config",
+      "column": "consent_recorded_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "ai_policy_config",
+      "column": "consent_recorded_by",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "ai_policy_config",
+      "column": "max_requests_per_hour",
+      "type": "integer",
+      "nullable": false,
+      "default": "60"
+    },
+    {
+      "table": "ai_policy_config",
+      "column": "updated_at",
       "type": "timestamp with time zone",
       "nullable": false,
       "default": "now()"
@@ -2291,6 +2434,104 @@
       "default": "now()"
     },
     {
+      "table": "narrative_commentary",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "company_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "period_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "statement_line_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "version_no",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "provenance",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "disclosure",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "sentences_json",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "citation_coverage_pct",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "created_by",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "approved_by",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "approved_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "narrative_commentary",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
       "table": "notification",
       "column": "id",
       "type": "uuid",
@@ -3230,6 +3471,238 @@
         "id"
       ],
       "references": "account.id"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.company_id"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.created_at"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_endpoint_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.endpoint"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_feature_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.feature"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_feature_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.feature"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.id"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_mode_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.mode"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_mode_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.mode"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_model_used_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.model_used"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_prompt_bytes_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.prompt_bytes"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_prompt_bytes_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.prompt_bytes"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_prompt_hash_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.prompt_hash"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_redaction_count_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.redaction_count"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_redaction_count_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_egress_audit.redaction_count"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_company_id_actor_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "actor_id"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "ai_egress_audit.id"
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "ai_egress_audit.id"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_ai_enabled_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_policy_config.ai_enabled"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_policy_config.company_id"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_consent_notice_version_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_policy_config.consent_notice_version"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_policy_config.id"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_max_requests_per_hour_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_policy_config.max_requests_per_hour"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_max_requests_per_hour_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_policy_config.max_requests_per_hour"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_updated_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "ai_policy_config.updated_at"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_company_id_consent_recorded_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "consent_recorded_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "ai_policy_config.id"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "ai_policy_config.id"
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_company_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id"
+      ],
+      "references": "ai_policy_config.company_id"
     },
     {
       "table": "app_user",
@@ -7080,6 +7553,183 @@
       "references": "membership.company_id"
     },
     {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_citation_coverage_pct_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.citation_coverage_pct"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.company_id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_created_at_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.created_at"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_disclosure_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.disclosure"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_period_id_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.period_id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_provenance_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.provenance"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_provenance_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.provenance"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_sentences_json_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.sentences_json"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_statement_line_key_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.statement_line_key"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_status_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.status"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_status_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.status"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_version_no_check",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.version_no"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_version_no_not_null",
+      "type": "CHECK",
+      "columns": [],
+      "references": "narrative_commentary.version_no"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_approved_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "approved_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_created_by_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "created_by"
+      ],
+      "references": "membership.company_id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id"
+      ],
+      "references": "company.id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_period_id_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "company_id",
+        "period_id"
+      ],
+      "references": "fiscal_period.id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_statement_line_key_fkey",
+      "type": "FOREIGN KEY",
+      "columns": [
+        "statement_line_key"
+      ],
+      "references": "statement_line.key"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_pkey",
+      "type": "PRIMARY KEY",
+      "columns": [
+        "id"
+      ],
+      "references": "narrative_commentary.id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_id_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "id"
+      ],
+      "references": "narrative_commentary.id"
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_period_id_statement_line_ke_key",
+      "type": "UNIQUE",
+      "columns": [
+        "company_id",
+        "period_id",
+        "statement_line_key",
+        "version_no"
+      ],
+      "references": "narrative_commentary.company_id"
+    },
+    {
       "table": "notification",
       "name": "notification_body_check",
       "type": "CHECK",
@@ -8618,6 +9268,65 @@
       ]
     },
     {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "ai_egress_audit_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "ai_egress_audit",
+      "name": "idx_ai_egress_audit_company",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "created_at"
+      ]
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_company_id_key",
+      "unique": true,
+      "columns": [
+        "company_id"
+      ]
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "ai_policy_config_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
+      "table": "ai_policy_config",
+      "name": "idx_ai_policy_config_company",
+      "unique": false,
+      "columns": [
+        "company_id"
+      ]
+    },
+    {
       "table": "app_user",
       "name": "app_user_firebase_uid_key",
       "unique": true,
@@ -9402,6 +10111,45 @@
       ]
     },
     {
+      "table": "narrative_commentary",
+      "name": "idx_narrative_commentary_lookup",
+      "unique": false,
+      "columns": [
+        "company_id",
+        "period_id",
+        "statement_line_key",
+        "version_no"
+      ]
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_id_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "id"
+      ]
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_company_id_period_id_statement_line_ke_key",
+      "unique": true,
+      "columns": [
+        "company_id",
+        "period_id",
+        "statement_line_key",
+        "version_no"
+      ]
+    },
+    {
+      "table": "narrative_commentary",
+      "name": "narrative_commentary_pkey",
+      "unique": true,
+      "columns": [
+        "id"
+      ]
+    },
+    {
       "table": "notification",
       "name": "idx_notification_recipient_inbox",
       "unique": false,
@@ -9657,6 +10405,11 @@
     }
   ],
   "triggers": [
+    {
+      "table": "ai_egress_audit",
+      "name": "trg_ai_egress_audit_immutable",
+      "deferrable": false
+    },
     {
       "table": "approval_task",
       "name": "trg_approval_task_state_machine",

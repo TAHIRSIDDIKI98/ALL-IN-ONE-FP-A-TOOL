@@ -72,6 +72,13 @@ export const APPROVED_M3_CONSOLIDATION_TABLES = [
   'consolidation_run',
 ];
 
+/** Opened in M3 under DEC-026 (§10.3, §11.7 Cited AI Variance Commentary, NLQ & Guarded Formula Builder). */
+export const APPROVED_M3_AI_TABLES = [
+  'narrative_commentary',
+  'ai_policy_config',
+  'ai_egress_audit',
+];
+
 const APPROVED_SET = new Set([
   ...APPROVED_M1_TABLES,
   ...APPROVED_M2_COLLABORATION_TABLES,
@@ -80,6 +87,7 @@ const APPROVED_SET = new Set([
   ...APPROVED_M3_CLOSE_TABLES,
   ...APPROVED_M3_EXCEPTION_TABLES,
   ...APPROVED_M3_CONSOLIDATION_TABLES,
+  ...APPROVED_M3_AI_TABLES,
 ]);
 
 export function checkSchemaScope(rootDir = process.cwd(), { requireComplete = false } = {}) {
